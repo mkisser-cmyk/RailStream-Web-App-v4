@@ -107,63 +107,78 @@ user_problem_statement: "Build RailStream Web App - a train camera streaming pla
 backend:
   - task: "Auth Login API Proxy"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implemented POST /api/auth/login that proxies to api.railstream.net, stores JWT in httpOnly cookie"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Auth login works correctly. Valid credentials (railstream/cn5453) return access_token, token_type: bearer, and user object with membership_tier: engineer. Invalid credentials properly rejected with error status. JWT token stored in httpOnly cookie."
 
   - task: "Auth Logout API"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implemented POST /api/auth/logout that clears token cookie"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Auth logout works correctly. Returns {ok: true} and clears railstream_token cookie."
 
   - task: "Camera Catalog API"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implemented GET /api/cameras/catalog that proxies to api.railstream.net/api/cameras/catalog"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Camera catalog works perfectly. Returns array of 46 cameras, each with required fields: _id, name, location, min_tier, thumbnail_path, status."
 
   - task: "Single Camera API"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implemented GET /api/cameras/:id that finds camera from catalog by _id"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Single camera API works correctly. Valid camera IDs return single camera object with all required fields. Invalid IDs properly return 404 error."
 
   - task: "Playback Authorize API"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implemented POST /api/playback/authorize that proxies to api.railstream.net/api/playback/authorize with camera_id, device_id, platform"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Playback authorize works correctly. With valid camera_id, returns ok: true, hls_url, camera_name, and session_id. Properly uses authentication token from login."
 
 metadata:
   created_by: "main_agent"
