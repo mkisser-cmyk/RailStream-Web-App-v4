@@ -1453,6 +1453,10 @@ export default function App() {
   const [viewMode, setViewMode] = useState('single');
   const [selectedCameras, setSelectedCameras] = useState([null, null, null, null, null, null, null, null, null]);
   const [playbackStates, setPlaybackStates] = useState({});
+  
+  // Favorites and Presets
+  const [favorites, setFavorites] = useState([]);
+  const [presets, setPresets] = useState([]);
 
   useEffect(() => {
     const init = async () => {
@@ -1462,6 +1466,10 @@ export default function App() {
         
         const savedUser = auth.getUser();
         if (savedUser) setUser(savedUser);
+        
+        // Load favorites and presets from localStorage
+        setFavorites(storage.getFavorites());
+        setPresets(storage.getPresets());
       } catch (e) {
         console.error('Init error:', e);
       } finally {
