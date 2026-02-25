@@ -114,31 +114,53 @@ function HLSVideoPlayer({ src, autoPlay = true, muted = true, controls = false, 
       if (Hls.isSupported()) {
         const hls = new Hls({ 
           enableWorker: true, 
-          lowLatencyMode: true,
+          lowLatencyMode: false, // Disable for better compatibility
           maxBufferLength: 30,
+          startLevel: -1, // Auto select quality
+          capLevelToPlayerSize: true,
+          // Handle codec issues
+          enableSoftwareAES: true,
         });
         hlsRef.current = hls;
         hls.loadSource(src);
         hls.attachMedia(video);
         
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          console.log('HLS manifest parsed, starting playback');
+        hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+          console.log('HLS: Manifest parsed, levels:', data.levels?.length);
           if (autoPlay) {
-            video.play().then(() => setIsPlaying(true)).catch((e) => console.log('Autoplay blocked:', e));
+            video.play().then(() => {
+              setIsPlaying(true);
+              console.log('HLS: Video playing');
+            }).catch((e) => console.log('Autoplay blocked:', e));
           }
         });
         
         hls.on(Hls.Events.ERROR, (_, data) => {
-          console.log('HLS Error:', data.type, data.details);
+          console.log('HLS Error:', data.type, data.details, data.fatal);
           if (data.fatal) {
-            if (onError) onError(data.details);
-            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-              hls.startLoad();
-            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-              hls.recoverMediaError();
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                console.log('HLS: Network error, trying to recover...');
+                hls.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                console.log('HLS: Media error, trying to recover...');
+                hls.recoverMediaError();
+                break;
+              default:
+                if (onError) onError(data.details);
+                break;
             }
           }
         });
+        
+        // Select first audio track automatically
+        hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
+          if (hls.audioTracks.length > 0) {
+            hls.audioTrack = 0;
+          }
+        });
+        
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = src;
         if (autoPlay) video.play().then(() => setIsPlaying(true)).catch(() => {});
