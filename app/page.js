@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -30,17 +29,10 @@ import {
   Send,
   Volume2,
   VolumeX,
-  Maximize2,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  ChevronDown,
   Star,
   Heart,
   Bookmark,
   Save,
-  FolderOpen,
-  Plus,
   Trash2,
   Zap,
   Shield,
@@ -51,14 +43,21 @@ import {
   Tv,
   HelpCircle,
   Mail,
-  CreditCard,
   Info,
   Eye,
+  ChevronLeft,
+  ChevronRight,
+  Globe,
+  Download,
+  Camera,
+  ArrowRight,
 } from 'lucide-react';
 import { clientApi } from '@/lib/api';
 import { auth } from '@/lib/auth';
 
-// Tier config
+// ============================================
+// CONSTANTS & HELPERS
+// ============================================
 const TIERS = {
   fireman: { label: 'Fireman', icon: Zap, color: 'from-orange-600 to-orange-500', price: 'FREE', level: 1 },
   conductor: { label: 'Conductor', icon: Shield, color: 'from-blue-600 to-blue-500', price: '$8.95/mo', level: 2 },
@@ -70,7 +69,6 @@ const canAccess = (userTier, cameraTier) => {
   return (TIERS[userTier]?.level || 0) >= (TIERS[cameraTier]?.level || 0);
 };
 
-// View modes
 const VIEW_MODES = [
   { id: 'single', label: '1', icon: Square, slots: 1 },
   { id: 'dual', label: '2', icon: Columns2, slots: 2 },
@@ -78,41 +76,65 @@ const VIEW_MODES = [
   { id: 'nine', label: '9', icon: Grid3X3, slots: 9 },
 ];
 
-// ============================================
-// LOCAL STORAGE HELPERS
-// ============================================
+// Local Storage
 const storage = {
   getFavorites: () => {
     if (typeof window === 'undefined') return [];
-    try {
-      return JSON.parse(localStorage.getItem('railstream_favorites') || '[]');
-    } catch { return []; }
+    try { return JSON.parse(localStorage.getItem('railstream_favorites') || '[]'); } catch { return []; }
   },
-  setFavorites: (favorites) => {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem('railstream_favorites', JSON.stringify(favorites));
-  },
+  setFavorites: (f) => { if (typeof window !== 'undefined') localStorage.setItem('railstream_favorites', JSON.stringify(f)); },
   getPresets: () => {
     if (typeof window === 'undefined') return [];
-    try {
-      return JSON.parse(localStorage.getItem('railstream_presets') || '[]');
-    } catch { return []; }
+    try { return JSON.parse(localStorage.getItem('railstream_presets') || '[]'); } catch { return []; }
   },
-  setPresets: (presets) => {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem('railstream_presets', JSON.stringify(presets));
-  },
-  getLastView: () => {
-    if (typeof window === 'undefined') return null;
-    try {
-      return JSON.parse(localStorage.getItem('railstream_lastview'));
-    } catch { return null; }
-  },
-  setLastView: (view) => {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem('railstream_lastview', JSON.stringify(view));
-  },
+  setPresets: (p) => { if (typeof window !== 'undefined') localStorage.setItem('railstream_presets', JSON.stringify(p)); },
 };
+
+// ============================================
+// HLS VIDEO PLAYER
+// ============================================
+function HLSVideoPlayer({ src, autoPlay = true, muted = true, controls = false, className = '', onError }) {
+  const videoRef = useRef(null);
+  const hlsRef = useRef(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !src) return;
+
+    import('hls.js').then((HlsModule) => {
+      const Hls = HlsModule.default;
+      if (Hls.isSupported()) {
+        const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+        hlsRef.current = hls;
+        hls.loadSource(src);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          if (autoPlay) video.play().catch(() => {});
+        });
+        hls.on(Hls.Events.ERROR, (_, data) => {
+          if (data.fatal && onError) onError(data.details);
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = src;
+        if (autoPlay) video.play().catch(() => {});
+      }
+    }).catch(() => {});
+
+    return () => { if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; } };
+  }, [src, autoPlay, onError]);
+
+  return (
+    <video
+      ref={videoRef}
+      className={className}
+      controls={controls}
+      muted={muted}
+      playsInline
+      loop
+      aria-hidden="true"
+    />
+  );
+}
 
 // ============================================
 // NAVIGATION
@@ -120,83 +142,99 @@ const storage = {
 function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const navItems = [
+    { id: 'home', label: 'Home' },
+    { id: 'watch', label: 'Watch' },
+    { id: 'cameras', label: 'Cameras' },
+    { id: 'about', label: 'About' },
+    { id: 'hosts', label: 'Hosts' },
+    { id: 'faq', label: 'FAQ' },
+  ];
+
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 h-14 bg-black/95 backdrop-blur border-b border-white/5">
-      <div className="h-full px-4 flex items-center justify-between max-w-[1920px] mx-auto">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-sm border-b border-white/10" role="navigation" aria-label="Main navigation">
+      <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
         {/* Logo */}
-        <button onClick={() => setCurrentPage('watch')} className="flex items-center gap-2 group">
-          <div className="w-8 h-8 rounded bg-gradient-to-br from-[#ff7a00] to-orange-600 flex items-center justify-center">
-            <Train className="w-5 h-5 text-white" />
-          </div>
-          <span className="text-xl font-bold tracking-tight hidden sm:block">
-            <span className="text-white">Rail</span>
-            <span className="text-[#ff7a00]">Stream</span>
-          </span>
+        <button 
+          onClick={() => setCurrentPage('home')} 
+          className="flex items-center gap-3"
+          aria-label="RailStream Home"
+        >
+          <img 
+            src="https://railstream.net/images/Homepage/WebsiteLogo.png" 
+            alt="RailStream Logo" 
+            className="h-10"
+          />
         </button>
 
-        {/* Center Nav */}
-        <div className="hidden md:flex items-center gap-1 absolute left-1/2 -translate-x-1/2">
-          {[
-            { id: 'watch', label: 'Watch', icon: Monitor },
-            { id: 'cameras', label: 'Cameras', icon: Eye },
-            { id: 'about', label: 'About', icon: Info },
-            { id: 'hosts', label: 'Hosts', icon: Users },
-            { id: 'faq', label: 'FAQ', icon: HelpCircle },
-          ].map(item => (
+        {/* Desktop Nav */}
+        <div className="hidden md:flex items-center gap-1" role="menubar">
+          {navItems.map(item => (
             <button
               key={item.id}
               onClick={() => setCurrentPage(item.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+              role="menuitem"
+              aria-current={currentPage === item.id ? 'page' : undefined}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 currentPage === item.id 
-                  ? 'bg-white/10 text-white' 
-                  : 'text-white/60 hover:text-white hover:bg-white/5'
+                  ? 'bg-[#ff7a00] text-white' 
+                  : 'text-white hover:bg-white/10'
               }`}
             >
-              <item.icon className="w-4 h-4" />
               {item.label}
             </button>
           ))}
         </div>
 
-        {/* Right side */}
+        {/* Auth */}
         <div className="flex items-center gap-3">
           {user ? (
             <div className="flex items-center gap-3">
-              <div className={`px-3 py-1.5 rounded-full bg-gradient-to-r ${TIERS[user.membership_tier]?.color || 'from-gray-600 to-gray-500'} text-white text-xs font-semibold flex items-center gap-1.5`}>
+              <span className={`hidden sm:flex px-3 py-1.5 rounded-full bg-gradient-to-r ${TIERS[user.membership_tier]?.color} text-white text-xs font-bold items-center gap-1.5`}>
                 {user.membership_tier === 'engineer' && <Crown className="w-3 h-3" />}
                 {user.membership_tier === 'conductor' && <Shield className="w-3 h-3" />}
                 {user.membership_tier === 'fireman' && <Zap className="w-3 h-3" />}
-                {TIERS[user.membership_tier]?.label || user.membership_tier}
-              </div>
-              <span className="text-sm text-white/70 hidden sm:block">{user.username}</span>
-              <button onClick={onLogout} className="p-2 rounded-lg hover:bg-white/10 text-white/50 hover:text-white transition">
+                {TIERS[user.membership_tier]?.label}
+              </span>
+              <span className="text-white text-sm hidden sm:block">{user.username}</span>
+              <button 
+                onClick={onLogout} 
+                className="p-2 rounded-lg hover:bg-white/10 text-white transition"
+                aria-label="Sign out"
+              >
                 <LogOut className="w-4 h-4" />
               </button>
             </div>
           ) : (
-            <Button onClick={onLogin} size="sm" className="bg-[#ff7a00] hover:bg-[#ff8c20] text-white">
+            <Button onClick={onLogin} className="bg-[#ff7a00] hover:bg-[#ff8c20] text-white font-semibold">
               Sign In
             </Button>
           )}
           
-          <button onClick={() => setMenuOpen(!menuOpen)} className="md:hidden p-2 text-white">
-            {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          <button 
+            onClick={() => setMenuOpen(!menuOpen)} 
+            className="md:hidden p-2 text-white"
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </div>
       </div>
 
-      {/* Mobile menu */}
+      {/* Mobile Menu */}
       {menuOpen && (
-        <div className="md:hidden absolute top-14 left-0 right-0 bg-black/95 backdrop-blur border-b border-white/10 p-4 space-y-2">
-          {['watch', 'cameras', 'about', 'hosts', 'faq'].map(page => (
+        <div className="md:hidden bg-black/95 border-b border-white/10 p-4" role="menu">
+          {navItems.map(item => (
             <button
-              key={page}
-              onClick={() => { setCurrentPage(page); setMenuOpen(false); }}
-              className={`block w-full text-left px-4 py-3 rounded-lg capitalize ${
-                currentPage === page ? 'bg-[#ff7a00] text-white' : 'text-white/70 hover:bg-white/10'
+              key={item.id}
+              onClick={() => { setCurrentPage(item.id); setMenuOpen(false); }}
+              role="menuitem"
+              className={`block w-full text-left px-4 py-3 rounded-lg text-white font-medium ${
+                currentPage === item.id ? 'bg-[#ff7a00]' : 'hover:bg-white/10'
               }`}
             >
-              {page}
+              {item.label}
             </button>
           ))}
         </div>
@@ -206,220 +244,324 @@ function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
 }
 
 // ============================================
-// HLS VIDEO PLAYER COMPONENT
+// HOME PAGE - THE WOW FACTOR
 // ============================================
-function HLSVideoPlayer({ src, autoPlay = true, muted = false, controls = true, onError }) {
-  const videoRef = useRef(null);
-  const hlsRef = useRef(null);
+function HomePage({ cameras, onStartWatching, onLogin, user }) {
+  const [heroCamera, setHeroCamera] = useState(null);
+  const [heroPlayback, setHeroPlayback] = useState(null);
 
+  // Pick a random online camera for the hero background
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !src) return;
-
-    // Dynamic import of hls.js
-    import('hls.js').then((HlsModule) => {
-      const Hls = HlsModule.default;
+    const onlineCameras = cameras.filter(c => c.status === 'online' && c.min_tier === 'fireman');
+    if (onlineCameras.length > 0) {
+      const randomCam = onlineCameras[Math.floor(Math.random() * onlineCameras.length)];
+      setHeroCamera(randomCam);
       
-      if (Hls.isSupported()) {
-        const hls = new Hls({
-          enableWorker: true,
-          lowLatencyMode: true,
-        });
-        
-        hlsRef.current = hls;
-        hls.loadSource(src);
-        hls.attachMedia(video);
-        
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          if (autoPlay) {
-            video.play().catch(() => {
-              // Autoplay blocked, user needs to interact
-            });
-          }
-        });
-        
-        hls.on(Hls.Events.ERROR, (event, data) => {
-          if (data.fatal) {
-            console.error('HLS fatal error:', data);
-            if (onError) onError(data.details || 'Stream error');
-          }
-        });
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS support (Safari)
-        video.src = src;
-        if (autoPlay) {
-          video.play().catch(() => {});
+      // Get playback URL for background video
+      clientApi.authorizePlayback(randomCam._id).then(data => {
+        if (data.ok && data.hls_url) {
+          setHeroPlayback(data);
         }
-      } else {
-        if (onError) onError('HLS not supported');
-      }
-    }).catch((err) => {
-      console.error('Failed to load HLS.js:', err);
-      if (onError) onError('Failed to load player');
-    });
-
-    return () => {
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
-    };
-  }, [src, autoPlay, onError]);
-
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.muted = muted;
+      }).catch(() => {});
     }
-  }, [muted]);
+  }, [cameras]);
 
   return (
-    <video
-      ref={videoRef}
-      className="w-full h-full object-contain bg-black"
-      controls={controls}
-      muted={muted}
-      playsInline
-    />
-  );
-}
-
-// ============================================
-// VIDEO PLAYER COMPONENT
-// ============================================
-function VideoPlayer({ camera, playbackData, isLoading, error, onClose, isMuted, setIsMuted, isMain = false }) {
-  const canWatch = camera && playbackData?.hls_url;
-
-  if (isLoading) {
-    return (
-      <div className="absolute inset-0 flex items-center justify-center bg-black">
-        <div className="text-center">
-          <Loader2 className="w-10 h-10 text-[#ff7a00] animate-spin mx-auto mb-3" />
-          <p className="text-white/50 text-sm">Connecting...</p>
+    <main className="min-h-screen bg-black">
+      {/* HERO SECTION - Full screen with live video background */}
+      <section className="relative h-screen flex items-center justify-center overflow-hidden" aria-label="Welcome to RailStream">
+        {/* Background Video */}
+        {heroPlayback?.hls_url && (
+          <div className="absolute inset-0 z-0">
+            <HLSVideoPlayer
+              src={heroPlayback.hls_url}
+              className="w-full h-full object-cover opacity-40"
+              muted={true}
+              autoPlay={true}
+              controls={false}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-black/30" />
+          </div>
+        )}
+        
+        {/* If no video, show gradient */}
+        {!heroPlayback?.hls_url && (
+          <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 via-black to-zinc-900" />
+        )}
+        
+        {/* Content */}
+        <div className="relative z-10 text-center px-4 max-w-5xl mx-auto">
+          {/* Logo */}
+          <img 
+            src="https://railstream.net/images/Trackside_Logo_Extra_Large.png" 
+            alt="RailStream - Next to being trackside" 
+            className="h-32 md:h-48 lg:h-56 mx-auto mb-8 drop-shadow-2xl"
+          />
+          
+          {/* Tagline */}
+          <p className="text-xl md:text-2xl lg:text-3xl text-white font-light mb-4 tracking-wide">
+            Superior image with sound quality
+          </p>
+          <p className="text-2xl md:text-3xl lg:text-4xl text-[#ff7a00] font-bold mb-12">
+            Next to being trackside.
+          </p>
+          
+          {/* CTA Buttons */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+            <Button 
+              size="lg" 
+              onClick={onStartWatching}
+              className="bg-[#ff7a00] hover:bg-[#ff8c20] text-white text-lg px-10 py-6 rounded-xl font-bold shadow-lg shadow-orange-500/30 transition-all hover:scale-105"
+              aria-label="Start watching live train cameras"
+            >
+              <Play className="w-6 h-6 mr-2" fill="white" />
+              Start Watching
+            </Button>
+            {!user && (
+              <Button 
+                size="lg" 
+                variant="outline"
+                onClick={onLogin}
+                className="border-2 border-white text-white hover:bg-white hover:text-black text-lg px-10 py-6 rounded-xl font-bold transition-all"
+                aria-label="Sign in to your account"
+              >
+                Sign In
+              </Button>
+            )}
+          </div>
+          
+          {/* Live indicator */}
+          {heroCamera && (
+            <div className="inline-flex items-center gap-2 text-white bg-black/50 px-4 py-2 rounded-full">
+              <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse" aria-hidden="true" />
+              <span className="text-sm">
+                Now showing: <span className="font-semibold">{heroCamera.name}</span>
+              </span>
+            </div>
+          )}
         </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="absolute inset-0 flex items-center justify-center bg-black/90">
-        <div className="text-center p-4">
-          <X className="w-10 h-10 text-red-400 mx-auto mb-2" />
-          <p className="text-white/70 text-sm">{error}</p>
+        
+        {/* Scroll indicator */}
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white animate-bounce" aria-hidden="true">
+          <ChevronRight className="w-8 h-8 rotate-90" />
         </div>
-      </div>
-    );
-  }
+      </section>
 
-  if (!canWatch && camera) {
-    return (
-      <div className="absolute inset-0 bg-black">
-        <img src={camera.thumbnail_path} alt="" className="w-full h-full object-cover opacity-30" />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="text-center">
-            <Lock className="w-10 h-10 text-white/40 mx-auto mb-2" />
-            <p className="text-white/60 text-sm">Upgrade to watch</p>
+      {/* STATS SECTION */}
+      <section className="py-20 px-4 bg-zinc-950" aria-labelledby="stats-heading">
+        <h2 id="stats-heading" className="sr-only">RailStream Statistics</h2>
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+            {[
+              { icon: Camera, value: '46', label: 'Live Cameras', sublabel: 'in 32 cities' },
+              { icon: Train, value: '19', label: 'Railroads', sublabel: 'covered' },
+              { icon: Clock, value: '2M+', label: 'Hours Watched', sublabel: 'every month' },
+              { icon: Download, value: '400K+', label: 'App Downloads', sublabel: 'worldwide' },
+              { icon: Globe, value: '175', label: 'Countries', sublabel: 'viewing' },
+            ].map((stat, i) => (
+              <div key={i} className="text-center p-6 bg-zinc-900 rounded-2xl">
+                <stat.icon className="w-10 h-10 text-[#ff7a00] mx-auto mb-3" aria-hidden="true" />
+                <div className="text-4xl font-bold text-white mb-1">{stat.value}</div>
+                <div className="text-white font-medium">{stat.label}</div>
+                <div className="text-white/60 text-sm">{stat.sublabel}</div>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
-    );
-  }
+      </section>
 
-  if (canWatch) {
-    return (
-      <HLSVideoPlayer
-        src={playbackData.hls_url}
-        autoPlay={true}
-        muted={isMuted}
-        controls={isMain}
-        onError={(err) => console.error('Player error:', err)}
-      />
-    );
-  }
-
-  return (
-    <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">
-      <p className="text-white/30 text-sm">Select a camera</p>
-    </div>
-  );
-}
-
-// ============================================
-// CHAT COMPONENT
-// ============================================
-function ChatPanel({ isOpen, onToggle }) {
-  const [messages, setMessages] = useState([
-    { id: 1, user: 'Mike_RS', text: 'NS train approaching Fostoria!', time: '2m ago', tier: 'engineer' },
-    { id: 2, user: 'TrainFan42', text: 'Great catch on that consist 🚂', time: '1m ago', tier: 'conductor' },
-    { id: 3, user: 'Railwatcher', text: 'Anyone see the UP stack train earlier?', time: '30s ago', tier: 'fireman' },
-  ]);
-  const [newMessage, setNewMessage] = useState('');
-
-  const handleSend = () => {
-    if (!newMessage.trim()) return;
-    setMessages(prev => [...prev, {
-      id: Date.now(),
-      user: 'You',
-      text: newMessage,
-      time: 'now',
-      tier: 'engineer'
-    }]);
-    setNewMessage('');
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="w-80 bg-zinc-900/95 backdrop-blur border-l border-white/10 flex flex-col">
-      {/* Header */}
-      <div className="p-4 border-b border-white/10 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <MessageCircle className="w-5 h-5 text-[#ff7a00]" />
-          <span className="font-semibold text-white">Live Chat</span>
-          <Badge className="bg-green-500/20 text-green-400 text-xs">47 online</Badge>
-        </div>
-        <button onClick={onToggle} className="p-1 hover:bg-white/10 rounded">
-          <X className="w-4 h-4 text-white/50" />
-        </button>
-      </div>
-
-      {/* Messages */}
-      <ScrollArea className="flex-1 p-4">
-        <div className="space-y-3">
-          {messages.map(msg => (
-            <div key={msg.id} className="group">
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`text-sm font-medium ${
-                  msg.tier === 'engineer' ? 'text-purple-400' :
-                  msg.tier === 'conductor' ? 'text-blue-400' : 'text-orange-400'
-                }`}>{msg.user}</span>
-                <span className="text-xs text-white/30">{msg.time}</span>
+      {/* WHY RAILSTREAM */}
+      <section className="py-20 px-4 bg-black" aria-labelledby="why-heading">
+        <div className="max-w-6xl mx-auto">
+          <h2 id="why-heading" className="text-4xl md:text-5xl font-bold text-white text-center mb-4">
+            The RailStream Difference
+          </h2>
+          <p className="text-white/70 text-center text-xl mb-16 max-w-2xl mx-auto">
+            Quality over quantity. Our numbers speak for themselves.
+          </p>
+          
+          <div className="grid md:grid-cols-4 gap-8">
+            {[
+              { icon: Eye, title: 'Superior Video', desc: 'Crystal clear 1080p video quality that rivals being there in person.' },
+              { icon: Volume2, title: 'Exquisite Audio', desc: 'Experience the rumble and roar of trains with our premium audio.' },
+              { icon: Zap, title: 'Night Vision', desc: 'Additional lighting at locations for 24/7 nighttime viewing.' },
+              { icon: Radio, title: 'Scanner Feeds', desc: 'Live railroad radio feeds at most camera locations.' },
+            ].map((feature, i) => (
+              <div key={i} className="text-center p-8 bg-zinc-900 rounded-2xl hover:bg-zinc-800 transition">
+                <div className="w-20 h-20 rounded-2xl bg-[#ff7a00]/20 flex items-center justify-center mx-auto mb-6">
+                  <feature.icon className="w-10 h-10 text-[#ff7a00]" aria-hidden="true" />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-3">{feature.title}</h3>
+                <p className="text-white/70">{feature.desc}</p>
               </div>
-              <p className="text-sm text-white/80 pl-0">{msg.text}</p>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </ScrollArea>
+      </section>
 
-      {/* Input */}
-      <div className="p-4 border-t border-white/10">
-        <div className="flex gap-2">
-          <Input
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Type a message..."
-            className="flex-1 bg-white/5 border-white/10 text-white placeholder:text-white/30 text-sm"
-          />
-          <Button onClick={handleSend} size="icon" className="bg-[#ff7a00] hover:bg-[#ff8c20]">
-            <Send className="w-4 h-4" />
+      {/* PLATFORMS */}
+      <section className="py-20 px-4 bg-zinc-950" aria-labelledby="platforms-heading">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 id="platforms-heading" className="text-3xl md:text-4xl font-bold text-white mb-4">
+            Watch Us 24/7/365
+          </h2>
+          <p className="text-white/70 text-xl mb-12">
+            Available on all your favorite platforms
+          </p>
+          
+          <div className="flex flex-wrap justify-center gap-4">
+            {[
+              { name: 'Roku', url: 'https://channelstore.roku.com/details/74e07738778cf9dfb74340ef94503257' },
+              { name: 'Amazon Fire TV', url: 'https://www.amazon.com/Railstream/dp/B08466FH5Q' },
+              { name: 'Apple TV', url: 'https://apps.apple.com/us/app/railstream/id1520484749' },
+              { name: 'iOS', url: 'https://apps.apple.com/us/app/railstream/id1520484749' },
+              { name: 'Android', url: 'https://play.google.com/store/apps/details?id=com.maz.combo2225rs' },
+            ].map((platform, i) => (
+              <a 
+                key={i}
+                href={platform.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-[#ff7a00] rounded-xl text-white font-medium transition-all"
+              >
+                <Tv className="w-5 h-5" aria-hidden="true" />
+                {platform.name}
+                <ExternalLink className="w-4 h-4" aria-hidden="true" />
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* MEMBERSHIP TIERS */}
+      <section className="py-20 px-4 bg-black" aria-labelledby="pricing-heading">
+        <div className="max-w-6xl mx-auto">
+          <h2 id="pricing-heading" className="text-4xl font-bold text-white text-center mb-4">
+            A Membership for Every Railfan
+          </h2>
+          <p className="text-white/70 text-center text-xl mb-16">
+            Love trains? Us too!
+          </p>
+          
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              {
+                tier: 'fireman',
+                name: 'Fireman',
+                price: 'FREE',
+                features: ['Access to 14 cameras', 'Unlimited viewing with ads', 'Great for getting started'],
+                cta: 'Watch Now',
+                primary: false,
+              },
+              {
+                tier: 'conductor',
+                name: 'Conductor',
+                price: '$8.95',
+                period: '/month',
+                features: ['All Fireman cameras + more', 'AD FREE viewing', 'Extended DVR rewind', 'Dual & Quad viewing', 'Radio feeds'],
+                cta: 'Join Today',
+                primary: true,
+              },
+              {
+                tier: 'engineer',
+                name: 'Engineer',
+                price: '$12.95',
+                period: '/month',
+                features: ['Access to ALL 46 cameras', 'AD FREE viewing', 'Extended DVR rewind', 'All viewing modes', 'Radio feeds', 'Mobile & TV apps'],
+                cta: 'Join Today',
+                primary: false,
+              },
+            ].map((plan, i) => (
+              <div 
+                key={i} 
+                className={`relative p-8 rounded-2xl ${
+                  plan.primary 
+                    ? 'bg-gradient-to-b from-[#ff7a00] to-orange-700 scale-105' 
+                    : 'bg-zinc-900'
+                }`}
+              >
+                {plan.primary && (
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-white text-black px-4 py-1 rounded-full text-sm font-bold">
+                    MOST POPULAR
+                  </div>
+                )}
+                <div className="text-center mb-6">
+                  <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
+                  <div className="flex items-baseline justify-center gap-1">
+                    <span className="text-5xl font-bold text-white">{plan.price}</span>
+                    {plan.period && <span className="text-white/70">{plan.period}</span>}
+                  </div>
+                </div>
+                <ul className="space-y-3 mb-8" role="list">
+                  {plan.features.map((feature, j) => (
+                    <li key={j} className="flex items-center gap-3 text-white">
+                      <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                        <ChevronRight className="w-3 h-3" aria-hidden="true" />
+                      </div>
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+                <Button 
+                  className={`w-full py-6 text-lg font-bold ${
+                    plan.primary 
+                      ? 'bg-white text-[#ff7a00] hover:bg-white/90' 
+                      : 'bg-[#ff7a00] text-white hover:bg-[#ff8c20]'
+                  }`}
+                  onClick={() => plan.tier === 'fireman' ? onStartWatching() : window.open('https://railstream.net/member/signup', '_blank')}
+                >
+                  {plan.cta}
+                  <ArrowRight className="w-5 h-5 ml-2" aria-hidden="true" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FOOTER CTA */}
+      <section className="py-20 px-4 bg-gradient-to-r from-[#ff7a00] to-orange-600" aria-labelledby="final-cta">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 id="final-cta" className="text-4xl md:text-5xl font-bold text-white mb-6">
+            Ready to Railfan?
+          </h2>
+          <p className="text-white/90 text-xl mb-8">
+            Join thousands of railfans watching live trains right now.
+          </p>
+          <Button 
+            size="lg"
+            onClick={onStartWatching}
+            className="bg-white text-[#ff7a00] hover:bg-white/90 text-xl px-12 py-8 rounded-xl font-bold shadow-2xl transition-all hover:scale-105"
+          >
+            <Play className="w-7 h-7 mr-3" fill="currentColor" />
+            Start Watching Now
           </Button>
         </div>
-        <p className="text-xs text-white/30 mt-2">
-          💬 Join our <a href="https://discord.gg/railstream" className="text-[#ff7a00] hover:underline">Discord</a> for more!
-        </p>
-      </div>
-    </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer className="py-12 px-4 bg-black border-t border-white/10" role="contentinfo">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <img 
+              src="https://railstream.net/images/Homepage/WebsiteLogo.png" 
+              alt="RailStream" 
+              className="h-8"
+            />
+            <nav className="flex flex-wrap justify-center gap-6" aria-label="Footer navigation">
+              {['About', 'Cameras', 'Hosts', 'FAQ', 'Terms', 'Privacy'].map(link => (
+                <a key={link} href="#" className="text-white hover:text-[#ff7a00] transition">
+                  {link}
+                </a>
+              ))}
+            </nav>
+            <p className="text-white/50 text-sm">
+              © {new Date().getFullYear()} RailStream, LLC. All rights reserved.
+            </p>
+          </div>
+        </div>
+      </footer>
+    </main>
   );
 }
 
@@ -436,8 +578,10 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
     e.stopPropagation();
     if (favorites.includes(cameraId)) {
       setFavorites(favorites.filter(id => id !== cameraId));
+      toast.success('Removed from favorites');
     } else {
       setFavorites([...favorites, cameraId]);
+      toast.success('Added to favorites');
     }
   };
   
@@ -446,11 +590,8 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
       c.name?.toLowerCase().includes(search.toLowerCase()) ||
       c.location?.toLowerCase().includes(search.toLowerCase());
     let matchesFilter = true;
-    if (filter === 'favorites') {
-      matchesFilter = favorites.includes(c._id);
-    } else if (filter !== 'all') {
-      matchesFilter = c.min_tier === filter;
-    }
+    if (filter === 'favorites') matchesFilter = favorites.includes(c._id);
+    else if (filter !== 'all') matchesFilter = c.min_tier === filter;
     return matchesSearch && matchesFilter;
   });
 
@@ -471,15 +612,12 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
     return 'Other';
   };
 
-  // Group cameras - favorites first, then by region
   const groupedCameras = {};
   if (filter !== 'favorites' && favoritesCameras.length > 0) {
     const favFiltered = favoritesCameras.filter(c => 
       (!search || c.name?.toLowerCase().includes(search.toLowerCase()) || c.location?.toLowerCase().includes(search.toLowerCase()))
     );
-    if (favFiltered.length > 0) {
-      groupedCameras['★ Favorites'] = favFiltered;
-    }
+    if (favFiltered.length > 0) groupedCameras['★ Favorites'] = favFiltered;
   }
   
   filtered.filter(c => filter === 'favorites' || !favorites.includes(c._id)).forEach(cam => {
@@ -496,23 +634,21 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
   };
 
   return (
-    <div className="h-full flex flex-col bg-zinc-900/50">
-      {/* Presets Panel */}
+    <div className="h-full flex flex-col bg-zinc-900/50" role="region" aria-label="Camera selection">
       {showPresets ? (
         <div className="flex-1 flex flex-col">
           <div className="p-3 border-b border-white/10 flex items-center justify-between">
             <h3 className="font-semibold text-white flex items-center gap-2">
-              <Bookmark className="w-4 h-4 text-[#ff7a00]" />
+              <Bookmark className="w-4 h-4 text-[#ff7a00]" aria-hidden="true" />
               My Presets
             </h3>
-            <button onClick={() => setShowPresets(false)} className="p-1 hover:bg-white/10 rounded">
-              <X className="w-4 h-4 text-white/50" />
+            <button onClick={() => setShowPresets(false)} className="p-1 hover:bg-white/10 rounded" aria-label="Close presets">
+              <X className="w-4 h-4 text-white" />
             </button>
           </div>
           
-          {/* Save Current View */}
           <div className="p-3 border-b border-white/5">
-            <p className="text-xs text-white/50 mb-2">Save current view as preset:</p>
+            <label className="text-xs text-white/70 mb-2 block">Save current view as preset:</label>
             <div className="flex gap-2">
               <Input
                 value={newPresetName}
@@ -520,19 +656,19 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
                 placeholder="Preset name..."
                 className="flex-1 bg-white/5 border-white/10 text-white text-sm"
                 onKeyDown={(e) => e.key === 'Enter' && handleSavePreset()}
+                aria-label="Preset name"
               />
-              <Button onClick={handleSavePreset} size="icon" className="bg-[#ff7a00] hover:bg-[#ff8c20]">
+              <Button onClick={handleSavePreset} size="icon" className="bg-[#ff7a00] hover:bg-[#ff8c20]" aria-label="Save preset">
                 <Save className="w-4 h-4" />
               </Button>
             </div>
           </div>
           
-          {/* Preset List */}
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-2">
               {presets.length === 0 ? (
-                <div className="text-center py-8 text-white/30">
-                  <Bookmark className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <div className="text-center py-8 text-white/50">
+                  <Bookmark className="w-8 h-8 mx-auto mb-2 opacity-50" aria-hidden="true" />
                   <p className="text-sm">No presets saved yet</p>
                   <p className="text-xs mt-1">Set up your view and save it!</p>
                 </div>
@@ -548,6 +684,7 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
                           toast.success('Preset deleted');
                         }}
                         className="p-1 hover:bg-white/10 rounded opacity-0 group-hover:opacity-100 transition"
+                        aria-label={`Delete preset ${preset.name}`}
                       >
                         <Trash2 className="w-3 h-3 text-red-400" />
                       </button>
@@ -555,28 +692,15 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
                     <div className="flex gap-1 mb-2">
                       {preset.cameras.slice(0, 4).map((cam, j) => (
                         <div key={j} className="w-10 h-6 rounded overflow-hidden bg-zinc-800">
-                          {cam?.thumbnail_path && (
-                            <img src={cam.thumbnail_path} alt="" className="w-full h-full object-cover" />
-                          )}
+                          {cam?.thumbnail_path && <img src={cam.thumbnail_path} alt="" className="w-full h-full object-cover" />}
                         </div>
                       ))}
-                      {preset.cameras.length > 4 && (
-                        <div className="w-10 h-6 rounded bg-zinc-800 flex items-center justify-center text-xs text-white/50">
-                          +{preset.cameras.length - 4}
-                        </div>
-                      )}
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-white/40">
-                        {preset.viewMode} view • {preset.cameras.filter(Boolean).length} cameras
-                      </span>
+                      <span className="text-xs text-white/50">{preset.viewMode} view • {preset.cameras.filter(Boolean).length} cameras</span>
                       <Button 
                         size="sm" 
-                        onClick={() => {
-                          onLoadPreset(preset);
-                          setShowPresets(false);
-                          toast.success(`Loaded "${preset.name}"`);
-                        }}
+                        onClick={() => { onLoadPreset(preset); setShowPresets(false); toast.success(`Loaded "${preset.name}"`); }}
                         className="h-7 bg-[#ff7a00] hover:bg-[#ff8c20] text-xs"
                       >
                         Load
@@ -590,111 +714,103 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
         </div>
       ) : (
         <>
-          {/* Search & Filter */}
           <div className="p-3 border-b border-white/5 space-y-2">
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" aria-hidden="true" />
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search cameras..."
                   className="pl-9 bg-white/5 border-white/10 text-white text-sm placeholder:text-white/30"
+                  aria-label="Search cameras"
                 />
               </div>
               <button
                 onClick={() => setShowPresets(true)}
-                className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition"
-                title="My Presets"
+                className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white transition"
+                aria-label="Open presets"
               >
                 <Bookmark className="w-4 h-4" />
               </button>
             </div>
             <Tabs value={filter} onValueChange={setFilter}>
               <TabsList className="w-full bg-white/5 p-1">
-                <TabsTrigger value="all" className="flex-1 text-xs data-[state=active]:bg-[#ff7a00]">All</TabsTrigger>
-                <TabsTrigger value="favorites" className="flex-1 text-xs data-[state=active]:bg-yellow-600">
-                  <Star className="w-3 h-3 mr-1" />
+                <TabsTrigger value="all" className="flex-1 text-xs text-white data-[state=active]:bg-[#ff7a00] data-[state=active]:text-white">All</TabsTrigger>
+                <TabsTrigger value="favorites" className="flex-1 text-xs text-white data-[state=active]:bg-yellow-600 data-[state=active]:text-white">
+                  <Star className="w-3 h-3 mr-1" aria-hidden="true" />
                   {favorites.length}
                 </TabsTrigger>
-                <TabsTrigger value="fireman" className="flex-1 text-xs data-[state=active]:bg-orange-600">Free</TabsTrigger>
-                <TabsTrigger value="conductor" className="flex-1 text-xs data-[state=active]:bg-blue-600">Cond</TabsTrigger>
+                <TabsTrigger value="fireman" className="flex-1 text-xs text-white data-[state=active]:bg-orange-600 data-[state=active]:text-white">Free</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
 
-          {/* Camera List */}
           <ScrollArea className="flex-1">
             <div className="p-2">
               {Object.entries(groupedCameras).map(([region, cams]) => (
                 <div key={region} className="mb-4">
-                  <h4 className={`text-xs font-semibold uppercase tracking-wider px-2 mb-2 ${
-                    region === '★ Favorites' ? 'text-yellow-500' : 'text-white/40'
-                  }`}>{region}</h4>
-                  <div className="space-y-1">
+                  <h4 className={`text-xs font-semibold uppercase tracking-wider px-2 mb-2 ${region === '★ Favorites' ? 'text-yellow-500' : 'text-white/50'}`}>
+                    {region}
+                  </h4>
+                  <ul className="space-y-1" role="list">
                     {cams.map(camera => {
                       const isSelected = selectedCameras.some(c => c?._id === camera._id);
                       const hasAccess = canAccess(userTier, camera.min_tier);
                       const isFavorite = favorites.includes(camera._id);
                       
                       return (
-                        <div
-                          key={camera._id}
-                          className={`relative flex items-center gap-3 p-2 rounded-lg transition-all ${
-                            isSelected 
-                              ? 'bg-[#ff7a00]/20 border border-[#ff7a00]/50' 
-                              : hasAccess
-                                ? 'hover:bg-white/5 border border-transparent'
-                                : 'opacity-50 border border-transparent'
-                          }`}
-                        >
-                          <button
-                            onClick={() => hasAccess && onSelect(camera)}
-                            disabled={!hasAccess}
-                            className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                          >
-                            <div className="relative w-16 h-10 rounded overflow-hidden flex-shrink-0">
-                              <img src={camera.thumbnail_path} alt="" className="w-full h-full object-cover" />
-                              {camera.status === 'online' && (
-                                <div className="absolute top-1 left-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                              )}
-                              {!hasAccess && (
-                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                                  <Lock className="w-3 h-3 text-white/60" />
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm text-white truncate">{camera.name}</p>
-                              <p className="text-xs text-white/40 truncate">{camera.location}</p>
-                            </div>
-                          </button>
-                          
-                          {/* Favorite button */}
-                          <button
-                            onClick={(e) => toggleFavorite(camera._id, e)}
-                            className={`p-1.5 rounded transition ${
-                              isFavorite ? 'text-yellow-500' : 'text-white/20 hover:text-yellow-500'
-                            }`}
-                          >
-                            <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
-                          </button>
-                          
-                          {isSelected && (
-                            <div className="w-6 h-6 rounded-full bg-[#ff7a00] flex items-center justify-center text-white text-xs font-bold">
-                              {selectedCameras.findIndex(c => c?._id === camera._id) + 1}
-                            </div>
-                          )}
-                        </div>
+                        <li key={camera._id}>
+                          <div className={`relative flex items-center gap-3 p-2 rounded-lg transition-all ${
+                            isSelected ? 'bg-[#ff7a00]/20 ring-1 ring-[#ff7a00]' : hasAccess ? 'hover:bg-white/5' : 'opacity-50'
+                          }`}>
+                            <button
+                              onClick={() => hasAccess && onSelect(camera)}
+                              disabled={!hasAccess}
+                              className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                              aria-label={`${hasAccess ? 'Select' : 'Locked'} ${camera.name}`}
+                            >
+                              <div className="relative w-16 h-10 rounded overflow-hidden flex-shrink-0">
+                                <img src={camera.thumbnail_path} alt="" className="w-full h-full object-cover" />
+                                {camera.status === 'online' && (
+                                  <span className="absolute top-1 left-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" aria-label="Live" />
+                                )}
+                                {!hasAccess && (
+                                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                    <Lock className="w-3 h-3 text-white" aria-hidden="true" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-white truncate">{camera.name}</p>
+                                <p className="text-xs text-white/50 truncate">{camera.location}</p>
+                              </div>
+                            </button>
+                            
+                            <button
+                              onClick={(e) => toggleFavorite(camera._id, e)}
+                              className={`p-1.5 rounded transition ${isFavorite ? 'text-yellow-500' : 'text-white/30 hover:text-yellow-500'}`}
+                              aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                            >
+                              <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+                            </button>
+                            
+                            {isSelected && (
+                              <span className="w-6 h-6 rounded-full bg-[#ff7a00] flex items-center justify-center text-white text-xs font-bold">
+                                {selectedCameras.findIndex(c => c?._id === camera._id) + 1}
+                              </span>
+                            )}
+                          </div>
+                        </li>
                       );
                     })}
-                  </div>
+                  </ul>
                 </div>
               ))}
               
               {Object.keys(groupedCameras).length === 0 && (
-                <div className="text-center py-8 text-white/30">
-                  <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <div className="text-center py-8 text-white/50">
+                  <Search className="w-8 h-8 mx-auto mb-2 opacity-50" aria-hidden="true" />
                   <p className="text-sm">No cameras found</p>
                 </div>
               )}
@@ -707,18 +823,16 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
 }
 
 // ============================================
-// MULTI-VIEW WATCH PAGE
+// WATCH PAGE
 // ============================================
 function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera, favorites, setFavorites, presets, setPresets }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
 
-  const handleSelectCamera = (camera, slotIndex = null) => {
-    const slot = slotIndex ?? selectedCameras.findIndex(c => !c);
-    const actualSlot = slot === -1 ? 0 : slot;
-    
-    loadCamera(camera, actualSlot);
+  const handleSelectCamera = (camera) => {
+    const slot = selectedCameras.findIndex(c => !c);
+    loadCamera(camera, slot === -1 ? 0 : slot);
   };
 
   const handleSavePreset = (name) => {
@@ -735,13 +849,9 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
 
   const handleLoadPreset = (preset) => {
     setViewMode(preset.viewMode);
-    // Clear current selections
     setSelectedCameras([null, null, null, null, null, null, null, null, null]);
-    // Load cameras from preset
     preset.cameras.forEach((camera, i) => {
-      if (camera) {
-        setTimeout(() => loadCamera(camera, i), i * 200);
-      }
+      if (camera) setTimeout(() => loadCamera(camera, i), i * 200);
     });
   };
 
@@ -755,10 +865,9 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   const slots = VIEW_MODES.find(m => m.id === viewMode)?.slots || 1;
 
   return (
-    <div className="h-screen pt-14 flex bg-black">
-      {/* Left: Camera Picker */}
+    <div className="h-screen pt-16 flex bg-black">
       {pickerOpen && (
-        <div className="w-72 border-r border-white/5 flex-shrink-0">
+        <div className="w-72 border-r border-white/10 flex-shrink-0">
           <CameraPicker
             cameras={cameras}
             selectedCameras={selectedCameras}
@@ -775,42 +884,36 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
         </div>
       )}
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* View Controls */}
-        <div className="h-12 px-4 flex items-center justify-between border-b border-white/5 bg-zinc-900/50">
+        {/* Controls */}
+        <div className="h-12 px-4 flex items-center justify-between border-b border-white/10 bg-zinc-900/50">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPickerOpen(!pickerOpen)}
-              className={`p-2 rounded-lg transition ${pickerOpen ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
+              className={`p-2 rounded-lg transition ${pickerOpen ? 'bg-white/10 text-white' : 'text-white hover:bg-white/5'}`}
+              aria-label={pickerOpen ? 'Hide camera list' : 'Show camera list'}
             >
               <ChevronLeft className={`w-4 h-4 transition-transform ${!pickerOpen ? 'rotate-180' : ''}`} />
             </button>
             
-            <div className="h-6 w-px bg-white/10 mx-2" />
+            <div className="h-6 w-px bg-white/10 mx-2" aria-hidden="true" />
             
-            {/* View Mode Buttons */}
-            <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+            <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1" role="group" aria-label="View mode">
               {VIEW_MODES.map(mode => {
-                const needsUpgrade = (mode.id === 'dual' || mode.id === 'quad' || mode.id === 'nine') && 
-                  (!user || user.membership_tier === 'fireman');
-                
+                const needsUpgrade = (mode.id !== 'single') && (!user || user.membership_tier === 'fireman');
                 return (
                   <button
                     key={mode.id}
                     onClick={() => !needsUpgrade && setViewMode(mode.id)}
                     disabled={needsUpgrade}
                     className={`relative p-2 rounded transition-all ${
-                      viewMode === mode.id 
-                        ? 'bg-[#ff7a00] text-white' 
-                        : needsUpgrade
-                          ? 'text-white/20 cursor-not-allowed'
-                          : 'text-white/50 hover:text-white hover:bg-white/10'
+                      viewMode === mode.id ? 'bg-[#ff7a00] text-white' : needsUpgrade ? 'text-white/20' : 'text-white hover:bg-white/10'
                     }`}
-                    title={needsUpgrade ? 'Upgrade to Conductor or Engineer' : `${mode.label} view`}
+                    aria-label={`${mode.label} camera view${needsUpgrade ? ' (upgrade required)' : ''}`}
+                    aria-pressed={viewMode === mode.id}
                   >
                     <mode.icon className="w-4 h-4" />
-                    {needsUpgrade && <Lock className="w-2 h-2 absolute top-1 right-1 text-white/40" />}
+                    {needsUpgrade && <Lock className="w-2 h-2 absolute top-1 right-1 text-white/40" aria-hidden="true" />}
                   </button>
                 );
               })}
@@ -820,14 +923,17 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsMuted(!isMuted)}
-              className={`p-2 rounded-lg transition ${isMuted ? 'text-red-400' : 'text-white/50 hover:text-white'}`}
+              className={`p-2 rounded-lg transition ${isMuted ? 'text-red-400' : 'text-white hover:bg-white/10'}`}
+              aria-label={isMuted ? 'Unmute' : 'Mute'}
             >
               {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
             </button>
             
             <button
               onClick={() => setChatOpen(!chatOpen)}
-              className={`p-2 rounded-lg transition flex items-center gap-2 ${chatOpen ? 'bg-[#ff7a00] text-white' : 'text-white/50 hover:text-white hover:bg-white/10'}`}
+              className={`p-2 rounded-lg transition flex items-center gap-2 ${chatOpen ? 'bg-[#ff7a00] text-white' : 'text-white hover:bg-white/10'}`}
+              aria-label={chatOpen ? 'Close chat' : 'Open chat'}
+              aria-expanded={chatOpen}
             >
               <MessageCircle className="w-4 h-4" />
               <span className="text-sm hidden sm:inline">Chat</span>
@@ -846,53 +952,69 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                 <div 
                   key={i} 
                   className="relative bg-zinc-900 rounded overflow-hidden group"
-                  onClick={() => !camera && setPickerOpen(true)}
+                  role="region"
+                  aria-label={camera ? `Camera ${i + 1}: ${camera.name}` : `Empty slot ${i + 1}`}
                 >
                   {camera ? (
                     <>
-                      <VideoPlayer
-                        camera={camera}
-                        playbackData={state.data}
-                        isLoading={state.loading}
-                        error={state.error}
-                        isMuted={isMuted || i > 0}
-                        setIsMuted={setIsMuted}
-                        isMain={i === 0}
-                      />
-                      {/* Camera label overlay */}
+                      {state.loading ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black">
+                          <Loader2 className="w-10 h-10 text-[#ff7a00] animate-spin" />
+                        </div>
+                      ) : state.error ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/90">
+                          <div className="text-center p-4">
+                            <X className="w-10 h-10 text-red-400 mx-auto mb-2" aria-hidden="true" />
+                            <p className="text-white">{state.error}</p>
+                          </div>
+                        </div>
+                      ) : state.data?.hls_url ? (
+                        <HLSVideoPlayer
+                          src={state.data.hls_url}
+                          className="w-full h-full object-contain bg-black"
+                          muted={isMuted || i > 0}
+                          autoPlay={true}
+                          controls={i === 0}
+                        />
+                      ) : null}
+                      
                       <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-white text-sm font-medium truncate">{camera.name}</p>
-                            <p className="text-white/60 text-xs truncate">{camera.location}</p>
+                            <p className="text-white/70 text-xs truncate">{camera.location}</p>
                           </div>
                           {camera.status === 'online' && (
                             <Badge className="bg-red-600 text-white text-xs">LIVE</Badge>
                           )}
                         </div>
                       </div>
-                      {/* Close button */}
+                      
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
+                        onClick={() => {
                           const newCameras = [...selectedCameras];
                           newCameras[i] = null;
                           setSelectedCameras(newCameras);
                         }}
-                        className="absolute top-2 right-2 p-1.5 rounded bg-black/50 text-white/70 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute top-2 right-2 p-1.5 rounded bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                        aria-label={`Remove ${camera.name}`}
                       >
                         <X className="w-4 h-4" />
                       </button>
                     </>
                   ) : (
-                    <div className="absolute inset-0 flex items-center justify-center cursor-pointer hover:bg-white/5 transition">
+                    <button
+                      onClick={() => setPickerOpen(true)}
+                      className="absolute inset-0 flex items-center justify-center hover:bg-white/5 transition"
+                      aria-label="Add camera to this slot"
+                    >
                       <div className="text-center">
                         <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-2">
                           <Play className="w-6 h-6 text-white/30" />
                         </div>
                         <p className="text-white/30 text-sm">Click to add camera</p>
                       </div>
-                    </div>
+                    </button>
                   )}
                 </div>
               );
@@ -900,7 +1022,26 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
           </div>
 
           {/* Chat Panel */}
-          <ChatPanel isOpen={chatOpen} onToggle={() => setChatOpen(false)} />
+          {chatOpen && (
+            <div className="w-80 bg-zinc-900/95 border-l border-white/10 flex flex-col" role="complementary" aria-label="Live chat">
+              <div className="p-4 border-b border-white/10 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <MessageCircle className="w-5 h-5 text-[#ff7a00]" aria-hidden="true" />
+                  <span className="font-semibold text-white">Live Chat</span>
+                  <Badge className="bg-green-500/20 text-green-400 text-xs">47 online</Badge>
+                </div>
+                <button onClick={() => setChatOpen(false)} className="p-1 hover:bg-white/10 rounded" aria-label="Close chat">
+                  <X className="w-4 h-4 text-white" />
+                </button>
+              </div>
+              <div className="flex-1 p-4">
+                <p className="text-white/50 text-sm text-center">Chat coming soon!</p>
+                <p className="text-white/30 text-xs text-center mt-2">
+                  Join our <a href="https://discord.gg/railstream" className="text-[#ff7a00] hover:underline">Discord</a> in the meantime!
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -920,70 +1061,64 @@ function CamerasPage({ cameras, user, onSelectCamera }) {
     .filter(c => {
       const matchesSearch = !search || 
         c.name?.toLowerCase().includes(search.toLowerCase()) ||
-        c.location?.toLowerCase().includes(search.toLowerCase()) ||
-        c.description?.toLowerCase().includes(search.toLowerCase());
+        c.location?.toLowerCase().includes(search.toLowerCase());
       const matchesTab = tab === 'all' || c.min_tier === tab;
       return matchesSearch && matchesTab;
     })
     .sort((a, b) => tierOrder[a.min_tier] - tierOrder[b.min_tier]);
 
   const tierGroups = {
-    fireman: { title: 'Fireman Cameras (FREE)', desc: '14 complimentary railcams — no login necessary!', cameras: [] },
-    conductor: { title: 'Conductor Cameras ($8.95/mo)', desc: 'All Fireman cameras plus Berea, Fostoria NKP, West Newton + ad-free viewing.', cameras: [] },
-    engineer: { title: 'Engineer Cameras ($12.95/mo)', desc: 'Access to ALL railcams + mobile/TV apps + all features.', cameras: [] },
+    fireman: { title: 'Fireman Cameras', subtitle: 'FREE - 14 complimentary railcams', cameras: [] },
+    conductor: { title: 'Conductor Cameras', subtitle: '$8.95/mo - All Fireman + exclusive locations', cameras: [] },
+    engineer: { title: 'Engineer Cameras', subtitle: '$12.95/mo - Access to ALL railcams', cameras: [] },
   };
 
-  filtered.forEach(c => {
-    if (tierGroups[c.min_tier]) tierGroups[c.min_tier].cameras.push(c);
-  });
+  filtered.forEach(c => { if (tierGroups[c.min_tier]) tierGroups[c.min_tier].cameras.push(c); });
 
   return (
-    <div className="min-h-screen pt-14 bg-zinc-950">
+    <main className="min-h-screen pt-16 bg-zinc-950">
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="text-center mb-8">
+        <header className="text-center mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">Our Cameras</h1>
-          <p className="text-white/60 max-w-2xl mx-auto">
-            46 live railcams across the USA and Canada. The best video and audio quality on the web — 
-            second only to being trackside!
+          <p className="text-white/70 max-w-2xl mx-auto">
+            46 live railcams across the USA and Canada. Superior video and audio quality — next to being trackside!
           </p>
-        </div>
+        </header>
 
-        {/* Search & Filter */}
         <div className="flex flex-col sm:flex-row gap-4 mb-8 max-w-2xl mx-auto">
           <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" aria-hidden="true" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by location, state, or railroad..."
               className="pl-12 h-12 bg-white/5 border-white/10 text-white placeholder:text-white/30"
+              aria-label="Search cameras"
             />
           </div>
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="bg-white/5 h-12">
-              <TabsTrigger value="all" className="px-4 data-[state=active]:bg-[#ff7a00]">All</TabsTrigger>
-              <TabsTrigger value="fireman" className="px-4 data-[state=active]:bg-orange-600">Free</TabsTrigger>
-              <TabsTrigger value="conductor" className="px-4 data-[state=active]:bg-blue-600">Conductor</TabsTrigger>
-              <TabsTrigger value="engineer" className="px-4 data-[state=active]:bg-purple-600">Engineer</TabsTrigger>
+              <TabsTrigger value="all" className="px-4 text-white data-[state=active]:bg-[#ff7a00]">All</TabsTrigger>
+              <TabsTrigger value="fireman" className="px-4 text-white data-[state=active]:bg-orange-600">Free</TabsTrigger>
+              <TabsTrigger value="conductor" className="px-4 text-white data-[state=active]:bg-blue-600">Conductor</TabsTrigger>
+              <TabsTrigger value="engineer" className="px-4 text-white data-[state=active]:bg-purple-600">Engineer</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
 
-        {/* Camera Groups */}
         {Object.entries(tierGroups).map(([tier, group]) => {
           if (group.cameras.length === 0) return null;
           const TierIcon = TIERS[tier]?.icon || Zap;
           
           return (
-            <div key={tier} className="mb-12">
+            <section key={tier} className="mb-12" aria-labelledby={`${tier}-heading`}>
               <div className="flex items-center gap-3 mb-4">
                 <div className={`p-2 rounded-lg bg-gradient-to-r ${TIERS[tier]?.color}`}>
-                  <TierIcon className="w-5 h-5 text-white" />
+                  <TierIcon className="w-5 h-5 text-white" aria-hidden="true" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-white">{group.title}</h2>
-                  <p className="text-sm text-white/50">{group.desc}</p>
+                  <h2 id={`${tier}-heading`} className="text-xl font-semibold text-white">{group.title}</h2>
+                  <p className="text-sm text-white/50">{group.subtitle}</p>
                 </div>
               </div>
               
@@ -995,9 +1130,9 @@ function CamerasPage({ cameras, user, onSelectCamera }) {
                     <button
                       key={camera._id}
                       onClick={() => hasAccess && onSelectCamera(camera)}
-                      className={`group relative rounded-xl overflow-hidden bg-zinc-900 text-left transition-all hover:scale-[1.02] hover:shadow-xl ${
-                        !hasAccess ? 'opacity-70' : ''
-                      }`}
+                      disabled={!hasAccess}
+                      className={`group relative rounded-xl overflow-hidden bg-zinc-900 text-left transition-all hover:scale-[1.02] ${!hasAccess ? 'opacity-70' : ''}`}
+                      aria-label={`${camera.name} - ${hasAccess ? 'Click to watch' : 'Upgrade required'}`}
                     >
                       <div className="aspect-video relative">
                         <img src={camera.thumbnail_path} alt="" className="w-full h-full object-cover" />
@@ -1005,14 +1140,14 @@ function CamerasPage({ cameras, user, onSelectCamera }) {
                         
                         {camera.status === 'online' && (
                           <Badge className="absolute top-3 left-3 bg-red-600 text-white">
-                            <span className="w-2 h-2 bg-white rounded-full mr-1.5 animate-pulse" />
+                            <span className="w-2 h-2 bg-white rounded-full mr-1.5 animate-pulse" aria-hidden="true" />
                             LIVE
                           </Badge>
                         )}
                         
                         {!hasAccess && (
                           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                            <Lock className="w-8 h-8 text-white/50" />
+                            <Lock className="w-8 h-8 text-white" aria-hidden="true" />
                           </div>
                         )}
                         
@@ -1027,18 +1162,17 @@ function CamerasPage({ cameras, user, onSelectCamera }) {
                       
                       <div className="p-4">
                         <h3 className="font-semibold text-white mb-1">{camera.name}</h3>
-                        <p className="text-sm text-white/50 mb-2">{camera.location}</p>
-                        <p className="text-xs text-white/40 line-clamp-2">{camera.description}</p>
+                        <p className="text-sm text-white/50">{camera.location}</p>
                       </div>
                     </button>
                   );
                 })}
               </div>
-            </div>
+            </section>
           );
         })}
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -1047,161 +1181,79 @@ function CamerasPage({ cameras, user, onSelectCamera }) {
 // ============================================
 function AboutPage() {
   return (
-    <div className="min-h-screen pt-14 bg-zinc-950">
+    <main className="min-h-screen pt-16 bg-zinc-950">
       <div className="max-w-5xl mx-auto px-4 py-16">
-        {/* Hero with Logo */}
-        <div className="text-center mb-16">
-          <img 
-            src="https://railstream.net/images/Homepage/Transparent_Stroke.png" 
-            alt="RailStream Logo" 
-            className="h-24 mx-auto mb-6"
-          />
+        <header className="text-center mb-16">
+          <img src="https://railstream.net/images/Homepage/WebsiteLogo.png" alt="RailStream" className="h-16 mx-auto mb-6" />
           <h1 className="text-4xl font-bold text-white mb-4">About RailStream</h1>
-          <p className="text-xl text-white/60 max-w-2xl mx-auto">
-            Superior image with sound quality that is only second to being trackside.
-          </p>
-        </div>
+          <p className="text-xl text-white/70">Superior image with sound quality that is only second to being trackside.</p>
+        </header>
         
         <div className="space-y-12">
-          {/* Our Story with Photo */}
-          <div className="grid md:grid-cols-2 gap-8 items-center">
-            <div>
-              <img 
-                src="https://railstream.net/images/us2.png" 
-                alt="Mike and Andrea" 
-                className="rounded-2xl w-full shadow-2xl"
-              />
-            </div>
+          <section className="grid md:grid-cols-2 gap-8 items-center">
+            <div><img src="https://railstream.net/images/us2.png" alt="Mike and Andrea, founders of RailStream" className="rounded-2xl w-full shadow-2xl" /></div>
             <div className="bg-zinc-900 rounded-2xl p-8">
               <h2 className="text-3xl font-bold text-white mb-4">Our Story</h2>
-              <p className="text-white/70 leading-relaxed mb-4">
+              <p className="text-white/80 leading-relaxed mb-4">
                 Over a decade ago we had the idea for a railcam at the historic Fostoria Iron Triangle. 
-                It was the first live railcam with sound and it took off like hotcakes! We've grown a lot 
-                since the original cam, but we stay true to our roots.
+                It was the first live railcam with sound and it took off like hotcakes!
               </p>
-              <p className="text-white/70 leading-relaxed mb-4">
-                It is through this commitment to excellence that Railstream has amassed a worldwide following. 
-                We strive to make Railstream a place for all railfans to come and feel welcomed.
+              <p className="text-white/80 leading-relaxed mb-4">
+                We've grown a lot since the original cam, but we stay true to our roots. 
+                Superior image with sound quality that is only second to being trackside.
               </p>
               <p className="text-[#ff7a00] font-semibold text-lg">— Mike & Andrea</p>
             </div>
-          </div>
+          </section>
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { icon: Monitor, value: '46', label: 'Live Cameras' },
-              { icon: Train, value: '19', label: 'Railroads' },
-              { icon: Clock, value: '2M+', label: 'Hours/Month' },
-              { icon: Users, value: '175', label: 'Countries' },
+              { value: '46', label: 'Live Cameras' },
+              { value: '19', label: 'Railroads' },
+              { value: '2M+', label: 'Hours/Month' },
+              { value: '175', label: 'Countries' },
             ].map((stat, i) => (
               <div key={i} className="bg-zinc-900 rounded-xl p-6 text-center">
-                <stat.icon className="w-8 h-8 text-[#ff7a00] mx-auto mb-3" />
-                <div className="text-3xl font-bold text-white mb-1">{stat.value}</div>
-                <div className="text-sm text-white/50">{stat.label}</div>
+                <div className="text-4xl font-bold text-[#ff7a00] mb-1">{stat.value}</div>
+                <div className="text-white">{stat.label}</div>
               </div>
             ))}
-          </div>
+          </section>
 
-          {/* Two People on a Mission with Photo */}
-          <div className="grid md:grid-cols-2 gap-8 items-center">
+          <section className="grid md:grid-cols-2 gap-8 items-center">
             <div className="bg-zinc-900 rounded-2xl p-8 order-2 md:order-1">
-              <h2 className="text-3xl font-bold text-white mb-4">Two People On a Mission</h2>
-              <p className="text-white/70 leading-relaxed mb-4">
-                We aim to create the most immersive and reliable rail-viewing experience online. 
-                Whether you're a lifelong railfan or just discovering the joy of trains, Railstream 
-                brings you closer to the tracks than ever before.
-              </p>
-              <p className="text-white/70 leading-relaxed">
-                Our team is dedicated to quality, innovation, and community — always striving to make 
-                Railstream better for everyone who loves the rails.
-              </p>
-            </div>
-            <div className="order-1 md:order-2">
-              <img 
-                src="https://railstream.net/images/us3.png" 
-                alt="RailStream team in Selma" 
-                className="rounded-2xl w-full shadow-2xl"
-              />
-            </div>
-          </div>
-
-          {/* The RailStream Difference */}
-          <div className="bg-zinc-900 rounded-2xl p-8">
-            <h2 className="text-3xl font-bold text-white mb-6 text-center">The RailStream Difference</h2>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {[
-                { icon: Eye, title: 'Superior Video', desc: 'Our video quality and clarity is second to none.' },
-                { icon: Volume2, title: 'Exquisite Audio', desc: 'Simulate the trackside experience with crystal-clear sound.' },
-                { icon: Zap, title: 'Night Vision', desc: 'Additional lighting for 24/7 nighttime viewing.' },
-                { icon: Radio, title: 'Scanner Feeds', desc: 'Railroad radio at most locations.' },
-              ].map((feature, i) => (
-                <div key={i} className="text-center">
-                  <div className="w-16 h-16 rounded-xl bg-[#ff7a00]/20 flex items-center justify-center mx-auto mb-4">
-                    <feature.icon className="w-8 h-8 text-[#ff7a00]" />
-                  </div>
-                  <h3 className="font-semibold text-white mb-2">{feature.title}</h3>
-                  <p className="text-sm text-white/60">{feature.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* With Help of Friends */}
-          <div className="grid md:grid-cols-2 gap-8 items-center">
-            <div>
-              <img 
-                src="https://railstream.net/images/uslong.png" 
-                alt="RailStream team on site" 
-                className="rounded-2xl w-full shadow-2xl"
-              />
-            </div>
-            <div className="bg-zinc-900 rounded-2xl p-8">
               <h2 className="text-3xl font-bold text-white mb-4">With the Help of Friends</h2>
-              <p className="text-white/70 leading-relaxed mb-4">
-                We're blessed to work with an incredible network of partners, organizations, and 
-                generous families who help make our camera locations possible.
+              <p className="text-white/80 leading-relaxed mb-4">
+                We're blessed to work with an incredible network of partners, organizations, and generous families 
+                who help make our camera locations possible.
               </p>
-              <p className="text-white/70 leading-relaxed mb-4">
-                Many of our most beloved views exist thanks to railfans who've opened their backyards, 
-                businesses, and properties so we can bring you the next best thing to railfanning trackside.
-              </p>
-              <p className="text-white/50 text-sm mb-4">
-                A Special Thanks to: Mark, Kevin, Lloyd, Ron, Tom, Thomas, Justin, and Warren — your 
-                support and guidance have made a meaningful difference.
+              <p className="text-white/60 text-sm mb-4">
+                A Special Thanks to: Mark, Kevin, Lloyd, Ron, Tom, Thomas, Justin, and Warren.
               </p>
               <p className="text-[#ff7a00] font-semibold">— Mike & Andrea</p>
             </div>
-          </div>
+            <div className="order-1 md:order-2"><img src="https://railstream.net/images/us3.png" alt="RailStream team on location" className="rounded-2xl w-full shadow-2xl" /></div>
+          </section>
 
-          {/* Watch Everywhere */}
-          <div className="bg-gradient-to-r from-[#ff7a00] to-orange-600 rounded-2xl p-8 text-center">
+          <section className="bg-gradient-to-r from-[#ff7a00] to-orange-600 rounded-2xl p-8 text-center">
             <h2 className="text-3xl font-bold text-white mb-4">Watch Everywhere</h2>
             <p className="text-white/90 mb-6">Available 24/7/365 on all your favorite platforms.</p>
             <div className="flex flex-wrap justify-center gap-4">
               {[
                 { name: 'Roku', url: 'https://channelstore.roku.com/details/74e07738778cf9dfb74340ef94503257' },
-                { name: 'Amazon Fire TV', url: 'https://www.amazon.com/Railstream/dp/B08466FH5Q' },
-                { name: 'Apple TV / iOS', url: 'https://apps.apple.com/us/app/railstream/id1520484749' },
+                { name: 'Fire TV', url: 'https://www.amazon.com/Railstream/dp/B08466FH5Q' },
+                { name: 'Apple TV', url: 'https://apps.apple.com/us/app/railstream/id1520484749' },
                 { name: 'Android', url: 'https://play.google.com/store/apps/details?id=com.maz.combo2225rs' },
-              ].map((platform, i) => (
-                <a 
-                  key={i} 
-                  href={platform.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-6 py-3 bg-white/20 hover:bg-white/30 rounded-lg transition"
-                >
-                  <Tv className="w-5 h-5 text-white" />
-                  <span className="text-white font-medium">{platform.name}</span>
-                  <ExternalLink className="w-4 h-4 text-white/70" />
+              ].map((p, i) => (
+                <a key={i} href={p.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-6 py-3 bg-white/20 hover:bg-white/30 rounded-xl text-white font-medium transition">
+                  <Tv className="w-5 h-5" aria-hidden="true" />{p.name}<ExternalLink className="w-4 h-4" aria-hidden="true" />
                 </a>
               ))}
             </div>
-          </div>
+          </section>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -1210,47 +1262,40 @@ function AboutPage() {
 // ============================================
 function HostsPage() {
   const hosts = [
-    { name: "Bim's Package", location: "Atlanta, Georgia", url: "https://bimsliquor.com/" },
-    { name: "Boyce Railway Depot Foundation", location: "Boyce, Virginia", url: "https://boycedepot.com/" },
-    { name: "Riley's Railhouse", location: "Chesterton, Indiana", url: "https://www.rileysrailhouse.com/" },
-    { name: "Mount Carmel High School", location: "Chicago, Illinois", url: "https://www.mchs.org/" },
-    { name: "The Station Inn", location: "Cresson, Pennsylvania", url: "https://stationinnpa.com/" },
-    { name: "Sandy Creek Mining Company", location: "West Newton, PA", url: "https://sandycreekmining.com/" },
-    { name: "Fullerton Train Museum", location: "Fullerton, California", url: "https://fullertontrainmuseum.org/" },
-    { name: "Ludlow Heritage Museum", location: "Ludlow, Kentucky", url: "https://www.ludlowheritagemuseum.com/" },
-    { name: "Oregon Depot Museum", location: "Oregon, Illinois", url: "http://oregondepot.com/" },
-    { name: "City of Selma", location: "Selma, North Carolina" },
-    { name: "The Black Dog Coffee Company", location: "Shenandoah Jct, WV", url: "https://blackdogcoffee.net/" },
-    { name: "Roomettes", location: "Belleville, Ontario", url: "https://roometteslighting.com/" },
-    { name: "Mad River & NKP Railroad Museum", location: "Bellevue, Ohio", url: "https://madrivermuseum.org/" },
-    { name: "Village of Coal City", location: "Coal City, Illinois" },
-    { name: "Durand Union Station", location: "Durand, Michigan", url: "https://www.durandstation.org/" },
+    { name: "Bim's Package", location: "Atlanta, GA", url: "https://bimsliquor.com/" },
+    { name: "Boyce Railway Depot", location: "Boyce, VA", url: "https://boycedepot.com/" },
+    { name: "Riley's Railhouse", location: "Chesterton, IN", url: "https://www.rileysrailhouse.com/" },
+    { name: "Mount Carmel High School", location: "Chicago, IL", url: "https://www.mchs.org/" },
+    { name: "The Station Inn", location: "Cresson, PA", url: "https://stationinnpa.com/" },
+    { name: "Sandy Creek Mining Co.", location: "West Newton, PA", url: "https://sandycreekmining.com/" },
+    { name: "Fullerton Train Museum", location: "Fullerton, CA", url: "https://fullertontrainmuseum.org/" },
+    { name: "Ludlow Heritage Museum", location: "Ludlow, KY", url: "https://www.ludlowheritagemuseum.com/" },
+    { name: "Oregon Depot Museum", location: "Oregon, IL", url: "http://oregondepot.com/" },
+    { name: "City of Selma", location: "Selma, NC" },
+    { name: "Black Dog Coffee", location: "Shenandoah Jct, WV", url: "https://blackdogcoffee.net/" },
+    { name: "Roomettes", location: "Belleville, ON", url: "https://roometteslighting.com/" },
+    { name: "Mad River & NKP Museum", location: "Bellevue, OH", url: "https://madrivermuseum.org/" },
+    { name: "Village of Coal City", location: "Coal City, IL" },
+    { name: "Durand Union Station", location: "Durand, MI", url: "https://www.durandstation.org/" },
     { name: "Village of Franklin Park", location: "Franklin Park, IL", url: "https://www.villageoffranklinpark.com/" },
-    { name: "Whole Cubes", location: "La Grange, Illinois", url: "https://wholecubes.com/" },
-    { name: "Copy Cat Printing", location: "Grand Island, Nebraska" },
-    { name: "Marion Union Station Assoc.", location: "Marion, Ohio" },
-    { name: "Advanced Auto Images", location: "Northwood, Ohio", url: "http://www.advancedautoimages.com/" },
-    { name: "Rosenberg Railroad Museum", location: "Rosenberg, Texas", url: "https://www.rosenbergrrmuseum.org/" },
-    { name: "City of Saginaw", location: "Saginaw, Texas" },
-    { name: "CentrA Mod", location: "Temple, Texas", url: "http://centramodrr.com/" },
+    { name: "Whole Cubes", location: "La Grange, IL", url: "https://wholecubes.com/" },
+    { name: "Rosenberg Railroad Museum", location: "Rosenberg, TX", url: "https://www.rosenbergrrmuseum.org/" },
     { name: "Waldwick Historical Society", location: "Waldwick, NJ", url: "https://www.allaboardwaldwick.org/" },
   ];
 
   return (
-    <div className="min-h-screen pt-14 bg-zinc-950">
+    <main className="min-h-screen pt-16 bg-zinc-950">
       <div className="max-w-5xl mx-auto px-4 py-16">
-        <h1 className="text-4xl font-bold text-white text-center mb-4">Our Hosts</h1>
-        <p className="text-white/60 text-center mb-12 max-w-2xl mx-auto">
-          Our cameras wouldn't be possible without the support of our incredible hosts. 
-          Each location offers a unique rail experience.
-        </p>
+        <header className="text-center mb-12">
+          <h1 className="text-4xl font-bold text-white mb-4">Our Hosts</h1>
+          <p className="text-white/70 max-w-2xl mx-auto">
+            Our cameras wouldn't be possible without the support of our incredible hosts.
+          </p>
+        </header>
 
         <div className="bg-zinc-900 rounded-2xl p-6 mb-8">
-          <p className="text-white/70 leading-relaxed">
-            A huge thank you also goes out to our community partners and the railfan families 
-            (The Behrs, The Tweeds, The Kuiphoffs, The Schillingers, Mr Snyder, Mr Hinsdale, 
-            Mr Horner, Mr Southwell, Mr Poll, and Mr Wallace) who have graciously opened their backyards. 
-            Your generosity has helped us grow and make Railstream what it is today.
+          <p className="text-white/80 leading-relaxed">
+            A huge thank you to our community partners and the railfan families who have graciously opened their backyards.
           </p>
           <p className="text-[#ff7a00] font-semibold mt-4">— Mike & Andrea</p>
         </div>
@@ -1259,15 +1304,14 @@ function HostsPage() {
           {hosts.map((host, i) => (
             <div key={i} className="bg-zinc-900 rounded-xl p-4 flex items-start gap-4">
               <div className="w-12 h-12 rounded-lg bg-[#ff7a00]/20 flex items-center justify-center flex-shrink-0">
-                <Users className="w-6 h-6 text-[#ff7a00]" />
+                <Users className="w-6 h-6 text-[#ff7a00]" aria-hidden="true" />
               </div>
               <div>
                 <h3 className="font-semibold text-white">{host.name}</h3>
                 <p className="text-sm text-white/50 mb-2">{host.location}</p>
                 {host.url && (
-                  <a href={host.url} target="_blank" rel="noopener noreferrer" 
-                     className="text-sm text-[#ff7a00] hover:underline inline-flex items-center gap-1">
-                    Visit <ExternalLink className="w-3 h-3" />
+                  <a href={host.url} target="_blank" rel="noopener noreferrer" className="text-sm text-[#ff7a00] hover:underline inline-flex items-center gap-1">
+                    Visit <ExternalLink className="w-3 h-3" aria-hidden="true" />
                   </a>
                 )}
               </div>
@@ -1276,15 +1320,14 @@ function HostsPage() {
         </div>
 
         <div className="mt-12 bg-gradient-to-r from-[#ff7a00] to-orange-600 rounded-2xl p-8 text-center">
-          <h3 className="text-2xl font-bold text-white mb-2">Want to be a RailStream host?</h3>
-          <p className="text-white/80 mb-4">Have an idea for a new railcam location?</p>
+          <h2 className="text-2xl font-bold text-white mb-2">Want to be a RailStream host?</h2>
+          <p className="text-white/90 mb-4">Have an idea for a new railcam location?</p>
           <a href="mailto:railcam@railstream.net" className="inline-flex items-center gap-2 bg-white text-[#ff7a00] px-6 py-3 rounded-lg font-semibold hover:bg-white/90 transition">
-            <Mail className="w-5 h-5" />
-            railcam@railstream.net
+            <Mail className="w-5 h-5" aria-hidden="true" />railcam@railstream.net
           </a>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -1293,64 +1336,43 @@ function HostsPage() {
 // ============================================
 function FAQPage() {
   const faqs = [
-    {
-      q: "How do I upgrade my membership?",
-      a: "Click on 'Account Info' in the top menu, select 'SignUp Form', choose your membership type, and follow the payment prompts. Engineer level includes access to TV and mobile apps."
-    },
-    {
-      q: "Why do free cameras have ads and timeouts?",
-      a: "Ads and timeouts allow us to offer 14 cameras to the public for free. Without them, RailStream would be unable to provide free cameras and maintain the site. Upgrade to Conductor or Engineer for ad-free viewing."
-    },
-    {
-      q: "Why can't I log into more than one device?",
-      a: "Due to security settings, users cannot log into more than one machine simultaneously. We offer dual view and quad view (Conductor and Engineer members) so you can enjoy multiple cameras at once."
-    },
-    {
-      q: "What do I do if cameras are buffering?",
-      a: "Check your internet connection speed at speedtest.net. We recommend at least 6 Mbps and a dual-core processor or newer. For multi-view, a faster connection helps."
-    },
-    {
-      q: "I see the cameras but no sound?",
-      a: "Check that your computer volume isn't muted and that the mute button on the camera player isn't enabled. If issues persist, contact us."
-    },
-    {
-      q: "Can I post RailStream content on YouTube or social media?",
-      a: "All content is property of RailStream, LLC and protected by copyright. Any rebroadcast or retransmission without expressed written consent is prohibited."
-    },
-    {
-      q: "Can you wipe rain or snow off the cameras?",
-      a: "Unfortunately, no. Our cameras brave the elements outdoors. Mother Nature will hopefully clear things up so we don't miss too many trains!"
-    },
+    { q: "How do I upgrade my membership?", a: "Click on 'Account Info' in the top menu, select 'SignUp Form', choose your membership type, and follow the payment prompts." },
+    { q: "Why do free cameras have ads?", a: "Ads allow us to offer 14 cameras to the public for free. Upgrade to Conductor or Engineer for ad-free viewing." },
+    { q: "Why can't I log into more than one device?", a: "Due to security settings, users cannot log into more than one machine simultaneously. We offer dual and quad view so you can enjoy multiple cameras at once." },
+    { q: "What if cameras are buffering?", a: "Check your internet speed at speedtest.net. We recommend at least 6 Mbps and a dual-core processor." },
+    { q: "I see cameras but no sound?", a: "Check that your computer volume isn't muted and that the mute button on the player isn't enabled." },
+    { q: "Can I post RailStream content online?", a: "All content is property of RailStream, LLC and protected by copyright. Rebroadcast without consent is prohibited." },
   ];
 
   return (
-    <div className="min-h-screen pt-14 bg-zinc-950">
+    <main className="min-h-screen pt-16 bg-zinc-950">
       <div className="max-w-3xl mx-auto px-4 py-16">
-        <h1 className="text-4xl font-bold text-white text-center mb-4">FAQ</h1>
-        <p className="text-white/60 text-center mb-12">Common questions from the RailStream community.</p>
+        <header className="text-center mb-12">
+          <h1 className="text-4xl font-bold text-white mb-4">FAQ</h1>
+          <p className="text-white/70">Common questions from the RailStream community.</p>
+        </header>
 
         <div className="space-y-4">
           {faqs.map((faq, i) => (
             <div key={i} className="bg-zinc-900 rounded-xl p-6">
               <h3 className="font-semibold text-white mb-2 flex items-start gap-3">
-                <HelpCircle className="w-5 h-5 text-[#ff7a00] flex-shrink-0 mt-0.5" />
+                <HelpCircle className="w-5 h-5 text-[#ff7a00] flex-shrink-0 mt-0.5" aria-hidden="true" />
                 {faq.q}
               </h3>
-              <p className="text-white/60 pl-8">{faq.a}</p>
+              <p className="text-white/70 pl-8">{faq.a}</p>
             </div>
           ))}
         </div>
 
         <div className="mt-12 bg-zinc-900 rounded-2xl p-8 text-center">
-          <h3 className="text-xl font-semibold text-white mb-2">Still have questions?</h3>
-          <p className="text-white/60 mb-4">Our team is here to help!</p>
+          <h2 className="text-xl font-semibold text-white mb-2">Still have questions?</h2>
+          <p className="text-white/70 mb-4">Our team is here to help!</p>
           <a href="mailto:contactus@railstream.net" className="inline-flex items-center gap-2 bg-[#ff7a00] text-white px-6 py-3 rounded-lg font-semibold hover:bg-[#ff8c20] transition">
-            <Mail className="w-5 h-5" />
-            contactus@railstream.net
+            <Mail className="w-5 h-5" aria-hidden="true" />contactus@railstream.net
           </a>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -1367,7 +1389,6 @@ function LoginDialog({ open, onClose, onSuccess }) {
     e.preventDefault();
     setLoading(true);
     setError('');
-
     try {
       const data = await clientApi.login(username, password);
       if (data.access_token) {
@@ -1390,54 +1411,25 @@ function LoginDialog({ open, onClose, onSuccess }) {
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="bg-zinc-900 border-zinc-800 sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <div className="w-8 h-8 rounded bg-[#ff7a00] flex items-center justify-center">
-              <Train className="w-5 h-5 text-white" />
-            </div>
-            Sign In to RailStream
+          <DialogTitle className="flex items-center gap-2 text-xl text-white">
+            <img src="https://railstream.net/images/Homepage/WebsiteLogo.png" alt="" className="h-8" />
+            Sign In
           </DialogTitle>
-          <DialogDescription>
-            Access premium cameras and features
-          </DialogDescription>
+          <DialogDescription className="text-white/70">Access your RailStream account</DialogDescription>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-          {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
-              {error}
-            </div>
-          )}
-          
-          <Input
-            placeholder="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="h-12 bg-zinc-800 border-zinc-700 text-white"
-            required
-          />
-          
-          <Input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="h-12 bg-zinc-800 border-zinc-700 text-white"
-            required
-          />
-          
+          {error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">{error}</div>}
+          <Input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} className="h-12 bg-zinc-800 border-zinc-700 text-white placeholder:text-white/30" required aria-label="Username" />
+          <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 bg-zinc-800 border-zinc-700 text-white placeholder:text-white/30" required aria-label="Password" />
           <Button type="submit" className="w-full h-12 bg-[#ff7a00] hover:bg-[#ff8c20] text-white font-semibold" disabled={loading}>
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Sign In'}
           </Button>
         </form>
         
-        <div className="mt-4 text-center">
-          <p className="text-white/40 text-sm">
-            New to RailStream?{' '}
-            <a href="https://railstream.net/member/signup" target="_blank" className="text-[#ff7a00] hover:underline font-medium">
-              Join Today
-            </a>
-          </p>
-        </div>
+        <p className="text-center text-white/50 text-sm mt-4">
+          New to RailStream? <a href="https://railstream.net/member/signup" target="_blank" className="text-[#ff7a00] hover:underline font-medium">Join Today</a>
+        </p>
       </DialogContent>
     </Dialog>
   );
@@ -1450,15 +1442,12 @@ export default function App() {
   const [cameras, setCameras] = useState([]);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState('watch');
+  const [currentPage, setCurrentPage] = useState('home');
   const [loginOpen, setLoginOpen] = useState(false);
   
-  // Multi-view state
   const [viewMode, setViewMode] = useState('single');
   const [selectedCameras, setSelectedCameras] = useState([null, null, null, null, null, null, null, null, null]);
   const [playbackStates, setPlaybackStates] = useState({});
-  
-  // Favorites and Presets
   const [favorites, setFavorites] = useState([]);
   const [presets, setPresets] = useState([]);
 
@@ -1467,11 +1456,8 @@ export default function App() {
       try {
         const catalog = await clientApi.getCatalog();
         if (Array.isArray(catalog)) setCameras(catalog);
-        
         const savedUser = auth.getUser();
         if (savedUser) setUser(savedUser);
-        
-        // Load favorites and presets from localStorage
         setFavorites(storage.getFavorites());
         setPresets(storage.getPresets());
       } catch (e) {
@@ -1488,36 +1474,19 @@ export default function App() {
       toast.error(`Upgrade to ${TIERS[camera.min_tier]?.label} to watch this camera`);
       return;
     }
-
-    // Update selected cameras
     const newCameras = [...selectedCameras];
     newCameras[slotIndex] = camera;
     setSelectedCameras(newCameras);
-
-    // Set loading state
-    setPlaybackStates(prev => ({
-      ...prev,
-      [slotIndex]: { loading: true, data: null, error: null }
-    }));
-
+    setPlaybackStates(prev => ({ ...prev, [slotIndex]: { loading: true, data: null, error: null } }));
     try {
       const data = await clientApi.authorizePlayback(camera._id);
       if (data.ok && data.hls_url) {
-        setPlaybackStates(prev => ({
-          ...prev,
-          [slotIndex]: { loading: false, data, error: null }
-        }));
+        setPlaybackStates(prev => ({ ...prev, [slotIndex]: { loading: false, data, error: null } }));
       } else {
-        setPlaybackStates(prev => ({
-          ...prev,
-          [slotIndex]: { loading: false, data: null, error: data.detail || 'Unable to load' }
-        }));
+        setPlaybackStates(prev => ({ ...prev, [slotIndex]: { loading: false, data: null, error: data.detail || 'Unable to load' } }));
       }
     } catch {
-      setPlaybackStates(prev => ({
-        ...prev,
-        [slotIndex]: { loading: false, data: null, error: 'Connection error' }
-      }));
+      setPlaybackStates(prev => ({ ...prev, [slotIndex]: { loading: false, data: null, error: 'Connection error' } }));
     }
   };
 
@@ -1537,10 +1506,8 @@ export default function App() {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[#ff7a00] to-orange-600 flex items-center justify-center mx-auto mb-4 animate-pulse">
-            <Train className="w-10 h-10 text-white" />
-          </div>
-          <p className="text-white/50">Loading RailStream...</p>
+          <img src="https://railstream.net/images/Homepage/WebsiteLogo.png" alt="RailStream" className="h-12 mx-auto mb-4 animate-pulse" />
+          <p className="text-white/50">Loading...</p>
         </div>
       </div>
     );
@@ -1550,48 +1517,46 @@ export default function App() {
     <div className="min-h-screen bg-black text-white">
       <Toaster position="top-center" richColors />
       
-      <Navigation
-        user={user}
-        onLogin={() => setLoginOpen(true)}
-        onLogout={handleLogout}
-        currentPage={currentPage}
-        setCurrentPage={setCurrentPage}
-      />
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-[#ff7a00] text-white px-4 py-2 rounded z-50">
+        Skip to main content
+      </a>
+      
+      <Navigation user={user} onLogin={() => setLoginOpen(true)} onLogout={handleLogout} currentPage={currentPage} setCurrentPage={setCurrentPage} />
 
-      {currentPage === 'watch' && (
-        <WatchPage
-          cameras={cameras}
-          user={user}
-          viewMode={viewMode}
-          setViewMode={setViewMode}
-          selectedCameras={selectedCameras}
-          setSelectedCameras={setSelectedCameras}
-          playbackStates={playbackStates}
-          loadCamera={loadCamera}
-          favorites={favorites}
-          setFavorites={setFavorites}
-          presets={presets}
-          setPresets={setPresets}
-        />
-      )}
+      <div id="main-content">
+        {currentPage === 'home' && (
+          <HomePage 
+            cameras={cameras} 
+            onStartWatching={() => setCurrentPage('watch')} 
+            onLogin={() => setLoginOpen(true)}
+            user={user}
+          />
+        )}
+        
+        {currentPage === 'watch' && (
+          <WatchPage
+            cameras={cameras}
+            user={user}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            selectedCameras={selectedCameras}
+            setSelectedCameras={setSelectedCameras}
+            playbackStates={playbackStates}
+            loadCamera={loadCamera}
+            favorites={favorites}
+            setFavorites={setFavorites}
+            presets={presets}
+            setPresets={setPresets}
+          />
+        )}
 
-      {currentPage === 'cameras' && (
-        <CamerasPage
-          cameras={cameras}
-          user={user}
-          onSelectCamera={handleSelectCameraFromPage}
-        />
-      )}
+        {currentPage === 'cameras' && <CamerasPage cameras={cameras} user={user} onSelectCamera={handleSelectCameraFromPage} />}
+        {currentPage === 'about' && <AboutPage />}
+        {currentPage === 'hosts' && <HostsPage />}
+        {currentPage === 'faq' && <FAQPage />}
+      </div>
 
-      {currentPage === 'about' && <AboutPage />}
-      {currentPage === 'hosts' && <HostsPage />}
-      {currentPage === 'faq' && <FAQPage />}
-
-      <LoginDialog
-        open={loginOpen}
-        onClose={() => setLoginOpen(false)}
-        onSuccess={setUser}
-      />
+      <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onSuccess={setUser} />
     </div>
   );
 }
