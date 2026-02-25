@@ -11,22 +11,21 @@ import {
 
 // Timeline milestones
 const MILESTONES = [
-  { year: 2010, title: "The Beginning", description: "RailStream launches with a single camera in Fostoria, Ohio. Mike Kissell's vision of bringing the railfan community together online begins." },
-  { year: 2011, title: "Growing Community", description: "First 1,000 members join. The community grows as word spreads among railfans worldwide." },
-  { year: 2012, title: "Multi-Camera Expansion", description: "Network expands to 5 locations. Chicago and Chesterton cameras go live." },
-  { year: 2013, title: "DVR Features Launch", description: "Review Ops debuts, allowing members to go back in time and never miss a train." },
-  { year: 2014, title: "Mobile Access", description: "RailStream goes mobile, bringing live trains to phones and tablets everywhere." },
-  { year: 2015, title: "Community Milestones", description: "10,000 active members. First RailStream meetup events organized." },
-  { year: 2016, title: "HD Upgrade", description: "All cameras upgraded to 1080p HD. Crystal clear train watching arrives." },
-  { year: 2017, title: "Scanner Integration", description: "Railroad radio scanners integrated into streams. Hear the action as it happens." },
-  { year: 2018, title: "Andrea Joins", description: "Andrea brings her creative vision, transforming the site's look and feel." },
+  { year: 2011, title: "The Beginning", description: "RailStream launches in March with a single camera in Fostoria, Ohio. Mike & Andrea's vision of bringing the railfan community together online begins." },
+  { year: 2012, title: "Growing Community", description: "First 1,000 members join. The community grows as word spreads among railfans worldwide." },
+  { year: 2013, title: "Multi-Camera Expansion", description: "Network expands to 5 locations. Chicago and Chesterton cameras go live." },
+  { year: 2014, title: "DVR Features Launch", description: "Review Ops debuts, allowing members to go back in time and never miss a train." },
+  { year: 2015, title: "Mobile Access", description: "RailStream goes mobile, bringing live trains to phones and tablets everywhere." },
+  { year: 2016, title: "Community Milestones", description: "10,000 active members. First RailStream meetup events organized." },
+  { year: 2017, title: "HD Upgrade", description: "All cameras upgraded to 1080p HD. Crystal clear train watching arrives." },
+  { year: 2018, title: "Scanner Integration", description: "Railroad radio scanners integrated into streams. Hear the action as it happens." },
   { year: 2019, title: "25 Cameras Strong", description: "Network reaches 25 locations across the United States." },
   { year: 2020, title: "Pandemic Connection", description: "During lockdowns, RailStream becomes a vital connection to the outside world for thousands." },
   { year: 2021, title: "PTZ Cameras", description: "First pan-tilt-zoom cameras deployed, letting operators track trains in real-time." },
   { year: 2022, title: "Audio Options", description: "Multiple audio track selection launches - railroad radio, ambient, or silent viewing." },
   { year: 2023, title: "40+ Locations", description: "Network expands to over 40 camera locations nationwide." },
   { year: 2024, title: "Next Generation", description: "Planning begins for the next-generation RailStream platform." },
-  { year: 2025, title: "15 Years Strong", description: "Celebrating 15 years of connecting railfans worldwide. The journey continues!" },
+  { year: 2026, title: "15 Years Strong", description: "Celebrating 15 years of connecting railfans worldwide. The journey continues!" },
 ];
 
 // Key contributors
