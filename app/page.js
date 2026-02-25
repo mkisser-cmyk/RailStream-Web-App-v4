@@ -761,6 +761,12 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
             onSelect={handleSelectCamera}
             userTier={user?.membership_tier}
             viewMode={viewMode}
+            favorites={favorites}
+            setFavorites={(f) => { setFavorites(f); storage.setFavorites(f); }}
+            presets={presets}
+            setPresets={(p) => { setPresets(p); storage.setPresets(p); }}
+            onLoadPreset={handleLoadPreset}
+            onSavePreset={handleSavePreset}
           />
         </div>
       )}
