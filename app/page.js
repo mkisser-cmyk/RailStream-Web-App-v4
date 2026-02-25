@@ -102,13 +102,21 @@ function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const navItems = [
-    { id: 'home', label: 'Home' },
-    { id: 'watch', label: 'Watch' },
-    { id: 'cameras', label: 'Cameras' },
-    { id: 'about', label: 'About' },
-    { id: 'hosts', label: 'Hosts' },
-    { id: 'faq', label: 'FAQ' },
+    { id: 'home', label: 'Home', href: null },
+    { id: '15years', label: '🎉 15 Years', href: '/15years' },
+    { id: 'watch', label: 'Watch', href: null },
+    { id: 'cameras', label: 'Cameras', href: '/cameras' },
+    { id: 'host', label: 'Host', href: '/host' },
+    { id: 'about', label: 'About', href: null },
   ];
+
+  const handleNavClick = (item) => {
+    if (item.href) {
+      window.location.href = item.href;
+    } else {
+      setCurrentPage(item.id);
+    }
+  };
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-sm border-b border-white/10" role="navigation" aria-label="Main navigation">
@@ -131,13 +139,15 @@ function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
           {navItems.map(item => (
             <button
               key={item.id}
-              onClick={() => setCurrentPage(item.id)}
+              onClick={() => handleNavClick(item)}
               role="menuitem"
               aria-current={currentPage === item.id ? 'page' : undefined}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                currentPage === item.id 
-                  ? 'bg-[#ff7a00] text-white' 
-                  : 'text-white hover:bg-white/10'
+                item.id === '15years' 
+                  ? 'bg-gradient-to-r from-orange-500 to-yellow-500 text-white hover:from-orange-600 hover:to-yellow-600'
+                  : currentPage === item.id 
+                    ? 'bg-[#ff7a00] text-white' 
+                    : 'text-white hover:bg-white/10'
               }`}
             >
               {item.label}
@@ -187,10 +197,12 @@ function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
           {navItems.map(item => (
             <button
               key={item.id}
-              onClick={() => { setCurrentPage(item.id); setMenuOpen(false); }}
+              onClick={() => { handleNavClick(item); setMenuOpen(false); }}
               role="menuitem"
               className={`block w-full text-left px-4 py-3 rounded-lg text-white font-medium ${
-                currentPage === item.id ? 'bg-[#ff7a00]' : 'hover:bg-white/10'
+                item.id === '15years'
+                  ? 'bg-gradient-to-r from-orange-500 to-yellow-500'
+                  : currentPage === item.id ? 'bg-[#ff7a00]' : 'hover:bg-white/10'
               }`}
             >
               {item.label}
