@@ -285,16 +285,13 @@ function VideoPlayer({ camera, playbackData, isLoading, error, onClose, isMuted,
 
   if (canWatch) {
     return (
-      <video
-        key={playbackData.hls_url}
-        className="w-full h-full object-contain bg-black"
-        controls={isMain}
-        autoPlay
+      <HLSVideoPlayer
+        src={playbackData.hls_url}
+        autoPlay={true}
         muted={isMuted}
-        playsInline
-      >
-        <source src={playbackData.hls_url} type="application/x-mpegURL" />
-      </video>
+        controls={isMain}
+        onError={(err) => console.error('Player error:', err)}
+      />
     );
   }
 
