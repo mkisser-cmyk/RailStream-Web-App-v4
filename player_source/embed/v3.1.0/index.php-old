@@ -1,0 +1,213 @@
+<?php
+// /embed/v3.1.0/index.php
+// RailStream Embed Entry — v3.1.0
+// Expects: ?p=<base64url(json)>&s=<hex_hmac_sha256(p, EMBED_SECRET)>
+
+declare(strict_types=1);
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+// -----------------------------
+// CONFIG (keep simple for now)
+// -----------------------------
+$EMBED_SECRET = 'Ki$$leAndrea04';     // used to verify ?s=
+$EDGE_BASE    = 'https://media01.railstream.net';     // HLS origin
+$EDGE_PATHKEY = 'q3ChrEVX4nmXXuAu';                  // path segment in your URLs
+
+// Wowza/WMS signing key used by your existing system (keep as-is for now)
+$WMS_KEY      = '* CJ4g3JwLzYcnFeUpZfrPGGcdkWPa2Cr6';
+$WMS_VALIDMIN = 15;                                  // keep consistent with your working baseline
+
+// Player behavior defaults
+$DEFAULT_DVR_DAYS   = 14;
+$DEFAULT_CHUNK_HOURS = 4;
+
+// -----------------------------
+// Helpers
+// -----------------------------
+function b64url_decode(string $in): string {
+  $in = strtr($in, '-_', '+/');
+  $pad = strlen($in) % 4;
+  if ($pad) $in .= str_repeat('=', 4 - $pad);
+  $out = base64_decode($in, true);
+  return $out === false ? '' : $out;
+}
+
+function timing_safe_equals(string $a, string $b): bool {
+  if (function_exists('hash_equals')) return hash_equals($a, $b);
+  if (strlen($a) !== strlen($b)) return false;
+  $res = 0;
+  for ($i=0; $i<strlen($a); $i++) $res |= ord($a[$i]) ^ ord($b[$i]);
+  return $res === 0;
+}
+
+function fail(int $code, string $msg): void {
+  http_response_code($code);
+  header('Content-Type: text/plain; charset=utf-8');
+  echo $msg;
+  exit;
+}
+
+function clean_cam(string $cam): string {
+  $cam = strtoupper($cam);
+  return preg_match('/^[A-Z0-9_]+$/', $cam) ? $cam : 'FOS_CAM01';
+}
+
+function build_wms_auth(string $wmsKey, int $validMinutes): string {
+  // Same algorithm you were using:
+  // server_time = gmdate("n/j/Y g:i:s A")
+  // hash_value  = base64(md5(ip + key + today + validminutes, true))
+  // wmsAuthSign = base64("server_time=...&hash_value=...&validminutes=...")
+  $today = gmdate("n/j/Y g:i:s A");
+  $ip    = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+
+  $str2hash   = $ip . $wmsKey . $today . $validMinutes;
+  $md5raw     = md5($str2hash, true);
+  $base64hash = base64_encode($md5raw);
+
+  $urlsig = "server_time={$today}&hash_value={$base64hash}&validminutes={$validMinutes}";
+  return base64_encode($urlsig);
+}
+
+// -----------------------------
+// Validate signed payload
+// -----------------------------
+$p = $_GET['p'] ?? '';
+$s = $_GET['s'] ?? '';
+
+if ($p === '' || $s === '') {
+  fail(400, "Missing required parameters: p and s");
+}
+
+// Verify signature (hex hmac sha256 over the literal p string)
+$calc = hash_hmac('sha256', $p, $EMBED_SECRET);
+if (!timing_safe_equals(strtolower($calc), strtolower($s))) {
+  fail(403, "Invalid signature");
+}
+
+// Decode payload JSON
+$json = b64url_decode($p);
+if ($json === '') {
+  fail(400, "Invalid payload encoding");
+}
+
+$payload = json_decode($json, true);
+if (!is_array($payload)) {
+  fail(400, "Invalid payload JSON");
+}
+
+// Basic exp check (seconds)
+$now = time();
+$exp = isset($payload['exp']) ? (int)$payload['exp'] : 0;
+if ($exp > 0 && $now > $exp) {
+  fail(403, "Expired payload");
+}
+
+// -----------------------------
+// Extract payload fields
+// -----------------------------
+$cam   = clean_cam((string)($payload['cam'] ?? 'FOS_CAM01'));
+$peers = $payload['peers'] ?? [];
+if (!is_array($peers)) $peers = [];
+$peers = array_values(array_filter(array_map(function($c){
+  $c = strtoupper((string)$c);
+  return preg_match('/^[A-Z0-9_]+$/', $c) ? $c : null;
+}, $peers)));
+
+$labelsRaw = (string)($payload['labels'] ?? '');
+$labels = $labelsRaw !== '' ? explode('|', $labelsRaw) : [];
+$labelMap = [];
+foreach ($peers as $i => $id) {
+  $labelMap[$id] = (isset($labels[$i]) && $labels[$i] !== '') ? $labels[$i] : $id;
+}
+if (!isset($labelMap[$cam])) $labelMap[$cam] = $cam;
+
+$isDev = !empty($payload['dev']);
+
+// -----------------------------
+// Build stream URLs
+// -----------------------------
+$wmsAuth = build_wms_auth($WMS_KEY, $WMS_VALIDMIN);
+
+$basePath = "/{$EDGE_PATHKEY}/{$cam}/";
+$baseStreamURL = "{$EDGE_BASE}{$basePath}playlist_dvr.m3u8?wmsAuthSign=" . rawurlencode($wmsAuth);
+
+$chunkHours   = $DEFAULT_CHUNK_HOURS;
+$chunkSeconds = $chunkHours * 3600;
+
+// Initial chunk
+$initialSrc = str_replace('playlist_dvr.m3u8', "playlist_dvr_timeshift-0-{$chunkSeconds}.m3u8", $baseStreamURL);
+
+// -----------------------------
+// Config passed to rs-media.js
+// -----------------------------
+$config = [
+  'version'       => '3.2.0-Build-Alpha',
+  'cam'           => $cam,
+  'edgeBase'      => $EDGE_BASE . $basePath,
+  'thumbBase'     => "/thumbs/{$cam}/",
+  'relatedCams'   => $peers,
+  'labelMap'      => $labelMap,
+  'dvrDays'       => $DEFAULT_DVR_DAYS,
+  'chunkHours'    => $chunkHours,
+  'toolbarMode'   => 'bar',
+  'dev'           => $isDev,
+
+  // 🔐 streaming auth
+  'authKey'       => $wmsAuth,
+  'tokenUrl'      => "/embed/v3.1.0/token.php?p=" . rawurlencode($p) . "&s=" . rawurlencode($s),
+  'tokenRotateMs' => 6 * 60 * 1000,
+  'tokenCredentials' => 'same-origin',
+];
+
+?><!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>RailStream DVR — <?= htmlspecialchars($cam, ENT_QUOTES) ?></title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Vendor Custom Control Bar CSS -->
+  <link rel="stylesheet" href="/assets/css/v3.1.0/rs-min.css" />
+  <!-- RailStream player CSS (new) -->
+  <link rel="stylesheet" href="/assets/css/v3.1.0/rs-player.css" />
+</head>
+
+<body>
+  <div id="rs-shell">
+    <div id="rs-toolbar"><div class="bar" id="rs-toolbar-inner"></div></div>
+
+    <div class="video-wrapper" id="rs-video-wrap">
+<video
+  id="cam_player"
+  class="video-js vjs-default-skin vjs-fill"
+  controls
+  preload="auto"
+  crossorigin="anonymous"
+  playsinline
+></video>
+
+      <div id="thumb-preview" class="thumb-preview"></div>
+
+      <div id="rs-fullscreen-notice" class="rs-notice" role="status" aria-live="polite">
+        <div class="box"><h3></h3><p></p></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.RS_CONFIG = <?= json_encode($config, JSON_UNESCAPED_SLASHES) ?>;
+    window.RS_VERSION = window.RS_VERSION || '3.1.0-Alpha';
+    window.RS_THUMB_SKEW = (typeof window.RS_THUMB_SKEW === 'number') ? window.RS_THUMB_SKEW : 16;
+  </script>
+
+  <!-- Vendor JS -->
+  <script defer src="/vendor/video-js/8.23.4/video.min.js"></script>
+  <script defer src="/vendor/nuevo/13.5.5/nuevo.min.js"></script>
+  <script defer src="/vendor/nuevo/13.5.5/plugins/videojs-chromecast.min.js"></script>
+  <script defer src="/vendor/nuevo/13.5.5/plugins/hlsjs.js"></script>
+  
+  <!-- RailStream core JS (ONLY ONCE) -->
+  <script defer src="/assets/js/v3.1.0/rs-media.js"></script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<?php
+declare(strict_types=1);
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+
+$EMBED_SECRET = 'Ki$$leAndrea04';
+$WMS_KEY      = '* CJ4g3JwLzYcnFeUpZfrPGGcdkWPa2Cr6';
+$WMS_VALIDMIN = 15;
+
+function b64url_decode(string $in): string {
+  $in = strtr($in, '-_', '+/');
+  $pad = strlen($in) % 4;
+  if ($pad) $in .= str_repeat('=', 4 - $pad);
+  $out = base64_decode($in, true);
+  return $out === false ? '' : $out;
+}
+
+function timing_safe_equals(string $a, string $b): bool {
+  return function_exists('hash_equals') ? hash_equals($a, $b) : $a === $b;
+}
+
+function fail(int $code, string $msg): void {
+  http_response_code($code);
+  header('Content-Type: application/json; charset=utf-8');
+  echo json_encode(['error' => $msg], JSON_UNESCAPED_SLASHES);
+  exit;
+}
+
+function build_wms_auth(string $wmsKey, int $validMinutes): string {
+  $today = gmdate("n/j/Y g:i:s A");
+  $ip    = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+
+  $str2hash   = $ip . $wmsKey . $today . $validMinutes;
+  $md5raw     = md5($str2hash, true);
+  $base64hash = base64_encode($md5raw);
+
+  $urlsig = "server_time={$today}&hash_value={$base64hash}&validminutes={$validMinutes}";
+  return base64_encode($urlsig);
+}
+
+$p = $_GET['p'] ?? '';
+$s = $_GET['s'] ?? '';
+
+if ($p === '' || $s === '') fail(400, 'Missing p/s');
+
+$calc = hash_hmac('sha256', $p, $EMBED_SECRET);
+if (!timing_safe_equals(strtolower($calc), strtolower($s))) fail(403, 'Bad signature');
+
+// Optional: also enforce exp from payload (recommended)
+$json = b64url_decode($p);
+$payload = $json ? json_decode($json, true) : null;
+if (!is_array($payload)) fail(400, 'Bad payload');
+
+$now = time();
+$exp = isset($payload['exp']) ? (int)$payload['exp'] : 0;
+if ($exp > 0 && $now > $exp) fail(403, 'Expired payload');
+
+header('Content-Type: application/json; charset=utf-8');
+echo json_encode([
+  'token' => build_wms_auth($WMS_KEY, $WMS_VALIDMIN),
+  'exp'   => $now + ($WMS_VALIDMIN * 60),
+], JSON_UNESCAPED_SLASHES);

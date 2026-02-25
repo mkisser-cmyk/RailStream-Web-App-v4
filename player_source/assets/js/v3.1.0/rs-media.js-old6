@@ -1,0 +1,2205 @@
+/* ============================================================
+ * rs-media.js — v3.1.1-Alpha (Nuevo + hlsjs)
+ *  - Clean startup (avoid play races / bufferStalled on load)
+ *  - Day/block selectors use absolute wall time
+ *  - Base-10 parsing for days/blocks
+ *  - Dynamic token wrapper (currentToken + tokenParam())
+ *  - Auto token rotation (default ~9 min; adjustable via RS_CONFIG.tokenRotateMs)
+ *  - Softer ABR start (lower initial bitrate, dimension-limited)
+ *  - Live start sits ~30s behind edge (tune via RS_CONFIG.liveLagSec)
+ *  - Status panel: remove “variant” row, keep dropped frames with %
+ *  - All other behavior (thumbs, dev tools, DVR watchdog, resume, keys) preserved
+ *
+ * FIXES APPLIED (3.1.1 hardening):
+ *  - Diagnostics updateStats(): removed broken/duplicated rows block, fixed syntax errors,
+ *    fixed bitrate detection fallback paths, fixed mode/behindLive calc.
+ *  - Prevent duplicate row declarations / stray “...” / const inside arrays.
+ * ============================================================ */
+
+window.RS_VERSION = 'v3.4.0-Bld_340';
+
+/* ====== Boot video.js ====== */
+const C = window.RS_CONFIG || {};
+const DEV = !!C.dev;
+const VERSION = (window.RS_VERSION || C.version || 'RC');
+
+let camName   = C.cam;
+let baseURL   = C.edgeBase;         // e.g. https://edge02.../Live_Web/CAMID/
+let thumbBase = C.thumbBase;        // e.g. /thumbs/CAMID/
+const relatedCams = Array.isArray(C.relatedCams) ? C.relatedCams : [];
+const labelMap    = C.labelMap || {};
+
+// --- Token support + rotation plumbing ---
+// authKey comes from embed PHP (wmsAuthSign) and is used for initial playback
+const authKey = (C.authKey && String(C.authKey).trim()) || "";
+
+// currentToken can be updated later by a refresher without reloading the page
+let currentToken = authKey;
+
+// rotate about every 9 minutes by default (keys that expire at 10min)
+const TOKEN_ROTATE_MS = Number(C.tokenRotateMs || 9 * 60 * 1000);
+
+// ===== token URL builder (iframe-safe; cross-origin only when explicitly configured) =====
+// Config:
+//   RS_CONFIG.tokenUrl                (required to enable refresh)
+//   RS_CONFIG.tokenAllowCrossOrigin   (optional, default false)
+//   RS_CONFIG.tokenCredentials        ('same-origin' | 'include' | 'omit') optional
+function __rsTokenUrl(reason) {
+  // If tokenUrl is not explicitly provided, DO NOT attempt refresh.
+  if (!C.tokenUrl) return null;
+
+  // Resolve relative URL against the iframe document origin
+  const u = new URL(C.tokenUrl, window.location.origin);
+
+  // Default: same-origin only (safe)
+  const allowX = !!C.tokenAllowCrossOrigin;
+  if (!allowX && u.origin !== window.location.origin) return null;
+
+  if (camName) u.searchParams.set('cam', camName);
+  if (reason)  u.searchParams.set('reason', reason);
+  return u.toString();
+}
+
+// safeSeekUnix: snap to DVR bounds, call jumpToUnix, retry once if seek appears stalled
+async function safeSeekUnix(targetUnix){
+  try{
+    const nowUnix = await rsGetServerNowUnix();
+    const elapsed = nowUnix - targetUnix;
+    if (elapsed < 0 || elapsed > MAX_WINDOW_SEC){ setChunk(0); return; }
+
+    await jumpToUnix(targetUnix, true);
+
+    // wait a short period for loadedmetadata/seek to take effect
+    await new Promise(res => setTimeout(res, 2200));
+
+    try{
+      const sk = player.seekable();
+      if (sk && sk.length){
+        const end = sk.end(0);
+        const offset = (typeof player.__rsCurrentOffset === 'number') ? player.__rsCurrentOffset : currentDvrOffset || 0;
+        const nowMinusOffset = nowUnix - offset;
+        const secondsBehindEnd = nowMinusOffset - targetUnix;
+        const expected = Math.max(0, end - secondsBehindEnd);
+        const cur = Number(player.currentTime() || 0);
+        if (Math.abs(cur - expected) > 4){
+          // retry once
+          await jumpToUnix(targetUnix, true);
+        }
+      } else {
+        // no seekable yet — retry once
+        await jumpToUnix(targetUnix, true);
+      }
+    }catch(_){ /* swallow */ }
+  }catch(_){ /* swallow */ }
+}
+
+function __rsTokenCredentialsFor(urlStr){
+  try{
+    if (C.tokenCredentials) return String(C.tokenCredentials);
+    const u = new URL(urlStr, window.location.origin);
+    // Same origin: keep cookies
+    if (u.origin === window.location.origin) return 'same-origin';
+    // Cross origin: default omit unless user explicitly wants include
+    return 'omit';
+  }catch(_){
+    return 'same-origin';
+  }
+}
+
+function tokenParam() {
+  return currentToken ? `?wmsAuthSign=${encodeURIComponent(currentToken)}` : "";
+}
+
+// Ask the server for a fresh token. No-op unless tokenUrl is configured.
+async function __rsRefreshTokenIfNeeded(reason) {
+  const url = __rsTokenUrl(reason || 'timer');
+  if (!url) return null;
+
+  try {
+    const ac = new AbortController();
+    const to = setTimeout(() => ac.abort(), 4000);
+
+    const r = await fetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      signal: ac.signal,
+      credentials: __rsTokenCredentialsFor(url),
+      headers: { 'Accept': 'application/json' }
+    });
+
+    clearTimeout(to);
+    if (!r.ok) return null;
+
+    const data = await r.json().catch(() => null);
+    if (!data || !data.token) return null;
+
+    const t = String(data.token).trim();
+    if (!t) return null;
+
+    return { token: t };
+  } catch (_) {
+    return null;
+  }
+}
+
+// Safely rotate the token + reattach stream without losing position
+let __rsTokenRotateInFlight = false;
+async function __rsRotateToken(reason) {
+  if (__rsTokenRotateInFlight) return;
+  __rsTokenRotateInFlight = true;
+
+  try {
+    // If refresh isn’t configured, do nothing (don’t break playback)
+    if (!C.tokenUrl) return;
+
+    const snapUnix = __rsCurrentUnixFromTime();
+    const res = await __rsRefreshTokenIfNeeded(reason || 'timer');
+    if (!res || !res.token) return;
+    if (res.token === currentToken) return;
+
+    currentToken = res.token;
+
+    // If we know where we are in wall time, keep that position
+    if (snapUnix != null) {
+      await jumpToUnix(snapUnix, false);
+    } else {
+      // Otherwise just reload current window (live or DVR)
+      await setChunk(currentDvrOffset || 0, { autoplay: true });
+    }
+  } catch (_) {
+    // silent by design
+  } finally {
+    __rsTokenRotateInFlight = false;
+  }
+}
+
+// Default DVR days now 14 (was 10)
+const DVR_DAYS     = Number((C.dvrDays ?? 14));
+const CHUNK_HOURS  = Number(C.chunkHours || 4);
+const CHUNK_SEC    = CHUNK_HOURS * 3600;
+const MAX_WINDOW_SEC = DVR_DAYS * 24 * 3600;
+
+const LIVE_LAG_SEC = Number(C.liveLagSec || 20); // 30s default
+
+const player = videojs('cam_player', {
+  fluid: false,
+  responsive: true,
+  controls: true,
+  liveui: true,
+  preload: 'auto',
+  playbackRates: [0.5, 1, 1.5, 2, 3, 4],
+  debug: DEV,
+  html5: {
+    // Use hls.js plugin when available (nuevo hlsjs.js)
+    hlsjsConfig: {
+      // Keep the live/DVR experience stable; avoid huge memory buffers
+      maxBufferLength: 15,
+      backBufferLength: 30,
+	  liveSyncDurationCount:  3,
+      enableWorker: true
+    },
+    vhs: {
+      // Core HLS behavior
+      overrideNative: true,
+
+      // Softer / safer ABR:
+      enableLowInitialPlaylist: true,             // start on lower rendition if possible
+      limitRenditionByPlayerDimensions: true,     // avoid pulling 1080p into a tiny viewport
+      maxInitialBitrate: Number(C.maxInitialBitrate || 7500000), // ~7.5Mbps initial cap
+      bandwidthVariance: 1.4                      // smoother decisions, less aggressive jumps
+    },
+    nativeAudioTracks: false,
+    nativeVideoTracks: false,
+    nativeTextTracks:  false
+  }
+});
+
+// Expose for adminTools hooks (they check window.player)
+window.player = player;
+
+// ===== FIX: guard nuevo double-init to reduce “Product not registered” spam if scripts load twice =====
+try {
+  if (player.nuevo && !player.__rsNuevoInit) {
+    player.__rsNuevoInit = true;
+    player.nuevo({
+      license:"1606585f17134356050a1f4712", contextMenu:false,
+      snapshot:true, snapshotType:"png", buttonForward:true,
+      resOnly:true, shareMenu:false, zoomMenu:false
+    });
+  }
+} catch(_) {}
+
+try { player.chromecast && player.chromecast(); } catch(_) {}
+
+/* ====== State ====== */
+let currentDvrOffset = 0;
+let lastIntendedUnix = null;
+let __pausedUnix = null;
+
+/* ====== Utilities ====== */
+
+// ---- Helpers for safe seeking & absolute time ----
+function __rsCurrentUnixFromTime(t){
+  try{
+    const sk = player.seekable(); if (!sk || !sk.length) return null;
+    const end = sk.end(0);
+    const nowU = Math.floor(Date.now()/1000);
+    const cur = (typeof t==='number' ? t : player.currentTime());
+    const secondsFromEnd = Math.max(0, end - cur);
+    const unix = nowU - currentDvrOffset - secondsFromEnd;
+    return Math.floor(unix);
+  }catch(_){ return null; }
+}
+
+// --- easing helper for in-window seeks (no await required) ---
+function __rsEaseTo(targetTime, durationMs = 180){
+  try{
+    const start = Number(player.currentTime()) || 0;
+    const dist  = targetTime - start;
+    const t0    = performance.now();
+    (function step(now){
+      const p = Math.min(1, (now - t0) / durationMs);
+      const w = p*p*(3 - 2*p); // smoothstep
+      try { player.currentTime(start + dist*w); } catch(_){}
+      if (p < 1) requestAnimationFrame(step);
+    })(t0);
+  }catch(_){}
+}
+
+async function __rsSeekBy(deltaSeconds){
+  try{
+    const sk = player.seekable(); if (!sk || !sk.length) return;
+    const start = sk.start(0), end = sk.end(0);
+    const cur = player.currentTime();
+    let target = cur + deltaSeconds;
+    // If inside current seekable, ease instead of hard jump
+    if (target >= start && target <= end){
+      target = Math.max(start, Math.min(end, target));
+      __rsEaseTo(target);
+      return;
+    }
+    // Otherwise map to absolute unix and use existing jumpToUnix
+    const curU = __rsCurrentUnixFromTime(cur);
+    if (curU == null) return;
+    const targetUnix = curU + Math.round(deltaSeconds);
+    await jumpToUnix(targetUnix, false);
+  }catch(_){}
+}
+
+const pad = n => String(n).padStart(2, '0');// ---- Site-local (camera) time support ----
+// If RS_CONFIG.siteTz is set (IANA TZ like "America/Chicago"), the DVR toolbar interprets HH:MM as SITE LOCAL time.
+// This keeps what the user selects aligned with what the camera overlay clock shows, regardless of the viewer PC timezone.
+const SITE_TZ = (C.siteTz && String(C.siteTz).trim()) || null;
+
+const __rsTzFmtCache = new Map();
+function __rsTzFmt(tz){
+  if (!tz) return null;
+  if (__rsTzFmtCache.has(tz)) return __rsTzFmtCache.get(tz);
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false
+  });
+  __rsTzFmtCache.set(tz, fmt);
+  return fmt;
+}
+
+function __rsTzParts(tz, utcMs){
+  const fmt = __rsTzFmt(tz);
+  if (!fmt) return null;
+  const parts = fmt.formatToParts(new Date(utcMs));
+  const get = (t) => Number((parts.find(p => p.type === t) || {}).value || 0);
+  return {
+    y: get('year'),
+    mo: get('month'),
+    d: get('day'),
+    h: get('hour'),
+    mi: get('minute'),
+    s: get('second')
+  };
+}
+
+// Offset in minutes of tz at utcMs. Positive means tz is ahead of UTC.
+function __rsTzOffsetMin(tz, utcMs){
+  const p = __rsTzParts(tz, utcMs);
+  if (!p) return 0;
+  const asUtc = Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s);
+  return (asUtc - utcMs) / 60000;
+}
+
+// Convert a site-local Y-M-D HH:MM to unix seconds (UTC) for the given tz.
+function __rsSiteLocalToUnix(tz, y, mo, d, hh, mm){
+  // Initial guess: interpret as UTC; then subtract tz offset.
+  let guess = Date.UTC(y, mo - 1, d, hh, mm, 0);
+  let off = __rsTzOffsetMin(tz, guess);
+  let utc = guess - off * 60000;
+  // Re-evaluate once (DST edges)
+  off = __rsTzOffsetMin(tz, utc);
+  utc = guess - off * 60000;
+  return Math.floor(utc / 1000);
+}
+
+// Derive the site-local calendar date for "now - dayIdx" using the SERVER clock (cached).
+async function __rsSiteDateForDayIdx(dayIdx){
+  const nowUnix = await rsGetServerNowUnix();
+  const nowMs = nowUnix * 1000;
+
+  // Get site-local Y/M/D for now
+  const nowP = __rsTzParts(SITE_TZ, nowMs);
+  if (!nowP) return null;
+
+  // Use noon to avoid DST midnight weirdness when stepping days
+  const noonGuess = Date.UTC(nowP.y, nowP.mo - 1, nowP.d, 12, 0, 0);
+  const noonUtc = noonGuess - (__rsTzOffsetMin(SITE_TZ, noonGuess) * 60000);
+  const targetUtc = noonUtc - (dayIdx * 86400 * 1000);
+
+  // Re-extract the site-local date parts for the target day
+  const tp = __rsTzParts(SITE_TZ, targetUtc);
+  return tp ? { y: tp.y, mo: tp.mo, d: tp.d } : null;
+}
+
+async function unixFromSiteDayAndTime(dayIdx, hh24, mm){
+  const date = await __rsSiteDateForDayIdx(dayIdx);
+  if (!date) return null;
+  let u = __rsSiteLocalToUnix(SITE_TZ, date.y, date.mo, date.d, hh24, mm);
+
+  // Clamp using server time (not viewer PC time)
+  const nowU = await rsGetServerNowUnix();
+  if (u > nowU) u = nowU;
+  if (nowU - u > MAX_WINDOW_SEC) u = nowU - MAX_WINDOW_SEC + 5;
+  return u;
+}
+
+// Unified: interpret toolbar time as site local if configured, otherwise viewer local.
+async function unixFromUiDayAndTime(dayIdx, hh24, mm){
+  if (SITE_TZ){
+    const u = await unixFromSiteDayAndTime(dayIdx, hh24, mm);
+    if (typeof u === 'number' && Number.isFinite(u)) return u;
+  }
+  return unixFromLocalDayAndTime(dayIdx, hh24, mm);
+}
+
+// For default HH:MM in the toolbar, prefer site-local *display* time (best-effort, uses local clock for ms).
+function __rsUiNowHHMM(){
+  if (!SITE_TZ) return null;
+  const p = __rsTzParts(SITE_TZ, Date.now());
+  if (!p) return null;
+  return { h: p.h, m: p.mi };
+}
+
+function unixFromLocalDayAndTime(dayIdx, hh24, mm){
+  const now = new Date();
+  const t = new Date(now);
+  t.setDate(now.getDate() - dayIdx);
+  t.setHours(hh24, mm, 0, 0);
+  let u = Math.floor(t.getTime()/1000);
+  const nowU = Math.floor(now.getTime()/1000);
+  if (u > nowU) u = nowU;
+  if (nowU - u > MAX_WINDOW_SEC) u = nowU - MAX_WINDOW_SEC + 5;
+  return u;
+}
+
+function dayBlockToOffset(dayIdx, blockIdx){
+  return Math.max(0, Math.min(MAX_WINDOW_SEC - CHUNK_SEC, (dayIdx*24 + blockIdx*CHUNK_HOURS) * 3600));
+}
+
+function offsetToDayBlock(offset){
+  const hours = Math.floor(offset/3600);
+  return { day: Math.floor(hours/24), block: Math.floor((hours % 24) / CHUNK_HOURS) };
+}
+
+async function headOK(url){
+  const ac = new AbortController(); const t = setTimeout(()=>ac.abort(), 2000);
+  try{
+    const r = await fetch(url, {method:'HEAD', cache:'no-store', redirect:'follow', signal:ac.signal});
+    clearTimeout(t);
+
+    if (!r || !r.ok) return false;
+
+    // Guard against auth/login redirects that still return 200.
+    // If fetch followed a redirect to some other document, treat as NOT OK.
+    if (r.redirected && r.url && !String(r.url).includes('playlist_dvr_timeshift-')) return false;
+
+    const ct = (r.headers && r.headers.get) ? (r.headers.get('content-type') || '') : '';
+    // Many edges return mpegurl or octet-stream; allow empty too.
+    if (ct && !/mpegurl|vnd\.apple\.mpegurl|octet-stream|text\/plain/i.test(ct)) return false;
+
+    return true;
+  }catch(e){ clearTimeout(t); return false; }
+}
+
+// Stronger check: actually fetch a few bytes and verify this is a real HLS playlist (not HTML/login).
+async function playlistOK(url){
+  const ac = new AbortController(); const t = setTimeout(()=>ac.abort(), 2500);
+  try{
+    const r = await fetch(url, {method:'GET', cache:'no-store', redirect:'follow', signal:ac.signal});
+    clearTimeout(t);
+    if (!r || !r.ok) return false;
+    if (r.redirected && r.url && !String(r.url).includes('playlist_dvr_timeshift-')) return false;
+
+    const ct = (r.headers && r.headers.get) ? (r.headers.get('content-type') || '') : '';
+    // If content-type looks like HTML, it's almost certainly an auth redirect page.
+    if (/text\/html/i.test(ct)) return false;
+
+    // Read a small amount (playlist is tiny anyway)
+    const txt = await r.text();
+    const s = String(txt || '').trimStart();
+    if (!s.startsWith('#EXTM3U')) return false;
+    // basic HLS markers
+    if (!/#EXTINF|#EXT-X-TARGETDURATION|#EXT-X-VERSION/i.test(s)) return false;
+    return true;
+  }catch(e){ clearTimeout(t); return false; }
+}
+
+// Cached server time helper: HEAD to a same-origin lightweight URL and read Date header
+// Caches result for 30 seconds and falls back to local clock when unavailable
+const __rsServerTimeCache = { ts: 0, unix: null };
+async function rsGetServerNowUnix(){
+  try{
+    const now = Date.now();
+    if ((__rsServerTimeCache.ts || 0) + 30_000 > now && Number.isFinite(__rsServerTimeCache.unix)){
+      return __rsServerTimeCache.unix;
+    }
+
+    // Choose a lightweight same-origin URL; prefer the baseURL root if it looks same-origin
+    let probe = '/';
+    try{
+      if (typeof baseURL === 'string'){
+        const u = new URL(baseURL, window.location.origin);
+        if (u.origin === window.location.origin) probe = u.pathname || '/';
+      }
+    }catch(_){ probe = '/'; }
+
+    const ac = new AbortController(); const to = setTimeout(()=>ac.abort(), 2000);
+    try{
+      const r = await fetch(probe, { method: 'HEAD', cache: 'no-store', signal: ac.signal });
+      clearTimeout(to);
+      const date = r && r.headers ? r.headers.get('date') : null;
+      if (date){
+        const s = Date.parse(date);
+        if (Number.isFinite(s)){
+          const u = Math.floor(s / 1000);
+          __rsServerTimeCache.unix = u;
+          __rsServerTimeCache.ts = Date.now();
+          return u;
+        }
+      }
+    }catch(_){ clearTimeout(to); }
+
+    // fallback to local time
+    const fu = Math.floor(Date.now()/1000);
+    __rsServerTimeCache.unix = fu;
+    __rsServerTimeCache.ts = Date.now();
+    return fu;
+  }catch(_){ return Math.floor(Date.now()/1000); }
+}
+
+/* ====== Toolbar (with "Camera" hidden if only one) ====== */
+let camSel, daySel, blockSel, timeInput, goBtn;
+
+function setHHMM(h, m){
+  const hh = pad(Math.min(23, Math.max(0, parseInt(h||0,10))));
+  const mm = pad(Math.min(59, Math.max(0, parseInt(m||0,10))));
+  if (timeInput) timeInput.value = `${hh}:${mm}`;
+}
+
+function getHHMM(){
+  if (!timeInput || !timeInput.value) return {h:0,m:0};
+  const [H, M] = String(timeInput.value).split(':');
+  const h = Math.min(23, Math.max(0, parseInt(H||'0',10) || 0));
+  const m = Math.min(59, Math.max(0, parseInt(M||'0',10) || 0));
+  return {h, m};
+}
+
+// --- Sync toolbar selectors to an absolute wall-unix time ---
+function __rsSyncSelectorsToUnix(unix){
+  try{
+    if (!daySel || !blockSel || !timeInput) return;
+    const nowU = Math.floor(Date.now()/1000);
+    let delta = Math.max(0, nowU - unix);               // seconds behind "now"
+    if (delta > MAX_WINDOW_SEC) delta = MAX_WINDOW_SEC; // clamp to window
+
+    const dayIdx = Math.floor(delta / 86400);
+    const remDay = delta % 86400;
+    const blockIdx = Math.floor(remDay / CHUNK_SEC);
+
+    const d = new Date(unix * 1000);
+    const H = String(d.getHours()).padStart(2,'0');
+    const M = String(d.getMinutes()).padStart(2,'0');
+
+    const maxDay = Math.max(0, DVR_DAYS - 1);
+    const perDay = Math.max(1, Math.floor(24 / CHUNK_HOURS));
+    daySel.value   = String(Math.min(dayIdx, maxDay));
+    blockSel.value = String(Math.min(blockIdx, perDay-1));
+    timeInput.value = `${H}:${M}`;
+  }catch(_){}
+}
+
+// --- Fast-resume helpers ---
+const RS_RESUME_KEY = 'rs:lastPoint:v1';
+
+function __rsSaveResumePoint(){
+  try{
+    const sk = player.seekable(); if (!sk || !sk.length) return;
+    const end = sk.end(0);
+    const nowU = Math.floor(Date.now()/1000);
+    const secondsBehindEnd = Math.max(0, end - player.currentTime());
+    const wallUnix = nowU - currentDvrOffset - secondsBehindEnd;
+    localStorage.setItem(RS_RESUME_KEY, JSON.stringify({
+      cam: camName,
+      wallUnix: Math.floor(wallUnix),
+      savedAt: nowU,
+      v: (window.RS_VERSION || 'DEV')
+    }));
+  }catch(_){}
+}
+
+function __rsReadResumePoint(){
+  try{ return JSON.parse(localStorage.getItem(RS_RESUME_KEY) || 'null'); }catch(_){ return null; }
+}
+
+function buildToolbar(){
+  const host = document.getElementById('rs-toolbar-inner');
+  if (!host) return;
+  host.innerHTML = '';
+
+  // Inject minimal RailCenter Ops UI styles once
+  if (!document.getElementById('rs-ops-style')){
+    const st = document.createElement('style');
+    st.id = 'rs-ops-style';
+    st.textContent = `
+      .rs-ops-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+      .rs-ops-title{font-weight:700;letter-spacing:.2px}
+      .rs-ops-meta{opacity:.9}
+      .rs-ops-pill{border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.35);color:#ddd;border-radius:999px;padding:6px 12px;font-weight:700;cursor:pointer}
+      .rs-ops-pill.rs-on{background:rgba(255,120,0,.22);border-color:rgba(255,120,0,.45);color:#fff}
+      .rs-ops-btn{border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.35);color:#fff;border-radius:10px;padding:6px 10px;cursor:pointer}
+      .rs-ops-btn:hover,.rs-ops-pill:hover{filter:brightness(1.08)}
+      .rs-ops-small{font-size:12px;opacity:.9}
+      .rs-ops-overlay{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:18px}
+      .rs-ops-panel{width:min(560px,96vw);background:rgba(15,17,20,.96);border:1px solid rgba(255,255,255,.15);border-radius:16px;box-shadow:0 18px 50px rgba(0,0,0,.6);padding:16px}
+      .rs-ops-panel h3{margin:0 0 10px 0;font-size:16px}
+      .rs-ops-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+      .rs-ops-field label{display:block;font-size:12px;opacity:.85;margin:0 0 6px 0}
+      .rs-ops-field select,.rs-ops-field input{width:100%;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:10px;padding:8px 10px}
+      .rs-ops-steps{display:flex;flex-wrap:wrap;gap:8px}
+      .rs-ops-step{border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.25);color:#fff;border-radius:999px;padding:7px 10px;cursor:pointer;font-weight:700}
+      .rs-ops-step.rs-on{background:rgba(255,120,0,.22);border-color:rgba(255,120,0,.45)}
+      .rs-ops-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+      .rs-ops-primary{background:rgba(255,120,0,.95);border:0;color:#111;border-radius:10px;padding:8px 12px;font-weight:900;cursor:pointer}
+      .rs-ops-muted{opacity:.85}
+    `;
+    document.head.appendChild(st);
+  }
+
+  // ---- Ops state (persist in-memory) ----
+  window.__RS_OPS = window.__RS_OPS || {
+    mode: 'live',          // 'live' | 'review'
+    blockSec: 3600,        // default 1h
+    cursorUnix: null,
+    lastRange: null
+  };
+  const OPS = window.__RS_OPS;
+
+  // Persist per-camera ops state (so Review Ops remembers where you were)
+  const RS_OPS_STATE_KEY = `rs:opsState:v1:${camName}`;
+  function __opsLoad(){
+    try{
+      const raw = localStorage.getItem(RS_OPS_STATE_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (!s || s.cam !== camName) return;
+      if (s.mode === 'live' || s.mode === 'review') OPS.mode = s.mode;
+      if (Number.isFinite(s.blockSec)) OPS.blockSec = Math.max(15*60, Math.min(24*3600, Math.floor(s.blockSec)));
+      if (Number.isFinite(s.cursorUnix)) OPS.cursorUnix = Math.floor(s.cursorUnix);
+      if (s.lastUi && typeof s.lastUi === 'object') OPS.lastUi = s.lastUi;
+    }catch(_){}
+  }
+  function __opsSave(){
+    try{
+      localStorage.setItem(RS_OPS_STATE_KEY, JSON.stringify({
+        cam: camName,
+        mode: OPS.mode,
+        blockSec: OPS.blockSec,
+        cursorUnix: OPS.cursorUnix,
+        lastUi: OPS.lastUi || null,
+        savedAt: Math.floor(Date.now()/1000)
+      }));
+    }catch(_){}
+  }
+  __opsLoad();
+
+  const fmtDur = (sec) => {
+    sec = Math.max(0, Math.floor(sec||0));
+    const d = Math.floor(sec/86400);
+    const h = Math.floor((sec%86400)/3600);
+    const m = Math.floor((sec%3600)/60);
+    if (d>0) return `${d}d ${String(h).padStart(2,'0')}h`;
+    if (h>0) return `${h}h ${String(m).padStart(2,'0')}m`;
+    return `${m}m`;
+  };
+
+  const mk = (tag, cls, txt) => { const el=document.createElement(tag); if(cls) el.className=cls; if(txt!=null) el.textContent=txt; return el; };
+
+  // ---- DVR range probing (cache 30s) ----
+  const __rangeCache = window.__RS_DVR_RANGE_CACHE || (window.__RS_DVR_RANGE_CACHE = { ts:0, val:null });
+
+  async function rsGetDvrRangeCached(){
+    const now = Date.now();
+    if (__rangeCache.val && (__rangeCache.ts + 30_000) > now) return __rangeCache.val;
+
+    const nowUnix = await rsGetServerNowUnix();
+    const urlFor = (off) => baseURL + `playlist_dvr_timeshift-${off}-${CHUNK_SEC}.m3u8${tokenParam()}`;
+
+    const __ok = async (u)=> (await playlistOK(u)) || (await headOK(u));
+
+    // Find max valid offset (seconds) via exponential + binary search
+    const step = CHUNK_SEC;
+    let lo = 0;
+    let hi = step;
+
+    // If even offset=0 fails, treat as no DVR
+    const ok0 = await __ok(urlFor(0));
+    if (!ok0){
+      const val = { nowUnix, maxOffset: 0, oldestUnix: nowUnix, newestUnix: nowUnix, availableSec: 0 };
+      __rangeCache.val = val; __rangeCache.ts = Date.now();
+      return val;
+    }
+
+    // Exponential search up to MAX_WINDOW_SEC
+    while (hi < MAX_WINDOW_SEC){
+      hi = Math.min(MAX_WINDOW_SEC, hi);
+      hi = Math.floor(hi/step)*step;
+      if (hi <= lo) break;
+      const ok = await __ok(urlFor(hi));
+      if (ok){ lo = hi; hi = hi*2; }
+      else { break; }
+    }
+    hi = Math.min(MAX_WINDOW_SEC, hi);
+    hi = Math.floor(hi/step)*step;
+    if (hi <= lo) hi = lo + step;
+
+    // Binary search between lo..hi (lo ok, hi maybe not)
+    let left = lo, right = Math.min(MAX_WINDOW_SEC, hi);
+    right = Math.floor(right/step)*step;
+    while (right - left > step){
+      const mid = Math.floor(((left + right)/2)/step)*step;
+      if (mid <= left) break;
+      const ok = await __ok(urlFor(mid));
+      if (ok) left = mid; else right = mid;
+    }
+
+    const maxOffset = left;
+    const availableSec = Math.min(MAX_WINDOW_SEC, maxOffset + step);
+    const oldestUnix = nowUnix - availableSec;
+    const newestUnix = nowUnix;
+
+    const val = { nowUnix, maxOffset, oldestUnix, newestUnix, availableSec };
+    __rangeCache.val = val; __rangeCache.ts = Date.now();
+    OPS.lastRange = val;
+    return val;
+  }
+
+  // ---- UI elements ----
+  const row = mk('div','rs-ops-row');
+  const title = mk('span','rs-ops-title', `RAILCENTER | ${OPS.mode === 'live' ? 'Live Ops' : 'Review Ops'}`);
+  const timeline = mk('span','rs-ops-meta rs-ops-small','Total Timeline: …');
+  timeline.id = 'rs-ops-timeline';
+  row.appendChild(title);
+  row.appendChild(timeline);
+
+  const livePill = mk('button','rs-ops-pill', 'Live Ops');
+  const reviewPill = mk('button','rs-ops-pill', 'Review Ops');
+  const syncPills = ()=>{
+    livePill.classList.toggle('rs-on', OPS.mode === 'live');
+    reviewPill.classList.toggle('rs-on', OPS.mode === 'review');
+    title.textContent = `RAILCENTER | ${OPS.mode === 'live' ? 'Live Ops' : 'Review Ops'}`;
+  };
+  syncPills();
+
+  row.appendChild(livePill);
+  row.appendChild(reviewPill);
+
+  // Review controls (only visible in Review Ops)
+  const prevBtn = mk('button','rs-ops-btn','⟵ Prev Block');
+  const nextBtn = mk('button','rs-ops-btn','Next Block ⟶');
+  const blockBtn = mk('button','rs-ops-btn', `Block: ${Math.round(OPS.blockSec/60)}m`);
+  const reviewCtl = mk('div','rs-ops-row');
+  reviewCtl.appendChild(prevBtn);
+  reviewCtl.appendChild(nextBtn);
+  reviewCtl.appendChild(blockBtn);
+
+  // Mount
+  host.appendChild(row);
+  host.appendChild(reviewCtl);
+
+  const syncReviewCtl = ()=>{
+    reviewCtl.style.display = (OPS.mode === 'review') ? 'flex' : 'none';
+    const mins = OPS.blockSec >= 3600 ? `${OPS.blockSec/3600}h` : `${OPS.blockSec/60}m`;
+    blockBtn.textContent = `Block: ${mins}`;
+  };
+  syncReviewCtl();
+
+  async function refreshTimeline(){
+    try{
+      const r = await rsGetDvrRangeCached();
+      const txt = (r.availableSec > 0) ? `Total Timeline: ${fmtDur(r.availableSec)}` : `Total Timeline: 0m`;
+      timeline.textContent = txt;
+    }catch(_){
+      timeline.textContent = 'Total Timeline: …';
+    }
+  }
+  refreshTimeline();
+
+  // ---- Overlay / setup ----
+  function closeOverlay(){
+    const ex = document.getElementById('rs-ops-overlay');
+    if (ex) ex.remove();
+  }
+
+  function dayLabelFor(dayIdx){
+    // Show actual date in site-local when possible, otherwise relative
+    try{
+      const nowMs = Date.now();
+      const ms = nowMs - (dayIdx * 86400 * 1000);
+      const tz = SITE_TZ || undefined;
+      const fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday:'short', month:'2-digit', day:'2-digit' });
+      const d = fmt.format(new Date(ms));
+      if (dayIdx === 0) return `Today (${d})`;
+      if (dayIdx === 1) return `Yesterday (${d})`;
+      return `${dayIdx} days ago (${d})`;
+    }catch(_){
+      if (dayIdx === 0) return 'Today';
+      if (dayIdx === 1) return 'Yesterday';
+      return `${dayIdx} days ago`;
+    }
+  }
+
+  async function openReviewSetup(){
+    closeOverlay();
+
+    const r = await rsGetDvrRangeCached();
+    const availDays = Math.max(0, Math.min(30, Math.floor(r.availableSec / 86400))); // cap UI list
+    const overlay = mk('div','rs-ops-overlay');
+    overlay.id = 'rs-ops-overlay';
+
+    const panel = mk('div','rs-ops-panel');
+    const h3 = mk('h3', null, 'Review Ops Setup');
+    panel.appendChild(h3);
+
+    const grid = mk('div','rs-ops-grid');
+
+    // Day
+    const dayField = mk('div','rs-ops-field');
+    dayField.appendChild(mk('label', null, 'Day'));
+    const daySel = document.createElement('select');
+    for (let i=0;i<=availDays;i++){
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = dayLabelFor(i);
+      daySel.appendChild(opt);
+    }
+    // Default day selection:
+// - If already in Review Ops, keep the day that matches the current cursorUnix
+// - Otherwise, reuse last UI selection (if any)
+let __initDay = 0;
+try{
+  if (OPS && OPS.mode === 'review' && Number.isFinite(OPS.cursorUnix)){
+    __initDay = Math.floor((r.nowUnix - OPS.cursorUnix) / 86400);
+  }else if (OPS && OPS.lastUi && Number.isFinite(parseInt(OPS.lastUi.dayIdx,10))){
+    __initDay = parseInt(OPS.lastUi.dayIdx,10);
+  }
+  __initDay = Math.max(0, Math.min(availDays, __initDay));
+}catch(_){}
+daySel.value = String(__initDay);
+
+    dayField.appendChild(daySel);
+
+    // Time
+    const timeField = mk('div','rs-ops-field');
+    timeField.appendChild(mk('label', null, 'Time (site local)'));
+    const tIn = document.createElement('input');
+    tIn.type = 'time';
+    tIn.step = 60;
+    // default time: prefer site-local parts if available, else local
+    const nowHHMM = __rsUiNowHHMM();
+    const nowD = new Date();
+    const hh = nowHHMM ? nowHHMM.h : nowD.getHours();
+    const mm = nowHHMM ? nowHHMM.m : nowD.getMinutes();
+    // Default time:
+// - If already in Review Ops, keep the current cursorUnix time (site local)
+// - Else reuse last UI time if available
+let __hh = hh, __mm = mm;
+try{
+  if (OPS && OPS.mode === 'review' && Number.isFinite(OPS.cursorUnix)){
+    const p = __rsTzParts(SITE_TZ, OPS.cursorUnix * 1000);
+    if (p){ __hh = p.h; __mm = p.mi; }
+  }else if (OPS && OPS.lastUi && typeof OPS.lastUi.hhmm === 'string'){
+    const parts = OPS.lastUi.hhmm.split(':');
+    const ph = parseInt(parts[0],10); const pm = parseInt(parts[1],10);
+    if (Number.isFinite(ph)) __hh = ph;
+    if (Number.isFinite(pm)) __mm = pm;
+  }
+}catch(_){}
+tIn.value = `${String(__hh).padStart(2,'0')}:${String(__mm).padStart(2,'0')}`;
+
+    timeField.appendChild(tIn);
+
+    // Persist last chosen day/time so reopening Review Ops stays on the same place
+    const __persistUi = ()=>{ try{ OPS.lastUi = { dayIdx: parseInt(daySel.value,10)||0, hhmm: String(tIn.value||'00:00') }; __opsSave(); }catch(_){} };
+    daySel.addEventListener('change', __persistUi);
+    tIn.addEventListener('change', __persistUi);
+
+    grid.appendChild(dayField);
+    grid.appendChild(timeField);
+    panel.appendChild(grid);
+
+    // Block sizes
+    const bWrap = mk('div','rs-ops-field');
+    bWrap.appendChild(mk('label', null, 'Block size'));
+    const steps = mk('div','rs-ops-steps');
+    const sizes = [
+      ['15m', 15*60], ['30m', 30*60], ['1h', 60*60], ['2h', 2*60*60], ['4h', 4*60*60],
+      ['8h', 8*60*60], ['12h', 12*60*60], ['16h', 16*60*60], ['24h', 24*60*60]
+    ];
+    let selected = OPS.blockSec || 3600;
+    const syncFns = [];
+    for (const [labelTxt, sec] of sizes){
+      const b = mk('button','rs-ops-step', labelTxt);
+      b.type='button';
+      const sync = ()=> b.classList.toggle('rs-on', selected === sec);
+      b.onclick = ()=>{ selected = sec; syncFns.forEach(fn=>fn()); };
+      syncFns.push(sync);
+      sync();
+      steps.appendChild(b);
+    }
+    bWrap.appendChild(steps);
+    panel.appendChild(bWrap);
+
+    const foot = mk('div','rs-ops-small rs-ops-muted', `Total Timeline: ${fmtDur(r.availableSec)}${(r.availableSec < MAX_WINDOW_SEC ? ' (building)' : '')}`);
+    panel.appendChild(foot);
+
+    const actions = mk('div','rs-ops-actions');
+    const cancel = mk('button','rs-ops-btn','Cancel'); cancel.type='button';
+    const goLive = mk('button','rs-ops-btn','Back to Live Ops'); goLive.type='button';
+    const start = mk('button','rs-ops-primary','Start Review Ops'); start.type='button';
+
+    actions.appendChild(goLive);
+    actions.appendChild(cancel);
+    actions.appendChild(start);
+    panel.appendChild(actions);
+
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', (e)=>{ if (e.target === overlay) closeOverlay(); });
+    cancel.onclick = ()=> closeOverlay();
+    goLive.onclick = async ()=>{
+      closeOverlay();
+      OPS.mode = 'live';
+      OPS.cursorUnix = null;
+      try{ __opsSave(); }catch(_){}
+      syncPills(); syncReviewCtl();
+      await setChunk(0, {autoplay:true});
+    };
+
+    start.onclick = async ()=>{
+      try{
+        const d = parseInt(daySel.value, 10) || 0;
+        const [H,M] = String(tIn.value || '00:00').split(':').map(x=>parseInt(x,10));
+        const h = Number.isFinite(H) ? H : 0;
+        const m = Number.isFinite(M) ? M : 0;
+        OPS.blockSec = selected;
+        OPS.mode = 'review';
+        syncPills(); syncReviewCtl();
+        closeOverlay();
+
+        const u = await unixFromUiDayAndTime(d, h, m);
+        OPS.cursorUnix = u;
+        try{ OPS.lastUi = { dayIdx: d, hhmm: String(tIn.value||'00:00') }; __opsSave(); }catch(_){}
+        await safeSeekUnix(u);
+      }catch(_){}
+    };
+  }
+
+  livePill.onclick = async ()=>{
+    OPS.mode = 'live';
+    OPS.cursorUnix = null;
+    try{ __opsSave(); }catch(_){}
+    syncPills();
+    syncReviewCtl();
+    closeOverlay();
+    await setChunk(0, {autoplay:true});
+    refreshTimeline();
+  };
+
+  reviewPill.onclick = async ()=>{
+    OPS.mode = 'review';
+    try{ __opsSave(); }catch(_){}
+    syncPills();
+    syncReviewCtl();
+    await openReviewSetup();
+  };
+
+  blockBtn.onclick = ()=> openReviewSetup();
+
+  prevBtn.onclick = async ()=>{
+    try{
+      const r = await rsGetDvrRangeCached();
+      const nowU = r.nowUnix;
+      if (!OPS.cursorUnix) OPS.cursorUnix = nowU - OPS.blockSec;
+      let target = OPS.cursorUnix - OPS.blockSec;
+      if (target < r.oldestUnix) target = r.oldestUnix;
+      OPS.cursorUnix = target;
+      try{ __opsSave(); }catch(_){}
+      await safeSeekUnix(target);
+    }catch(_){}
+  };
+
+  nextBtn.onclick = async ()=>{
+    try{
+      const r = await rsGetDvrRangeCached();
+      const nowU = r.nowUnix;
+      if (!OPS.cursorUnix) OPS.cursorUnix = nowU - OPS.blockSec;
+      let target = OPS.cursorUnix + OPS.blockSec;
+      // If target is at/after live edge, switch to live ops
+      if (target >= (r.newestUnix - 5)){
+        OPS.mode = 'live';
+        OPS.cursorUnix = null;
+        try{ __opsSave(); }catch(_){}
+        syncPills(); syncReviewCtl();
+        closeOverlay();
+        await setChunk(0, {autoplay:true});
+        return;
+      }
+      if (target < r.oldestUnix) target = r.oldestUnix;
+      OPS.cursorUnix = target;
+      try{ __opsSave(); }catch(_){}
+      await safeSeekUnix(target);
+    }catch(_){}
+  };
+}
+
+function resetToolbarToLiveUI(){
+  // No-op in Ops UI; Live Ops uses setChunk(0) directly.
+}
+
+/* ====== Stream window switching ====== */
+
+/**
+ * setChunk(offset, opts)
+ *  - offset: DVR timeshift offset in seconds
+ *  - opts.autoplay: whether to attempt playback after load (default true)
+ */
+async function setChunk(offset, opts = {}) {
+  const { autoplay = true } = opts;
+
+  currentDvrOffset = offset;
+  try{ player.__rsCurrentOffset = offset; }catch(_){ }
+  const url      = baseURL + `playlist_dvr_timeshift-${offset}-${CHUNK_SEC}.m3u8${tokenParam()}`;
+  const fallback = baseURL + `playlist_dvr_timeshift-0-${CHUNK_SEC}.m3u8${tokenParam()}`;
+
+  const ok     = await headOK(url);
+  const srcUrl = ok ? url : fallback;
+
+  player.src({ type: 'application/x-mpegURL', src: srcUrl });
+  player.load();
+
+  if (!autoplay) return;
+
+  const startPlayback = () => {
+    // For live (offset 0), intentionally sit a bit behind the edge so we build a bigger buffer
+    if (offset === 0 && LIVE_LAG_SEC > 0) {
+      try {
+        const sk = player.seekable();
+        if (sk && sk.length) {
+          const start = sk.start(0);
+          const end   = sk.end(0);
+          const t     = Math.max(start, end - LIVE_LAG_SEC);
+          player.currentTime(t);
+        }
+      } catch (_) {}
+    }
+
+    const p = player.play();
+    if (p && p.catch) p.catch(()=>{ /* autoplay blocked; user can click play */ });
+  };
+
+  // Always wait for metadata before starting, to avoid bufferStalled on startup
+  player.one('loadedmetadata', startPlayback);
+}
+
+async function jumpToUnix(targetUnix, updateUrl){
+  try{ __rsSyncSelectorsToUnix(targetUnix); }catch(_){ }
+
+  const nowUnix = await rsGetServerNowUnix();
+  const elapsed = nowUnix - targetUnix;
+
+  if (elapsed < 0 || elapsed > MAX_WINDOW_SEC){ 
+    setChunk(0); 
+    return; 
+  }
+
+  const offset = Math.floor(elapsed/CHUNK_SEC) * CHUNK_SEC;
+
+  // Only reload playlist if the desired chunk differs from what's currently attached
+  if (typeof player.__rsCurrentOffset === 'number' && player.__rsCurrentOffset === offset){
+    // Seek within current playlist if possible; otherwise wait for metadata
+    try{
+      const sk = player.seekable();
+      if (sk && sk.length){
+        const seekEnd = sk.end(0);
+        const nowMinusOffset = nowUnix - offset;
+        const secondsBehindEnd = nowMinusOffset - targetUnix;
+        const t = Math.max(0, seekEnd - secondsBehindEnd);
+        try{ player.currentTime(t); }catch(_){ }
+        const p = player.play(); if (p && p.catch) p.catch(()=>{});
+      } else {
+        player.one('loadedmetadata', ()=>{
+          try{
+            const sk2 = player.seekable(); if (!sk2 || !sk2.length) return;
+            const seekEnd = sk2.end(0);
+            const nowMinusOffset = nowUnix - offset;
+            const secondsBehindEnd = nowMinusOffset - targetUnix;
+            const t = Math.max(0, seekEnd - secondsBehindEnd);
+            try{ player.currentTime(t); }catch(_){}
+            const p = player.play(); if (p && p.catch) p.catch(()=>{});
+          }catch(_){ }
+        });
+      }
+    }catch(_){
+      // If anything goes wrong, fall back to reloading the chunk
+      await setChunk(offset, { autoplay: false });
+      player.one('loadedmetadata', ()=>{
+        try{
+          const sk = player.seekable(); if (!sk || !sk.length) return;
+          const seekEnd = sk.end(0);
+          const nowMinusOffset = nowUnix - offset;
+          const secondsBehindEnd = nowMinusOffset - targetUnix;
+          const t = Math.max(0, seekEnd - secondsBehindEnd);
+          try{ player.currentTime(t); }catch(_){ }
+          const p = player.play(); if (p && p.catch) p.catch(()=>{});
+        }catch(_){ }
+      });
+      try{ player.__rsCurrentOffset = offset; }catch(_){ }
+    }
+  } else {
+    await setChunk(offset, { autoplay: false });
+    // After loading the new chunk, position to the requested wall time
+    player.one('loadedmetadata', ()=>{
+      try{
+        const sk = player.seekable(); if (!sk || !sk.length) return;
+        const seekEnd = sk.end(0);
+        const nowMinusOffset = nowUnix - offset;
+        const secondsBehindEnd = nowMinusOffset - targetUnix;
+        const t = Math.max(0, seekEnd - secondsBehindEnd);
+        try{ player.currentTime(t); }catch(_){ }
+        const p = player.play(); if (p && p.catch) p.catch(()=>{});
+      }catch(_){ }
+    });
+    try{ player.__rsCurrentOffset = offset; }catch(_){ }
+  }
+
+  if (updateUrl){
+    const url = new URL(window.location.href);
+    url.searchParams.set('t', String(targetUnix));
+    url.searchParams.set('cam', camName);
+    url.searchParams.set('dev', C.dev ? '1' : '0');
+    history.replaceState({}, '', url.toString());
+  }
+}
+
+/* ====== Hover thumbnails (timeline only; no tab-switch fadeouts) ====== */
+(function setupHoverThumbs(){
+  const preview = document.getElementById('thumb-preview');
+  if (!preview) return;
+
+  try{
+    preview.style.border = "2px solid #ff6600";
+    preview.style.borderRadius = "6px";
+    preview.style.boxShadow = "0 0 6px rgba(255,102,0,0.5)";
+  }catch(_){}
+
+  const NO_THUMB_URL = '/video/img/no-preview.jpeg';
+  let overBar = false;
+  let lastStamp = 0;
+  let raf = 0;
+
+  const control = player.controlBar && player.controlBar.progressControl
+    ? player.controlBar.progressControl.el()
+    : null;
+  if (!control) return;
+
+  function evenCandidates(unix){
+    const baseEven = Math.floor(unix/2)*2;
+    const deltas = [0,-2,-4,-6,-8,-10,2,4,6,8,10];
+    const set = new Set(); deltas.forEach(d=>set.add(baseEven+d));
+    return Array.from(set);
+  }
+  function tryLoad(urls, done){
+    if (!urls.length) return done(null);
+    const u = urls.shift();
+    const im = new Image();
+    let finished = false;
+    const t = setTimeout(()=>{ if(!finished){ finished=true; tryLoad(urls, done); } }, 1200);
+    im.onload = async()=>{ if(finished) return; clearTimeout(t); finished=true; try{ await im.decode(); }catch(_){} done(u); };
+    im.onerror= ()=>{ if(finished) return; clearTimeout(t); finished=true; tryLoad(urls, done); };
+    im.src = u;
+  }
+  function show(){ preview.style.display='block'; preview.style.opacity='1'; }
+  function hide(){ preview.style.opacity='0'; setTimeout(()=>{ if (!overBar) preview.style.display='none'; }, 180); }
+
+  function tick(xClient){
+    raf = 0;
+    if (!overBar) return;
+
+    const rect = control.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (xClient - rect.left) / rect.width));
+    const sk = player.seekable(); if (!sk || !sk.length) return;
+
+    const s0 = sk.start(0), s1 = sk.end(0);
+    const hover = s0 + pct*(s1 - s0);
+
+    const nowU = Math.floor(Date.now()/1000);
+    const unix = Math.floor(nowU - currentDvrOffset - (s1 - hover));
+    const stamp = unix - (unix % 2);
+
+    const vrect = player.el().getBoundingClientRect();
+    const boxW = preview.offsetWidth || 205;
+    let left = xClient - vrect.left;
+    left = Math.max(20 + boxW/2, Math.min(left, player.el().offsetWidth - 20 - boxW/2));
+    preview.style.left = `${left}px`;
+
+    show();
+
+    if (stamp === lastStamp) return;
+    lastStamp = stamp;
+
+    const skew = (typeof window.RS_THUMB_SKEW === 'number') ? window.RS_THUMB_SKEW : 16;
+    const adj = stamp - skew;
+    const candidates = evenCandidates(adj).map(t => `${thumbBase}${t}.jpg`);
+
+    tryLoad([...candidates], (found)=>{
+      if (!overBar || stamp !== lastStamp) return; // stale
+      if (found){
+        preview.style.backgroundImage = `url('${found}')`;
+      } else {
+        preview.style.backgroundImage = `url('${NO_THUMB_URL}')`;
+      }
+      show();
+    });
+  }
+
+  control.addEventListener('mouseenter', ()=>{ overBar = true; show(); });
+  control.addEventListener('mouseleave', ()=>{ overBar = false; hide(); });
+
+  control.addEventListener('mousemove', (e)=>{
+    if (!overBar) return;
+    if (!raf) raf = requestAnimationFrame(()=> tick(e.clientX));
+  });
+  control.addEventListener('touchmove', (e)=>{
+    const t = e.touches && e.touches[0]; if (!t) return;
+    overBar = true;
+    if (!raf) raf = requestAnimationFrame(()=> tick(t.clientX));
+  }, {passive:true});
+  control.addEventListener('touchstart', ()=>{ overBar = true; show(); }, {passive:true});
+  control.addEventListener('touchend',   ()=>{ overBar = false; hide();   }, {passive:true});
+})();
+
+/* ====== Init helpers ====== */
+function __rsWallStrFromSnapshot(snap){
+  try{
+    const ts = (snap && (snap.wallUnix || snap.nowUnix)) ? (snap.wallUnix || snap.nowUnix) : (Date.now()/1000);
+    const d = new Date(ts*1000);
+    const hh = String(d.getHours()).padStart(2,'0');
+    const mm = String(d.getMinutes()).padStart(2,'0');
+    const ss = String(d.getSeconds()).padStart(2,'0');
+    const MO = String(d.getMonth()+1).padStart(2,'0');
+    const DD = String(d.getDate()).toString().padStart(2,'0');
+    return `${hh}:${mm}:${ss} ${MO}/${DD}`;
+  }catch(_){ return 'n/a'; }
+}
+
+function __rsWallStrNow(){
+  try{
+    const sk = player && player.seekable && player.seekable();
+    if (!sk || !sk.length) return 'n/a';
+    const end = sk.end(0);
+    const ct  = (player && typeof player.currentTime==='function') ? player.currentTime() : 0;
+    const nowU = (typeof window.nowUnix==='number' && window.nowUnix>0) ? window.nowUnix : Math.floor(Date.now()/1000);
+    const ts = nowU - (typeof currentDvrOffset==='number'? currentDvrOffset:0) - (end - ct);
+    const d = new Date(ts*1000);
+    const hh = String(d.getHours()).padStart(2,'0');
+    const mm = String(d.getMinutes()).padStart(2,'0');
+    const ss = String(d.getSeconds()).padStart(2,'0');
+    const MO = String(d.getMonth()+1).padStart(2,'0');
+    const DD = String(d.getDate()).toString().padStart(2,'0');
+    return `${hh}:${mm}:${ss} ${MO}/${DD}`;
+  }catch(_){ return 'n/a'; }
+}
+
+function __rsLatencySeconds(){
+  try{
+    if (!(player && typeof player.currentTime==='function' && player.seekable)) return 'n/a';
+    const sk = player.seekable();
+    if (!sk || !sk.length) return 'n/a';
+    const start = sk.start(0);
+    const end   = sk.end(0);
+    const ct    = player.currentTime();
+    const win   = Math.max(0, end - start);
+
+    let latencyA = end - ct;
+    let latencyB = end - (start + ct);
+
+    const clamp = (x)=> Math.max(0, Math.min(win, x));
+    latencyA = clamp(latencyA);
+    latencyB = clamp(latencyB);
+
+    let d = Math.min(latencyA, latencyB);
+    if (latencyA === 0 && latencyB > 0) d = latencyB;
+    if (latencyB === 0 && latencyA > 0) d = latencyA;
+
+    return d.toFixed(2) + ' s';
+  }catch(_){ return 'n/a'; }
+}
+
+function __mkPingUrl(){ 
+  try{ 
+    return baseURL + `playlist_dvr_timeshift-${currentDvrOffset}-${CHUNK_SEC}.m3u8${tokenParam()}`; 
+  }catch(_){ 
+    return baseURL; 
+  } 
+}
+
+// --- Resume-at-pause fix ---
+player.on('pause', ()=>{
+  try {
+    const sk = player.seekable();
+    if (!sk || !sk.length) return;
+    const nowU = Math.floor(Date.now()/1000);
+    const end = sk.end(0);
+    const secondsBehind = Math.max(0, end - player.currentTime());
+    __pausedUnix = nowU - currentDvrOffset - secondsBehind;
+  } catch(_){}
+});
+
+player.on('play', ()=>{
+  try{
+    if (!__pausedUnix) return;
+    const nowU = Math.floor(Date.now()/1000);
+    const elapsed = nowU - __pausedUnix;
+    const MAX_SEC = DVR_DAYS * 24 * 3600;
+    if (elapsed < 0 || elapsed > MAX_SEC){ __pausedUnix = null; return; }
+
+    const targetOffset = Math.floor(elapsed/CHUNK_SEC) * CHUNK_SEC;
+    if (targetOffset === currentDvrOffset){
+      const sk = player.seekable(); if (!sk || !sk.length){ __pausedUnix = null; return; }
+      const end = sk.end(0);
+      const nowMinusOffset = nowU - currentDvrOffset;
+      const secondsBehindEnd = nowMinusOffset - __pausedUnix;
+      const t = Math.max(0, end - secondsBehindEnd);
+      try{ player.currentTime(t); }catch(_){}
+      __pausedUnix = null;
+      return;
+    }
+    jumpToUnix(__pausedUnix, false);
+  } finally {
+    __pausedUnix = null;
+  }
+});
+
+// ---- Desktop-only keyboard shortcuts (no mobile) ----
+(function rsInstallDesktopKeys(){
+  try{
+    const isMobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    const finePointer = matchMedia && matchMedia('(pointer:fine)').matches;
+    if (isMobileUA || !finePointer) return;
+  }catch(_){}
+
+  function isTypingTarget(el){
+    if (!el) return false;
+    const tag = el.tagName;
+    if (!tag) return false;
+    if (/INPUT|TEXTAREA|SELECT/.test(tag)) return true;
+    if (el.isContentEditable) return true;
+    return false;
+  }
+
+  document.addEventListener('keydown', (e)=>{
+    const tgt = e.target;
+    if (isTypingTarget(tgt)) return;
+
+    if (e.shiftKey && e.key === 'ArrowLeft'){ e.preventDefault(); __rsSeekBy(-30); return; }
+    if (e.shiftKey && e.key === 'ArrowRight'){ e.preventDefault(); __rsSeekBy(30); return; }
+
+    if (!e.shiftKey && e.key === 'ArrowLeft'){ e.preventDefault(); __rsSeekBy(-10); return; }
+    if (!e.shiftKey && e.key === 'ArrowRight'){ e.preventDefault(); __rsSeekBy(10); return; }
+
+    if ((e.key==='D' || e.key==='d') && e.shiftKey){
+      e.preventDefault();
+      const p=document.getElementById('rs-devtools');
+      if (p&&p.style.display!=='none'){ p.style.display='none'; }
+      else { __rsOpenDiagPanel(); }
+    }
+    if (e.key === '?' || (e.shiftKey && e.key === '/')){ e.preventDefault(); __rsToggleHelp(); }
+  });
+})();
+
+/* ===== DVR→Live fallback (stall/error/out-of-range) ===== */
+(function rsInstallDvrFallback(){
+  function toast(msg){
+    try{
+      let t = document.getElementById('rs-toast');
+      if (!t){
+        t = document.createElement('div'); t.id='rs-toast';
+        t.style.cssText = 'position:fixed;left:50%;bottom:38px;transform:translateX(-50%);z-index:2147483000;background:rgba(20,24,28,.92);color:#fff;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px 12px;font:600 13px system-ui, -apple-system;box-shadow:0 8px 24px rgba(0,0,0,.35)';
+        document.body.appendChild(t);
+      }
+      t.textContent = msg; t.style.opacity='1'; t.style.display='block';
+      clearTimeout(window.__rsToastHide);
+      window.__rsToastHide = setTimeout(()=>{ t.style.opacity='0'; setTimeout(()=>{ t.style.display='none'; }, 200); }, 2200);
+    }catch(_){}
+  }
+
+  function isDvr(){ return (currentDvrOffset|0) > 0; }
+  function goLive(){ try{ resetToolbarToLiveUI(); setChunk(0); toast('Time not available — jumped to Live'); }catch(_){ setChunk(0); } }
+
+  player.on('error', async ()=>{
+    if (!isDvr()) {
+      await __rsRotateToken('error');
+      return;
+    }
+    goLive();
+  });
+
+  let badTicks = 0;
+  setInterval(()=>{
+    try{
+      if (!isDvr()) { badTicks = 0; return; }
+      const v = player.tech_ && player.tech_.el ? player.tech_.el() : document.querySelector('video');
+      if (!v) return;
+      const ct = v.currentTime || 0;
+      const b = v.buffered; const ahead = (b && b.length) ? (b.end(b.length-1) - ct) : 0;
+      const stuck = (v.readyState <= 2) || (ahead < 0.25);
+      badTicks = stuck ? (badTicks + 1) : 0;
+      if (badTicks >= 16){
+        badTicks = 0;
+        goLive();
+      }
+    }catch(_){}
+  }, 500);
+})();
+
+player.ready(()=>{
+  buildToolbar();
+  resetToolbarToLiveUI();
+  setChunk(0);
+
+  try{ player.on('timeupdate', __rsSaveResumePoint); }catch(_){}
+
+  if (C.tokenUrl && TOKEN_ROTATE_MS >= 60_000) {
+    setInterval(() => { __rsRotateToken('timer'); }, TOKEN_ROTATE_MS);
+  }
+});
+
+/* === RS Diagnostics (UI-only) === */
+(function rsInstallDiagnosticsUI(){
+  if (!document.getElementById('rs-diag-style')){
+    const st = document.createElement('style'); st.id='rs-diag-style';
+    st.textContent = `
+#rs-devtools{
+  position:fixed; right:12px; top:72px; z-index:9999;
+  background: rgba(12,14,16,.86);
+  backdrop-filter: saturate(120%) blur(2px);
+  color:#d9dde1; border:1px solid rgba(255,255,255,.08);
+  border-radius:14px; box-shadow:0 12px 28px rgba(0,0,0,.35);
+  min-width:360px; max-width:420px; padding:12px 12px 10px; display:none;
+  font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+#rs-devtools .rs-header{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+#rs-devtools .rs-title{ font-weight:700; font-size:15px; color:#e8edf2; letter-spacing:.2px; }
+#rs-devtools .rs-ver{ margin-left:auto; padding:2px 8px; border-radius:999px;
+  background:rgba(255,102,0,.12); color:#ff8a33; font:600 12px/1 monospace;
+  border:1px solid rgba(255,102,0,.25); }
+#rs-devtools .btns{ display:flex; gap:8px; margin-left:8px; }
+#rs-devtools .rs-btn{ background:#22272b; color:#e0e6eb; border:1px solid rgba(255,255,255,.12);
+  border-radius:10px; padding:6px 10px; font-weight:600; cursor:pointer; }
+#rs-devtools .rs-btn:hover{ background:#2b3136; }
+#rs-devtools .rs-rows{ display:grid; grid-auto-rows:minmax(20px,auto); row-gap:6px; }
+#rs-devtools .row{ display:grid; grid-template-columns: 140px 1fr; column-gap:18px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+#rs-devtools .row .k{ color:#aab3bd; }
+#rs-devtools .row .v{ color:#e6ebef; text-align:right; font-variant-numeric: tabular-nums; }
+.rs-menu{
+  position:fixed; z-index:9999; min-width:220px; display:none;
+  background:#11161a; color:#fff; border:1px solid rgba(255,255,255,.08);
+  border-radius:10px; box-shadow:0 14px 36px rgba(0,0,0,.45);
+}
+.rs-menu .item{ display:flex; justify-content:space-between; gap:12px; padding:8px 10px; cursor:pointer; }
+.rs-menu .item:hover{ background:#182027; }
+.rs-menu .muted{ opacity:.65; cursor:default; }
+#rs-help{ position:fixed; inset:0; background:rgba(0,0,0,.7); color:#fff; display:none; z-index:9998; }
+#rs-help .card{ max-width:720px; margin:8% auto; background:#11161a; border:1px solid rgba(255,255,255,.08);
+  border-radius:14px; padding:18px 20px; }
+`;
+    document.head.appendChild(st);
+  }
+
+  function __rsIsLiveish(){
+    try{
+      const off = (typeof currentDvrOffset === 'number' ? currentDvrOffset : 0);
+      if (off !== 0) return false;
+
+      const sk = player.seekable(); if (!sk || !sk.length) return true;
+      const end = sk.end(0);
+      const ct  = player.currentTime();
+      const behind = Math.max(0, end - ct);
+
+      const LIVE_EDGE_TOL = Number(C.liveEdgeTolSec || 120);
+      return behind <= LIVE_EDGE_TOL;
+    }catch(_){
+      return (typeof currentDvrOffset === 'number' ? currentDvrOffset : 0) === 0;
+    }
+  }
+
+  function __rsEdgeHost(){
+    try{
+      if (typeof baseURL === 'string'){
+        const m = baseURL.match(/^https?:\/\/([^\/]+)/i);
+        return m ? m[1] : 'n/a';
+      }
+    }catch(_){}
+    return 'n/a';
+  }
+
+  async function __rsPing(url){
+    const pl   = url || (__mkPingUrl && __mkPingUrl()) || (typeof baseURL==='string' ? baseURL : (location.origin + '/'));
+    const base = (typeof baseURL==='string' ? baseURL : (location.origin + '/'));
+    let ms = null;
+    try{
+      const ac = new AbortController(); const t0 = performance.now();
+      const to = setTimeout(()=>ac.abort(), 2000);
+      const r  = await fetch(pl, {method:'HEAD', cache:'no-store', signal:ac.signal});
+      clearTimeout(to); ms = Math.round(performance.now()-t0);
+      if (r && (r.ok || r.status===200)) return {ok:true, ms};
+    }catch(_){}
+
+    try{
+      const ac = new AbortController(); const t0 = performance.now();
+      const to = setTimeout(()=>ac.abort(), 2000);
+      await fetch(base, {method:'GET', cache:'no-store', mode:'no-cors', signal:ac.signal});
+      clearTimeout(to); ms = Math.round(performance.now()-t0);
+      return {ok:true, ms};
+    }catch(_){}
+
+    try{
+      const t0 = performance.now();
+      await new Promise(res=>{
+        const img = new Image();
+        const u = pl + (pl.indexOf('?')>-1?'&':'?') + 'r=' + (Date.now()%1e6);
+        const done = ()=>res();
+        img.onload=done; img.onerror=done; setTimeout(done,2000); img.src=u;
+      });
+      ms = Math.round(performance.now()-t0);
+      return {ok:true, ms};
+    }catch(_){}
+    return {ok:false, ms};
+  }
+
+  function p(){ try{ return window.videojs && videojs('cam_player'); }catch(_){ return null; } }
+  const pv = p();
+
+  function __rsWindowText(){
+    try{
+      const ch = (typeof CHUNK_HOURS !== 'undefined' ? CHUNK_HOURS : 4);
+      const off = (typeof currentDvrOffset !== 'undefined' ? currentDvrOffset : 0);
+      const day = Math.max(0, Math.floor(off / 86400));
+      const secsPerBlock = Math.max(1, ch * 3600);
+      const block = Math.max(0, Math.floor((off % 86400) / secsPerBlock));
+      return `day ${day}, block ${block} (${ch}h)`;
+    }catch(_){ return '—'; }
+  }
+
+  function __rsVideoQuality(){
+    try{
+      const v = document.querySelector('video');
+      if (!v) return null;
+      if (typeof v.getVideoPlaybackQuality === 'function'){
+        const q = v.getVideoPlaybackQuality();
+        const dropped = (typeof q.droppedVideoFrames === 'number') ? q.droppedVideoFrames : 0;
+        const total   = (typeof q.totalVideoFrames   === 'number') ? q.totalVideoFrames   : 0;
+        return {dropped, total};
+      }
+      const total = (typeof v.webkitDecodedFrameCount === 'number') ? v.webkitDecodedFrameCount : 0;
+      const dropped = (typeof v.webkitDroppedFrameCount === 'number') ? v.webkitDroppedFrameCount : 0;
+      return {dropped, total};
+    }catch(_){ return null; }
+  }
+
+  async function __rsMeasureLatency(){
+    try{
+      const pl = (__mkPingUrl && __mkPingUrl()) || (typeof baseURL==='string' ? baseURL + 'playlist.m3u8' : location.href);
+      try{
+        const ac = new AbortController(); const t0 = performance.now();
+        const to = setTimeout(()=>ac.abort(), 2500);
+        await fetch(pl, { method:'GET', cache:'no-store', mode:'no-cors', signal: ac.signal });
+        clearTimeout(to);
+        return Math.max(1, Math.round(performance.now() - t0));
+      }catch(_){}
+      try{
+        const t0 = performance.now();
+        await new Promise(res=>{
+          const img = new Image();
+          const u = pl + (pl.indexOf('?')>-1?'&':'?') + 'r=' + (Date.now()%1e6);
+          const done = ()=>res();
+          img.onload = done; img.onerror = done; setTimeout(done, 2500); img.src = u;
+        });
+        return Math.max(1, Math.round(performance.now() - t0));
+      }catch(_){}
+    }catch(_){}
+    return null;
+  }
+
+  (function(){
+    try{
+      (async()=>{
+        try{
+          window.__rsLastLatencyMs = await __rsMeasureLatency();
+          if (typeof updateStats==='function') try{ updateStats(); }catch(_){}
+        }catch(_){}
+      })();
+      clearInterval(window.__rsLatencyTimer);
+    }catch(_){}
+    window.__rsLatencyTimer = setInterval(async ()=>{
+      try{
+        const ms = await __rsMeasureLatency();
+        if (typeof ms === 'number') window.__rsLastLatencyMs = ms;
+        try{
+          const open = document.getElementById('rs-devtools');
+          if (open && open.style.display !== 'none' && typeof updateStats==='function') updateStats();
+        }catch(_){}
+      }catch(_){}
+    }, 7500);
+  })();
+
+  function __rsLatencyDisplay(){
+    try{
+      const ms = window.__rsLastLatencyMs;
+      if (typeof ms !== 'number') return '…';
+      let color = '#A3FFB0';
+      if (ms > 250) color = '#FF8A8A';
+      else if (ms > 100) color = '#FFD27A';
+      return `<span style="padding:2px 6px;border-radius:10px;background:rgba(255,255,255,0.08);"><span style="color:${color}">${ms} ms</span></span>`;
+    }catch(_){ return '…'; }
+  }
+
+  function __rsGetBitrateMbps(){
+  try{
+    const pv =
+      (window.videojs && typeof window.videojs === 'function')
+        ? window.videojs('cam_player')
+        : window.player;
+
+    if (!pv) return 'n/a';
+
+    let tech = null;
+    try { tech = pv.tech && pv.tech(true); } catch(_){ tech = null; }
+
+    // Try to locate a real hls.js (Hls) instance in common Nuevo / contrib spots
+    const candidates = [];
+
+    // ✅ Your build exposes it here (confirmed by console scan)
+    if (pv && pv.hlsjs) candidates.push(pv.hlsjs);
+
+    // contrib-hlsjs style
+    if (tech && (tech.hlsjs || tech.hlsjs_)) candidates.push(tech.hlsjs, tech.hlsjs_);
+    if (pv.tech_ && (pv.tech_.hlsjs || pv.tech_.hlsjs_)) candidates.push(pv.tech_.hlsjs, pv.tech_.hlsjs_);
+
+    // ✅ Nuevo / videojs-hlsjs style provider (YOUR CASE)
+    if (tech) candidates.push(tech.hlsProvider, tech.hlsProvider_);
+    if (pv.tech_) candidates.push(pv.tech_.hlsProvider, pv.tech_.hlsProvider_);
+
+    function unwrap(x){
+      if (!x) return null;
+
+      // some providers store the Hls instance on these keys
+      if (x.hls) return x.hls;
+      if (x._hls) return x._hls;
+      if (x.hlsjs) return x.hlsjs;
+      if (x.hlsjs_) return x.hlsjs_;
+
+      // sometimes provider has a getter
+      if (typeof x.getHls === 'function'){
+        try { const v = x.getHls(); if (v) return v; } catch(_){}
+      }
+
+      return x;
+    }
+
+    // Find first thing that looks like hls.js
+    let hls = null;
+    for (const c of candidates){
+      const u = unwrap(c);
+      if (!u) continue;
+      if (Array.isArray(u.levels) || typeof u.currentLevel === 'number' || typeof u.bandwidthEstimate === 'number'){
+        hls = u;
+        break;
+      }
+    }
+
+    if (hls){
+      const lvl =
+        (typeof hls.currentLevel === 'number') ? hls.currentLevel :
+        (typeof hls.loadLevel === 'number')    ? hls.loadLevel :
+        (typeof hls.nextLevel === 'number')    ? hls.nextLevel :
+        -1;
+
+      if (lvl >= 0 && Array.isArray(hls.levels) && hls.levels[lvl]){
+        const L = hls.levels[lvl];
+        const br = L.bitrate || L.avgBitrate || L.maxBitrate || 0;
+        if (typeof br === 'number' && br > 0){
+          return (br / 1e6).toFixed(2) + ' Mbps';
+        }
+      }
+
+      if (typeof hls.bandwidthEstimate === 'number' && hls.bandwidthEstimate > 0){
+        return (hls.bandwidthEstimate / 1e6).toFixed(2) + ' Mbps (est)';
+      }
+    }
+
+    return 'n/a';
+  }catch(_){
+    return 'n/a';
+  }
+}
+
+function __rsGetThroughputMbps(){
+  try{
+    const pv =
+      (window.videojs && typeof window.videojs === 'function')
+        ? window.videojs('cam_player')
+        : window.player;
+    if (!pv) return 'n/a';
+
+    // Your build exposes the Hls instance here (confirmed by your console scan)
+    const hls =
+      (pv && pv.hlsjs) ||
+      (pv && pv.tech_ && (pv.tech_.hlsjs || pv.tech_.hlsjs_)) ||
+      null;
+
+    if (!hls) return 'n/a';
+
+    // 1) Preferred: direct property
+    let est =
+      (typeof hls.bandwidthEstimate === 'number' && hls.bandwidthEstimate > 0)
+        ? hls.bandwidthEstimate
+        : null;
+
+    // 2) Alternate: bandwidthEstimator API
+    if (!est && hls.bandwidthEstimator && typeof hls.bandwidthEstimator.getEstimate === 'function'){
+      const v = hls.bandwidthEstimator.getEstimate();
+      if (typeof v === 'number' && v > 0) est = v;
+    }
+
+    if (!est) return 'n/a';
+    return (est / 1e6).toFixed(2) + ' Mbps (est)';
+  }catch(_){
+    return 'n/a';
+  }
+}
+
+  function updateStats(){
+    const body = document.getElementById('rs-debug-body'); if (!body) return;
+    const videoEl = (pv && pv.el && pv.el().querySelector('video')) || document.querySelector('video');
+
+    // resolution
+    let res = 'n/a';
+    try{
+      if (videoEl) res = `${videoEl.videoWidth || 0}x${videoEl.videoHeight || 0}`;
+    }catch(_){}
+
+    // buffer ahead
+    let buf = 'n/a';
+    try{
+      const isPaused = (pv && typeof pv.paused==='function') ? pv.paused() : false;
+      if (isPaused){ buf = '0.00 s'; }
+      else {
+        const b = pv && pv.buffered && pv.buffered();
+        const ct = pv && pv.currentTime ? pv.currentTime() : 0;
+        if (b && typeof b.length==='number' && b.length>0){
+          let ahead = 0;
+          for (let i=0;i<b.length;i++){
+            const s=b.start(i), e=b.end(i);
+            if (ct >= s && ct <= e){ ahead = Math.max(0, e - ct); break; }
+            if (ct < s){ ahead = Math.max(0, e - ct); break; }
+          }
+          buf = ahead.toFixed(2) + ' s';
+        } else {
+          const sk = pv && pv.seekable && pv.seekable();
+          if (sk && sk.length){ const end = sk.end(0); buf = Math.max(0, end - ct).toFixed(2) + ' s'; }
+        }
+      }
+    }catch(_){}
+
+    // dropped frames + percent
+    const qInfo = __rsVideoQuality();
+    let droppedText = 'n/a';
+    try{
+      if (qInfo && typeof qInfo.total === 'number' && qInfo.total > 0){
+        const pct = ((qInfo.dropped / qInfo.total) * 100).toFixed(1);
+        droppedText = `${qInfo.dropped}/${qInfo.total} (${pct}%)`;
+      } else if (videoEl) {
+        const q = videoEl.getVideoPlaybackQuality ? videoEl.getVideoPlaybackQuality() : null;
+        if (q && typeof q.droppedVideoFrames==='number') droppedText = String(q.droppedVideoFrames);
+        else if (typeof videoEl.webkitDroppedFrameCount==='number') droppedText = String(videoEl.webkitDroppedFrameCount);
+      }
+    }catch(_){}
+
+    // mode + behind live
+    const off0 = (typeof currentDvrOffset === 'number' ? currentDvrOffset : 0);
+    const liveish = __rsIsLiveish();
+
+    let modeText = 'DVR';
+    if (off0 === 0){
+      modeText = liveish ? 'LIVE' : 'DVR (timeshift)';
+    } else {
+      modeText = `DVR (${__rsWindowText()})`;
+    }
+
+    let behindLive = '— (DVR)';
+try{
+  if (off0 === 0){
+    const sk = pv && pv.seekable && pv.seekable();
+    const ct = pv && pv.currentTime ? pv.currentTime() : 0;
+    if (sk && sk.length){
+      const end = sk.end(0);
+      behindLive = Math.max(0, end - ct).toFixed(2) + ' s';
+    } else {
+      behindLive = '…';
+    }
+  }
+}catch(_){}
+
+    const rows = [
+      ['Player Version',      (window.RS_VERSION || 'DEV')],
+      ['Edge Server',         __rsEdgeHost()],
+      ['RTT to Server',       __rsLatencyDisplay()],
+      ['Video Mode',          modeText],
+      ['Behind Live',         behindLive],
+      ['Video Resolution',    res],
+      ['Video Bitrate',       __rsGetBitrateMbps()],
+      ['Network Throughput',  __rsGetThroughputMbps()],
+      ['Buffer Health',       buf],
+      ['Dropped Frames',      droppedText],
+      ['Current Play Time',   __rsWallStrNow()],
+  ];
+
+    body.innerHTML = rows.map(([k,v])=> `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('');
+  }
+
+  // helpers exposed for key handler
+  window.__rsOpenDiagPanel = function(){
+    if (window.__rsPingTimer) clearInterval(window.__rsPingTimer);
+    (async ()=>{ try{ await __rsPing(__mkPingUrl()); try{ updateStats(); }catch(_){}}catch(_){}})();
+    window.__rsPingTimer = setInterval(async ()=>{ try{ await __rsPing(__mkPingUrl()); }catch(_){} }, 5000);
+
+    const el = ensurePanel(); updateStats(); el.style.display='block';
+    if (window.__rsDiagTimer) clearInterval(window.__rsDiagTimer);
+    window.__rsDiagTimer = setInterval(updateStats, 600);
+  };
+
+  window.__rsToggleHelp = function(){
+    const h = document.getElementById('rs-help'); if (!h) return;
+    h.style.display = (h.style.display==='none' || !h.style.display) ? 'block' : 'none';
+  };
+
+  function ensurePanel(){
+    let p = document.getElementById('rs-devtools');
+    if (p) return p;
+    p = document.createElement('div'); p.id='rs-devtools';
+    p.innerHTML = `
+      <div class="rs-header">
+        <div class="rs-title">Status</div>
+        <span class="rs-ver">${window.RS_VERSION||'DEV'}</span>
+        <div class="btns">
+          <button class="rs-btn" id="rs-copy">Copy</button>
+          <button class="rs-btn" id="rs-close">Close</button>
+        </div>
+      </div>
+      <div class="rs-rows" id="rs-debug-body"></div>
+    `;
+    document.body.appendChild(p);
+    p.querySelector('#rs-close').onclick = ()=> {
+      p.style.display='none';
+      if (window.__rsDiagTimer){ clearInterval(window.__rsDiagTimer); window.__rsDiagTimer=null; }
+      if (window.__rsPingTimer){ clearInterval(window.__rsPingTimer); window.__rsPingTimer=null; }
+    };
+    p.querySelector('#rs-copy').onclick  = async ()=>{
+      try{ await navigator.clipboard.writeText(p.textContent.trim()); }catch(_){}
+    };
+    return p;
+  }
+
+  // Right-click context menu (desktop only; UI actions only)
+  (function(){
+    try{
+      const isMobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+      const finePointer = matchMedia && matchMedia('(pointer:fine)').matches;
+      if (isMobileUA || !finePointer) return;
+    }catch(_){}
+
+    const wrap = pv && pv.el && pv.el();
+    if (!wrap) return;
+    let menu = null;
+    const build = ()=>{
+      if (menu) return menu;
+      menu = document.createElement('div'); menu.className='rs-menu';
+      const add = (label, right, fn, cls='')=>{
+        const it=document.createElement('div'); it.className='item'+(cls?` ${cls}`:'');
+        const l=document.createElement('span'); l.textContent=label;
+        const r=document.createElement('span'); r.textContent=right||''; r.style.opacity=.7;
+        it.append(l,r); if (fn) it.onclick=()=>{ hide(); fn(); };
+        menu.appendChild(it);
+      };
+      add('Keyboard shortcuts', 'Shift+/', ()=> window.__rsToggleHelp());
+      add('Toggle Dev Tools', 'Shift+D', ()=> window.__rsOpenDiagPanel());
+      const sep=document.createElement('div'); sep.style.cssText='height:1px;background:rgba(255,255,255,.12)'; menu.appendChild(sep);
+      add(`Version ${(window.RS_VERSION||'DEV')}`, '', null, 'muted');
+      document.body.appendChild(menu);
+      return menu;
+    };
+    const show = (x,y)=>{
+      const m=build(); m.style.display='block';
+      const vw=innerWidth, vh=innerHeight, r=m.getBoundingClientRect();
+      m.style.left = Math.min(x, vw-r.width-8)+'px';
+      m.style.top  = Math.min(y, vh-r.height-8)+'px';
+      const once = ()=>{ hide(); document.removeEventListener('click', once); };
+      setTimeout(()=> document.addEventListener('click', once), 0);
+    };
+    const hide = ()=>{ if (menu) menu.style.display='none'; };
+    wrap.addEventListener('contextmenu', (e)=>{ e.preventDefault(); show(e.clientX, e.clientY); });
+  })();
+
+  // Help modal
+  (function(){
+    if (document.getElementById('rs-help')) return;
+    const help = document.createElement('div'); help.id='rs-help';
+    help.innerHTML = `
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px">
+          <h3 style="margin:0;font:600 16px/1.2 system-ui">RailStream Shortcuts</h3>
+          <button id="rs-help-close" class="rs-btn" style="margin-left:auto">Close</button>
+        </div>
+        <div style="display:grid;grid-template-columns: 1fr 1fr;gap:10px;margin-top:12px;font:14px/1.4 system-ui">
+          <div><code>←</code> — Back 10s</div>
+          <div><code>→</code> — Forward 10s</div>
+          <div><code>Shift + ←</code> — Back 30s</div>
+          <div><code>Shift + →</code> — Forward 30s</div>
+          <div><code>Shift + D</code> — Toggle Dev Tools</div>
+          <div><code>Shift + /</code> — Show this help</div>
+          <div style="grid-column:1/-1;opacity:.8">Note: Shortcuts are enabled on desktop only.</div>
+        </div>
+      </div>`;
+    document.body.appendChild(help);
+    help.querySelector('#rs-help-close').onclick = ()=> { help.style.display='none'; };
+  })();
+})();
+
+// ===== Admin export hooks (only active when adminTools=1) =====
+(function(){
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('adminTools') !== '1') return;
+
+    if (!window.player || typeof __rsCurrentUnixFromTime !== 'function') return;
+
+    let PARENT_ORIGIN = '*';
+    try{
+      if (C.parentOrigin) PARENT_ORIGIN = String(C.parentOrigin);
+      else if (document.referrer) PARENT_ORIGIN = new URL(document.referrer).origin;
+    }catch(_){ PARENT_ORIGIN = '*'; }
+
+    player.on('timeupdate', function(){
+      try {
+        const u = __rsCurrentUnixFromTime();
+        if (!u || !Number.isFinite(u)) return;
+
+        window.parent.postMessage(
+          { type: 'RS_PLAYHEAD_TIME', unix_ts: u },
+          PARENT_ORIGIN
+        );
+      } catch(_) {}
+    });
+
+    window.addEventListener('message', function(e){
+      try {
+        if (PARENT_ORIGIN !== '*' && e.origin !== PARENT_ORIGIN) return;
+
+        const data = e.data || {};
+        if (data.type === 'RS_SEEK_TO' && typeof data.unix_ts === 'number') {
+          if (typeof jumpToUnix === 'function') {
+            jumpToUnix(Math.floor(data.unix_ts), false);
+          }
+        }
+      } catch(_) {}
+    });
+
+  } catch(_) {}
+})();
+
+/* ============================================================
+ * RS v3.x glue — restores behaviors previously inline in rs-media.php
+ * ============================================================ */
+(function RS_GLUE_V3X(){
+  'use strict';
+
+  const $ = (id) => document.getElementById(id);
+  const safe = (fn) => { try { fn(); } catch(_){} };
+  const onReady = (fn) => {
+    if (document.readyState !== 'loading') fn();
+    else document.addEventListener('DOMContentLoaded', fn);
+  };
+  const isTouch = () => ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+  // ---- 1) Toolbar auto-hide + hotzone ----
+  const PORTRAIT_BP = 940;
+  const HIDE_DELAY  = 2600;
+  const HOTZONE_H   = 16;
+
+  let tbar = null;
+  let collapseTimer = null;
+
+  function shouldCollapse(){ return innerWidth <= PORTRAIT_BP; }
+
+  function collapseToolbar(){
+    if (!tbar) tbar = $('rs-toolbar');
+    if (!tbar) return;
+    if (!shouldCollapse()){
+      tbar.classList.remove('collapsed');
+      return;
+    }
+    tbar.classList.add('collapsed');
+  }
+
+  function revealToolbar(ms){
+    if (!tbar) tbar = $('rs-toolbar');
+    if (!tbar) return;
+
+    tbar.classList.remove('collapsed');
+
+    if (collapseTimer){ clearTimeout(collapseTimer); collapseTimer = null; }
+    if (shouldCollapse()){
+      collapseTimer = setTimeout(collapseToolbar, ms || HIDE_DELAY);
+    }
+  }
+
+  function bindHotzone(){
+    let hz = $('rs-toolbar-hotzone');
+    if (!hz){
+      hz = document.createElement('div');
+      hz.id = 'rs-toolbar-hotzone';
+      hz.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(hz);
+    }
+
+    const handler = (e) => safe(() => {
+      const y = (e.touches && e.touches[0]) ? e.touches[0].clientY : (e.clientY || 0);
+      if (y <= (HOTZONE_H + 2)) revealToolbar(2200);
+    });
+
+    ['mousemove','pointermove','touchstart','touchmove'].forEach((tp) => {
+      addEventListener(tp, handler, { passive: true });
+    });
+  }
+
+  function initToolbarAutoHide(){
+    tbar = $('rs-toolbar');
+    if (!tbar) return;
+
+    bindHotzone();
+
+    if (shouldCollapse()) tbar.classList.add('collapsed');
+    else tbar.classList.remove('collapsed');
+
+    tbar.addEventListener('change', () => revealToolbar(1200), true);
+    tbar.addEventListener('click', (e) => {
+      const t = e.target;
+      if (!t) return;
+      if (t.id === 'liveBtn' || (t.classList && t.classList.contains('rs-btn-go')) || t.tagName === 'SELECT'){
+        revealToolbar(1000);
+      }
+    }, true);
+
+    addEventListener('resize', () => {
+      if (shouldCollapse()) collapseToolbar();
+      else revealToolbar(0);
+    }, { passive:true });
+
+    addEventListener('orientationchange', () => {
+      setTimeout(() => {
+        if (shouldCollapse()) collapseToolbar();
+        else revealToolbar(0);
+      }, 0);
+    }, { passive:true });
+  }
+
+  // ---- 2) Fullscreen thumbnail forwarding ----
+  function bindThumbsIn(el){
+    safe(() => {
+      if (!el) return;
+      const holders = el.querySelectorAll('.vjs-progress-holder, .vjs-progress-control, .vjs-slider');
+      if (!holders || !holders.length) return;
+
+      const root = (window.player && player.el) ? player.el() : document;
+
+      function forwardMove(x,y){
+        safe(() => root.dispatchEvent(new MouseEvent('mousemove', { bubbles:true, clientX:x, clientY:y })));
+      }
+
+      holders.forEach((h) => {
+        if (h.__rsThumbBound) return;
+        h.__rsThumbBound = true;
+
+        h.addEventListener('pointermove', (e) => forwardMove(e.clientX, e.clientY), { passive:true });
+        h.addEventListener('touchmove', (e) => {
+          const t = (e.touches && e.touches[0]) ? e.touches[0] : null;
+          if (t) forwardMove(t.clientX, t.clientY);
+        }, { passive:true });
+      });
+    });
+  }
+
+  function bindThumbsFullscreen(){
+    let tries = 0;
+    (function tick(){
+      const fe = document.fullscreenElement || (window.player && player.el && player.el());
+      bindThumbsIn(fe || document);
+      if (tries++ < 10) setTimeout(tick, 120);
+    })();
+  }
+
+  // ---- 3) Touch long-press context menu block (only inside player) ----
+  function initLongPressBlock(){
+    if (!isTouch()) return;
+
+    function withinPlayer(el){
+      try{
+        const root = $('cam_player');
+        return !!(root && (el === root || (el && root.contains(el))));
+      }catch(_){ return false; }
+    }
+
+    function hardBlock(e){
+      if (!withinPlayer(e.target)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return false;
+    }
+
+    addEventListener('contextmenu', hardBlock, { capture:true });
+    document.addEventListener('contextmenu', hardBlock, { capture:true });
+
+    const root = $('cam_player');
+    if (root){
+      root.oncontextmenu = (e)=>{ e.preventDefault(); return false; };
+      const v = root.querySelector('video');
+      if (v) v.oncontextmenu = (e)=>{ e.preventDefault(); return false; };
+    }
+  }
+
+  // ---- 4) Aspect sizing (fluid padding from metadata) ----
+  function applyAspectFromMeta(){
+    safe(() => {
+      const root = $('cam_player');
+      if (!root) return;
+      const v = root.querySelector('video');
+      if (!v) return;
+
+      const w = v.videoWidth || 0;
+      const h = v.videoHeight || 0;
+      if (!w || !h) return;
+
+      root.classList.add('vjs-fluid');
+      root.style.paddingTop = (((h / w) * 100).toFixed(6)) + '%';
+    });
+  }
+
+  function initAspectFallback(){
+    safe(() => {
+      const root = $('cam_player');
+      if (!root) return;
+      root.classList.add('vjs-fluid');
+      root.style.paddingTop = '56.25%';
+      applyAspectFromMeta();
+    });
+  }
+
+  // ---- 5) iframe height postMessage to parent ----
+  function initIframeHeightPosting(){
+    const POST_TYPE = 'rs:height';
+
+    function docHeight(){
+      const b=document.body, d=document.documentElement;
+      const app = $('rs-app') || $('rs-shell') || document.body;
+      const appH = app ? Math.ceil(app.getBoundingClientRect().height) : 0;
+      return Math.max(appH, b.scrollHeight, d.scrollHeight, b.offsetHeight, d.offsetHeight, b.clientHeight, d.clientHeight);
+    }
+
+    let t;
+    function post(immediate){
+      clearTimeout(t);
+      const run = () => safe(() => {
+        if (window.parent && window.parent !== window){
+          window.parent.postMessage({ type: POST_TYPE, height: docHeight() }, '*');
+        }
+      });
+      if (immediate) run();
+      else { t=setTimeout(run,50); setTimeout(run,300); }
+    }
+
+    onReady(() => post(true));
+    addEventListener('load', () => post(true));
+    addEventListener('resize', () => post(false), { passive:true });
+
+    const toolbar = $('rs-toolbar');
+    if (toolbar && window.MutationObserver){
+      new MutationObserver(() => post(false))
+        .observe(toolbar, { attributes:true, attributeFilter:['class','style'] });
+
+      ['transitionend','animationend'].forEach((evt) => {
+        toolbar.addEventListener(evt, () => post(false), { passive:true });
+      });
+    }
+
+    if (window.ResizeObserver){
+      safe(() => new ResizeObserver(() => post(false)).observe(document.documentElement));
+    }
+
+    safe(() => {
+      if (!(window.player && player.on)) return;
+      [
+        'loadedmetadata','loadeddata','canplay','play','pause',
+        'seeking','seeked','resize','fullscreenchange','useractive','userinactive'
+      ].forEach((ev) => player.on(ev, () => post(false)));
+    });
+  }
+
+  onReady(() => {
+    initToolbarAutoHide();
+    initAspectFallback();
+    initLongPressBlock();
+    initIframeHeightPosting();
+
+    safe(() => {
+      if (window.player && player.on){
+        player.on('fullscreenchange', () => {
+          setTimeout(bindThumbsFullscreen, 0);
+          setTimeout(applyAspectFromMeta, 0);
+        });
+        player.one('loadedmetadata', () => setTimeout(applyAspectFromMeta, 0));
+        player.ready(() => setTimeout(bindThumbsFullscreen, 0));
+      }
+    });
+  });
+})();

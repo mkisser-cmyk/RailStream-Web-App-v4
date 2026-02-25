@@ -1,0 +1,355 @@
+/* =========================
+   RailStream Player Core CSS
+   Strategy: Video.js vjs-fluid (single source of truth)
+   ========================= */
+
+*{box-sizing:border-box}
+
+:root{
+  --rs-panel:#0c1117;
+  --rs-ctrl:#121821;
+  --rs-accent:#ffb84d;
+  --rs-text:#ecf2f8;
+  --rs-muted:#9aa4b3;
+  --rs-sep:#2a3340;
+
+  /* Brand */
+  --rs-orange:#ff7a00;
+}
+
+html,body{
+  margin:0;
+  background:#000;
+  color:var(--rs-text);
+  font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  overflow:hidden;
+}
+
+#rs-shell{max-width:1280px;margin:0 auto}
+
+/* =========================
+   Touch hardening (single)
+   ========================= */
+#cam_player{ -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; background:#000; }
+#cam_player video{ touch-action:manipulation; }
+#cam_player .vjs-control-bar, #cam_player .vjs-control-bar *,
+#cam_player .vjs-progress-control, #cam_player .vjs-progress-holder, #cam_player .vjs-slider{
+  touch-action:auto;
+}
+
+/* =========================
+   Toolbar styling
+   ========================= */
+#rs-toolbar .bar .rs-label{
+  color:var(--rs-orange);
+  font-weight:600;
+}
+
+.rs-flex{display:none}
+
+.rs-live{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:4px 10px;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.12);
+  font-weight:700;
+  letter-spacing:.5px
+}
+.rs-live.on{background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.35);}
+
+.rs-input-time{width:92px;text-align:center}
+
+#rs-toolbar .bar{
+  background:var(--rs-panel);
+  padding:10px 12px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:nowrap;
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  border-radius:12px 12px 0 0;
+  justify-content:center;
+}
+
+.rs-label{color:var(--rs-muted);font-weight:600;margin-right:6px;white-space:nowrap}
+
+.rs-select{position:relative;display:inline-flex;align-items:center}
+
+.rs-select select{
+  appearance:none;-webkit-appearance:none;-moz-appearance:none;
+  background:var(--rs-ctrl);
+  color:var(--rs-text);
+  border:none;
+  height:36px;
+  padding:0 28px 0 10px;
+  cursor:pointer;
+  font:inherit;
+  border-radius:10px
+}
+
+.rs-select::after{
+  content:'';
+  position:absolute;
+  right:10px;
+  top:50%;
+  transform:translateY(-50%) rotate(45deg);
+  width:8px;height:8px;
+  border-right:2px solid var(--rs-muted);
+  border-bottom:2px solid var(--rs-muted);
+  pointer-events:none
+}
+
+.rs-chip{display:none;background:var(--rs-ctrl);padding:8px 12px;border-radius:10px}
+
+.rs-input{
+  width:52px;height:36px;
+  border:none;border-radius:10px;
+  background:var(--rs-ctrl);
+  color:var(--rs-text);
+  text-align:center;
+  font-variant-numeric:tabular-nums
+}
+
+.rs-btn{
+  height:36px;
+  padding:0 12px;
+  background:var(--rs-ctrl);
+  color:var(--rs-text);
+  border:none;
+  border-radius:10px;
+  cursor:pointer
+}
+
+.rs-btn:focus,.rs-input:focus,.rs-select select:focus{
+  outline:2px solid var(--rs-accent);
+  outline-offset:1px
+}
+
+.rs-sep{width:1px;height:24px;background:var(--rs-sep);display:inline-block}
+
+/* Remove orange focus ring from selects & pills; keep neutral focus */
+#rs-toolbar .bar select:focus,
+#rs-toolbar .bar select:focus-visible,
+#rs-toolbar .bar button.rs-select:focus,
+#rs-toolbar .bar button.rs-select:focus-visible,
+#rs-toolbar .bar .rs-select:focus,
+#rs-toolbar .bar .rs-select:focus-visible,
+#rs-toolbar .bar .pill:focus,
+#rs-toolbar .bar .pill:focus-visible,
+#rs-toolbar .bar [aria-expanded="true"]{
+  outline:none !important;
+  box-shadow:none !important;
+  border-color:rgba(255,255,255,.18) !important;
+}
+
+/* GO button */
+#rs-toolbar .bar [data-role="rs-go"],
+#rs-toolbar .bar .rs-btn-go{
+  background:var(--rs-orange)!important;
+  color:#000!important;
+  border:1px solid rgba(0,0,0,.35)!important;
+  box-shadow:none!important;
+}
+#rs-toolbar .bar [data-role="rs-go"]:hover,
+#rs-toolbar .bar .rs-btn-go:hover{filter:saturate(1.1)}
+#rs-toolbar .bar [data-role="rs-go"]:active,
+#rs-toolbar .bar .rs-btn-go:active{transform:translateY(1px)}
+#rs-toolbar .bar .rs-btn-go:focus{outline:2px solid rgba(0,0,0,.5);outline-offset:1px}
+
+/* Skip buttons */
+.vjs-control.vjs-skip-back-10 .vjs-icon-placeholder,
+.vjs-control.vjs-skip-fwd-10 .vjs-icon-placeholder{
+  font-weight:700;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+}
+
+/* =========================
+   Video.js sizing (single)
+   ========================= */
+.video-wrapper{position:relative;width:100%;margin:0;}
+#cam_player{position:relative;width:100%;}
+#cam_player.video-js.vjs-fluid{padding-top:56.25%;} /* fallback 16:9 */
+#cam_player .vjs-tech{
+  width:100% !important;
+  height:100% !important;
+  position:absolute;
+  inset:0;
+}
+
+/* Keep Video.js element simple */
+.video-wrapper .video-js{
+  width:100%!important;
+  height:100%!important;
+  object-fit:cover;
+  background:#000;
+  border-radius:0;
+  box-shadow:none
+}
+
+/* Rounded thumbnail preview */
+.thumb-preview{
+  position:absolute;
+  bottom:84px;
+  width:205px;height:115px;
+  background:#000;
+  background-size:cover;
+  background-position:center;
+  border:1px solid rgba(255,255,255,.1);
+  display:none;
+  z-index:9999;
+  pointer-events:none;
+  transform:translateX(-50%);
+  opacity:0;
+  transition:opacity .2s ease;
+  border-radius:10px
+}
+
+/* Fullscreen notice (errors / info) */
+.rs-notice{
+  position:absolute;inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  padding:20px;
+  background:rgba(0,0,0,.82);
+  color:#fff;
+  z-index:10000
+}
+.rs-notice.show{display:flex;animation:fadein .18s ease}
+.rs-notice .box{
+  max-width:640px;
+  background:rgba(16,22,28,.88);
+  border:1px solid rgba(255,255,255,.12);
+  padding:16px 18px;
+  border-radius:12px
+}
+.rs-notice .box h3{margin:0 0 6px 0;font-weight:600;font-size:16px}
+.rs-notice .box p{margin:0;font-size:14px;color:#cfd6df}
+.hasNotice .vjs-error-display{display:none!important}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+
+/* Context menu */
+.rs-menu{
+  position:absolute;
+  min-width:240px;
+  background:#131a21;
+  color:#fff;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:10px;
+  box-shadow:0 10px 28px rgba(0,0,0,.38);
+  z-index:10003;
+  display:none;
+  padding:6px 0
+}
+.rs-menu .item{
+  padding:8px 14px;
+  display:flex;
+  justify-content:space-between;
+  gap:16px;
+  cursor:pointer;
+  user-select:none
+}
+.rs-menu .item:hover{background:#0f141b}
+.rs-menu .muted{color:#9aa4b3;cursor:default}
+.rs-menu .sep{height:1px;background:rgba(255,255,255,.08);margin:6px 0}
+
+/* Shortcuts modal */
+.rs-modal{
+  position:absolute;inset:0;
+  background:rgba(0,0,0,.6);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:10004
+}
+.rs-modal .card{
+  width:min(720px, calc(100% - 40px));
+  max-height:80vh;
+  overflow:auto;
+  background:#0f141b;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:12px;
+  padding:16px 18px
+}
+.rs-modal h3{margin:0 0 8px 0}
+.rs-modal ul{margin:0;padding-left:18px;line-height:1.6}
+.rs-modal .close{margin-top:12px}
+
+/* Debug panel */
+.rs-debug{
+  position:absolute;
+  right:12px;
+  top:60px;
+  width:380px;
+  max-width:calc(100% - 24px);
+  background:rgba(13,18,24,.98);
+  color:#d5dce6;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:10px;
+  z-index:10005;
+  display:none
+}
+.rs-debug header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:8px 10px;
+  border-bottom:1px solid rgba(255,255,255,.08)
+}
+.rs-debug .body{padding:8px 10px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.rs-debug .row{display:flex;justify-content:space-between;gap:10px}
+.rs-debug .k{color:#9aa4b3}
+.rs-debug .v{color:#ecf2f8;text-align:right;word-break:break-all}
+.rs-debug .btns{display:flex;gap:8px}
+.rs-debug button{height:28px;border:none;border-radius:8px;background:#1a2230;color:#fff;padding:0 10px;cursor:pointer}
+
+/* Responsive */
+@media (max-width:640px){
+  .rs-select select, .rs-input, .rs-btn{height:40px;font-size:16px}
+  .rs-label{font-size:14px}
+  #rs-toolbar .bar{gap:8px;padding:8px;justify-content:center}
+}
+
+@media (max-width:740px){
+  #rs-toolbar .bar{justify-content:flex-start}
+}
+
+/* Toolbar collapse helper */
+#rs-toolbar .bar{flex-wrap:wrap}
+#rs-toolbar .bar > *{min-width:0;max-width:100%;flex:0 1 auto}
+
+@media (max-width:940px){
+  #rs-toolbar{transition:transform .18s ease-in-out;overflow:clip}
+  #rs-toolbar.collapsed{max-height:0!important;opacity:0;transform:translateY(-110%);padding:0!important;border:0!important}
+  #rs-toolbar.collapsed .bar{display:none!important}
+  #rs-toolbar{scrollbar-width:none}
+  #rs-toolbar::-webkit-scrollbar{display:none;width:0;height:0}
+
+  #rs-toolbar .bar{gap:6px;padding:6px 8px}
+  #rs-toolbar .bar select, #rs-toolbar .bar input, #rs-toolbar .bar .pill, #rs-toolbar .bar .group{
+    flex:1 1 140px;min-width:84px;max-width:100%
+  }
+}
+
+/* Hot zone to reveal on small portrait */
+#rs-toolbar-hotzone{
+  position:fixed;
+  top:0;left:0;right:0;
+  height:16px;
+  z-index:999;
+  pointer-events:none
+}
+
+/* Prevent viewport width changing when Review overlay appears (scrollbar toggle) */
+/*html { overflow-y: scroll; } DISABLED MFK 1-22-26
+
+/* Make sure Video.js controls stay above overlays */
+.video-js .vjs-control-bar,
+.video-js .vjs-big-play-button {
+  z-index: 5000 !important;
+}

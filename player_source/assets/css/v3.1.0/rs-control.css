@@ -1,0 +1,48 @@
+/* RailStream CSS patch: restore vplaylist Back button + header styling
+   Drop this AFTER videojs.min-rs-new.css so it overrides.
+*/
+.vjs-vplaylist .vjs-head{
+  text-align:left;
+  background:#000;
+  border-bottom:1px solid #484848;
+  width:100%;
+  padding:0 3px 0 10px;
+  font-size:14px;
+  line-height:38px;
+}
+.vjs-vplaylist .vjs-head .p-label{
+  display:inline-block;
+  font-family:Arial, sans-serif;
+}
+.vjs-vplaylist .vjs-head .vjs-back{
+  float:right;
+  padding:0 6px 0 0;
+  background:transparent;
+  cursor:pointer;
+}
+.vjs-vplaylist .vjs-head .vjs-back i{
+  border:solid #fff;
+  border-width:0 0 3px 3px;
+  display:inline-block;
+  padding:4px;
+  margin:0 0 2px 0;
+}
+.vjs-vplaylist .vjs-head .vjs-back .vup{
+  transform-origin:50% 50%;
+  transform:rotate(45deg);
+}
+.vjs-vplaylist .vjs-head .vjs-back:focus-visible{
+  border-radius:4px;
+  outline:0;
+  border:2px solid #1e90ff !important;
+}
+#cam_player {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+
+.video-js {
+  width: 100% !important;
+  height: 100% !important;
+}
