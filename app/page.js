@@ -611,6 +611,53 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
         </section>
       )}
 
+      {/* 15 YEAR CELEBRATION BANNER */}
+      <section className="py-12 px-4 bg-gradient-to-r from-orange-600 via-yellow-500 to-orange-600 relative overflow-hidden">
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAwIDEwIEwgNDAgMTAgTSAxMCAwIEwgMTAgNDAgTSAwIDIwIEwgNDAgMjAgTSAyMCAwIEwgMjAgNDAgTSAwIDMwIEwgNDAgMzAgTSAzMCAwIEwgMzAgNDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgb3BhY2l0eT0iMC4xIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] opacity-30" />
+        <div className="max-w-4xl mx-auto text-center relative z-10">
+          <div className="flex items-center justify-center gap-3 mb-3">
+            <span className="text-4xl">🎉</span>
+            <h2 className="text-3xl md:text-4xl font-black text-white">
+              Celebrating 15 Years!
+            </h2>
+            <span className="text-4xl">🎉</span>
+          </div>
+          <p className="text-white/90 text-lg mb-4">
+            2010 - 2025 · Thank you for being part of our journey
+          </p>
+          <a
+            href="/15years"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-white text-orange-600 font-bold rounded-full hover:bg-white/90 transition-all transform hover:scale-105"
+          >
+            See Our Story
+            <ArrowRight className="w-5 h-5" />
+          </a>
+        </div>
+      </section>
+
+      {/* ANDREA TRIBUTE */}
+      <section className="py-16 px-4 bg-gradient-to-b from-black via-zinc-900/50 to-black">
+        <div className="max-w-3xl mx-auto text-center">
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-pink-500 to-orange-500 flex items-center justify-center mx-auto mb-6">
+            <Heart className="w-10 h-10 text-white" fill="currentColor" />
+          </div>
+          <h3 className="text-2xl md:text-3xl font-bold text-white mb-4">
+            In Memory of <span className="text-orange-400">Andrea</span>
+          </h3>
+          <p className="text-white/70 text-lg leading-relaxed mb-6">
+            RailStream's heart and creative soul. Andrea's passion for design and her dedication to our community 
+            touched everything she worked on. Her warmth, creativity, and attention to detail made RailStream 
+            feel like home for thousands of railfans. We miss her every day.
+          </p>
+          <div className="flex flex-wrap justify-center gap-3">
+            <span className="px-4 py-2 rounded-full bg-white/10 text-white/80 text-sm">Designer</span>
+            <span className="px-4 py-2 rounded-full bg-white/10 text-white/80 text-sm">Creative Director</span>
+            <span className="px-4 py-2 rounded-full bg-white/10 text-white/80 text-sm">Friend</span>
+            <span className="px-4 py-2 rounded-full bg-white/10 text-white/80 text-sm">Forever Remembered</span>
+          </div>
+        </div>
+      </section>
+
       {/* FOOTER CTA */}
       <section className="py-20 px-4 bg-gradient-to-r from-[#ff7a00] to-orange-600" aria-labelledby="final-cta">
         <div className="max-w-4xl mx-auto text-center">
