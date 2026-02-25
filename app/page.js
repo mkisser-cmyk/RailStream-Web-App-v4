@@ -1165,12 +1165,13 @@ function CamerasPage({ cameras, user, onSelectCamera }) {
 
         {Object.entries(tierGroups).map(([tier, group]) => {
           if (group.cameras.length === 0) return null;
-          const TierIcon = TIERS[tier]?.icon || Zap;
+          const TierIcon = tier === 'coming_soon' ? Clock : (TIERS[tier]?.icon || Zap);
+          const tierColor = tier === 'coming_soon' ? 'from-yellow-600 to-yellow-500' : TIERS[tier]?.color;
           
           return (
             <section key={tier} className="mb-12" aria-labelledby={`${tier}-heading`}>
               <div className="flex items-center gap-3 mb-4">
-                <div className={`p-2 rounded-lg bg-gradient-to-r ${TIERS[tier]?.color}`}>
+                <div className={`p-2 rounded-lg bg-gradient-to-r ${tierColor}`}>
                   <TierIcon className="w-5 h-5 text-white" aria-hidden="true" />
                 </div>
                 <div>
@@ -1181,18 +1182,19 @@ function CamerasPage({ cameras, user, onSelectCamera }) {
               
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {group.cameras.map(camera => {
-                  const hasAccess = canAccess(user?.membership_tier, camera.min_tier);
+                  const isComingSoon = camera.status === 'coming_soon';
+                  const hasAccess = !isComingSoon && canAccess(user?.membership_tier, camera.min_tier);
                   
                   return (
                     <button
                       key={camera._id}
                       onClick={() => hasAccess && onSelectCamera(camera)}
-                      disabled={!hasAccess}
-                      className={`group relative rounded-xl overflow-hidden bg-zinc-900 text-left transition-all hover:scale-[1.02] ${!hasAccess ? 'opacity-70' : ''}`}
-                      aria-label={`${camera.name} - ${hasAccess ? 'Click to watch' : 'Upgrade required'}`}
+                      disabled={!hasAccess || isComingSoon}
+                      className={`group relative rounded-xl overflow-hidden bg-zinc-900 text-left transition-all ${hasAccess ? 'hover:scale-[1.02]' : ''} ${!hasAccess && !isComingSoon ? 'opacity-70' : ''}`}
+                      aria-label={`${camera.name} - ${isComingSoon ? 'Coming soon' : hasAccess ? 'Click to watch' : 'Upgrade required'}`}
                     >
                       <div className="aspect-video relative">
-                        <img src={camera.thumbnail_path} alt="" className="w-full h-full object-cover" />
+                        <img src={camera.thumbnail_path || 'https://images.unsplash.com/photo-1474487548417-781cb71495f3?w=400&h=225&fit=crop'} alt="" className={`w-full h-full object-cover ${isComingSoon ? 'opacity-50' : ''}`} />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                         
                         {camera.status === 'online' && (
@@ -1202,7 +1204,16 @@ function CamerasPage({ cameras, user, onSelectCamera }) {
                           </Badge>
                         )}
                         
-                        {!hasAccess && (
+                        {isComingSoon && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <Badge className="bg-[#ff7a00] text-white">
+                              <Clock className="w-4 h-4 mr-1" aria-hidden="true" />
+                              Coming Soon
+                            </Badge>
+                          </div>
+                        )}
+                        
+                        {!hasAccess && !isComingSoon && (
                           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                             <Lock className="w-8 h-8 text-white" aria-hidden="true" />
                           </div>
