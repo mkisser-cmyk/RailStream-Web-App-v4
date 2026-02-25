@@ -424,19 +424,33 @@ function ChatPanel({ isOpen, onToggle }) {
 }
 
 // ============================================
-// CAMERA PICKER
+// CAMERA PICKER WITH FAVORITES & PRESETS
 // ============================================
-function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode }) {
+function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, favorites, setFavorites, presets, setPresets, onLoadPreset, onSavePreset }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  const [showPresets, setShowPresets] = useState(false);
+  const [newPresetName, setNewPresetName] = useState('');
+  
+  const toggleFavorite = (cameraId, e) => {
+    e.stopPropagation();
+    if (favorites.includes(cameraId)) {
+      setFavorites(favorites.filter(id => id !== cameraId));
+    } else {
+      setFavorites([...favorites, cameraId]);
+    }
+  };
   
   const filtered = cameras.filter(c => {
     const matchesSearch = !search || 
       c.name?.toLowerCase().includes(search.toLowerCase()) ||
       c.location?.toLowerCase().includes(search.toLowerCase());
-    const matchesFilter = filter === 'all' || c.min_tier === filter;
+    const matchesFilter = filter === 'all' || 
+      filter === 'favorites' ? favorites.includes(c._id) : c.min_tier === filter;
     return matchesSearch && matchesFilter;
   });
+
+  const favoritesCameras = cameras.filter(c => favorites.includes(c._id));
 
   const regions = {
     'California': ['California'],
@@ -453,88 +467,237 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode }
     return 'Other';
   };
 
-  const groupedCameras = filtered.reduce((acc, cam) => {
-    const region = getRegion(cam);
-    if (!acc[region]) acc[region] = [];
-    acc[region].push(cam);
-    return acc;
-  }, {});
+  // Group cameras - favorites first, then by region
+  const groupedCameras = {};
+  if (filter !== 'favorites' && favoritesCameras.length > 0) {
+    const favFiltered = favoritesCameras.filter(c => 
+      (!search || c.name?.toLowerCase().includes(search.toLowerCase()) || c.location?.toLowerCase().includes(search.toLowerCase()))
+    );
+    if (favFiltered.length > 0) {
+      groupedCameras['★ Favorites'] = favFiltered;
+    }
+  }
+  
+  filtered.filter(c => filter === 'favorites' || !favorites.includes(c._id)).forEach(cam => {
+    const region = filter === 'favorites' ? '★ Favorites' : getRegion(cam);
+    if (!groupedCameras[region]) groupedCameras[region] = [];
+    groupedCameras[region].push(cam);
+  });
+
+  const handleSavePreset = () => {
+    if (!newPresetName.trim()) return;
+    onSavePreset(newPresetName.trim());
+    setNewPresetName('');
+    toast.success(`Preset "${newPresetName}" saved!`);
+  };
 
   return (
     <div className="h-full flex flex-col bg-zinc-900/50">
-      {/* Search & Filter */}
-      <div className="p-3 border-b border-white/5 space-y-2">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search cameras..."
-            className="pl-9 bg-white/5 border-white/10 text-white text-sm placeholder:text-white/30"
-          />
-        </div>
-        <Tabs value={filter} onValueChange={setFilter}>
-          <TabsList className="w-full bg-white/5 p-1">
-            <TabsTrigger value="all" className="flex-1 text-xs data-[state=active]:bg-[#ff7a00]">All</TabsTrigger>
-            <TabsTrigger value="fireman" className="flex-1 text-xs data-[state=active]:bg-orange-600">Free</TabsTrigger>
-            <TabsTrigger value="conductor" className="flex-1 text-xs data-[state=active]:bg-blue-600">Cond</TabsTrigger>
-            <TabsTrigger value="engineer" className="flex-1 text-xs data-[state=active]:bg-purple-600">Eng</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
-
-      {/* Camera List */}
-      <ScrollArea className="flex-1">
-        <div className="p-2">
-          {Object.entries(groupedCameras).map(([region, cams]) => (
-            <div key={region} className="mb-4">
-              <h4 className="text-xs font-semibold text-white/40 uppercase tracking-wider px-2 mb-2">{region}</h4>
-              <div className="space-y-1">
-                {cams.map(camera => {
-                  const isSelected = selectedCameras.some(c => c?._id === camera._id);
-                  const hasAccess = canAccess(userTier, camera.min_tier);
-                  
-                  return (
-                    <button
-                      key={camera._id}
-                      onClick={() => hasAccess && onSelect(camera)}
-                      disabled={!hasAccess}
-                      className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all ${
-                        isSelected 
-                          ? 'bg-[#ff7a00]/20 border border-[#ff7a00]/50' 
-                          : hasAccess
-                            ? 'hover:bg-white/5 border border-transparent'
-                            : 'opacity-50 cursor-not-allowed border border-transparent'
-                      }`}
-                    >
-                      <div className="relative w-16 h-10 rounded overflow-hidden flex-shrink-0">
-                        <img src={camera.thumbnail_path} alt="" className="w-full h-full object-cover" />
-                        {camera.status === 'online' && (
-                          <div className="absolute top-1 left-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                        )}
-                        {!hasAccess && (
-                          <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                            <Lock className="w-3 h-3 text-white/60" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0 text-left">
-                        <p className="text-sm text-white truncate">{camera.name}</p>
-                        <p className="text-xs text-white/40 truncate">{camera.location}</p>
-                      </div>
-                      {isSelected && (
-                        <div className="w-6 h-6 rounded-full bg-[#ff7a00] flex items-center justify-center text-white text-xs font-bold">
-                          {selectedCameras.findIndex(c => c?._id === camera._id) + 1}
+      {/* Presets Panel */}
+      {showPresets ? (
+        <div className="flex-1 flex flex-col">
+          <div className="p-3 border-b border-white/10 flex items-center justify-between">
+            <h3 className="font-semibold text-white flex items-center gap-2">
+              <Bookmark className="w-4 h-4 text-[#ff7a00]" />
+              My Presets
+            </h3>
+            <button onClick={() => setShowPresets(false)} className="p-1 hover:bg-white/10 rounded">
+              <X className="w-4 h-4 text-white/50" />
+            </button>
+          </div>
+          
+          {/* Save Current View */}
+          <div className="p-3 border-b border-white/5">
+            <p className="text-xs text-white/50 mb-2">Save current view as preset:</p>
+            <div className="flex gap-2">
+              <Input
+                value={newPresetName}
+                onChange={(e) => setNewPresetName(e.target.value)}
+                placeholder="Preset name..."
+                className="flex-1 bg-white/5 border-white/10 text-white text-sm"
+                onKeyDown={(e) => e.key === 'Enter' && handleSavePreset()}
+              />
+              <Button onClick={handleSavePreset} size="icon" className="bg-[#ff7a00] hover:bg-[#ff8c20]">
+                <Save className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+          
+          {/* Preset List */}
+          <ScrollArea className="flex-1">
+            <div className="p-2 space-y-2">
+              {presets.length === 0 ? (
+                <div className="text-center py-8 text-white/30">
+                  <Bookmark className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No presets saved yet</p>
+                  <p className="text-xs mt-1">Set up your view and save it!</p>
+                </div>
+              ) : (
+                presets.map((preset, i) => (
+                  <div key={i} className="bg-white/5 rounded-lg p-3 group">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-medium text-white">{preset.name}</h4>
+                      <button 
+                        onClick={() => {
+                          const newPresets = presets.filter((_, idx) => idx !== i);
+                          setPresets(newPresets);
+                          toast.success('Preset deleted');
+                        }}
+                        className="p-1 hover:bg-white/10 rounded opacity-0 group-hover:opacity-100 transition"
+                      >
+                        <Trash2 className="w-3 h-3 text-red-400" />
+                      </button>
+                    </div>
+                    <div className="flex gap-1 mb-2">
+                      {preset.cameras.slice(0, 4).map((cam, j) => (
+                        <div key={j} className="w-10 h-6 rounded overflow-hidden bg-zinc-800">
+                          {cam?.thumbnail_path && (
+                            <img src={cam.thumbnail_path} alt="" className="w-full h-full object-cover" />
+                          )}
+                        </div>
+                      ))}
+                      {preset.cameras.length > 4 && (
+                        <div className="w-10 h-6 rounded bg-zinc-800 flex items-center justify-center text-xs text-white/50">
+                          +{preset.cameras.length - 4}
                         </div>
                       )}
-                    </button>
-                  );
-                })}
-              </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-white/40">
+                        {preset.viewMode} view • {preset.cameras.filter(Boolean).length} cameras
+                      </span>
+                      <Button 
+                        size="sm" 
+                        onClick={() => {
+                          onLoadPreset(preset);
+                          setShowPresets(false);
+                          toast.success(`Loaded "${preset.name}"`);
+                        }}
+                        className="h-7 bg-[#ff7a00] hover:bg-[#ff8c20] text-xs"
+                      >
+                        Load
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-          ))}
+          </ScrollArea>
         </div>
-      </ScrollArea>
+      ) : (
+        <>
+          {/* Search & Filter */}
+          <div className="p-3 border-b border-white/5 space-y-2">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search cameras..."
+                  className="pl-9 bg-white/5 border-white/10 text-white text-sm placeholder:text-white/30"
+                />
+              </div>
+              <button
+                onClick={() => setShowPresets(true)}
+                className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition"
+                title="My Presets"
+              >
+                <Bookmark className="w-4 h-4" />
+              </button>
+            </div>
+            <Tabs value={filter} onValueChange={setFilter}>
+              <TabsList className="w-full bg-white/5 p-1">
+                <TabsTrigger value="all" className="flex-1 text-xs data-[state=active]:bg-[#ff7a00]">All</TabsTrigger>
+                <TabsTrigger value="favorites" className="flex-1 text-xs data-[state=active]:bg-yellow-600">
+                  <Star className="w-3 h-3 mr-1" />
+                  {favorites.length}
+                </TabsTrigger>
+                <TabsTrigger value="fireman" className="flex-1 text-xs data-[state=active]:bg-orange-600">Free</TabsTrigger>
+                <TabsTrigger value="conductor" className="flex-1 text-xs data-[state=active]:bg-blue-600">Cond</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
+          {/* Camera List */}
+          <ScrollArea className="flex-1">
+            <div className="p-2">
+              {Object.entries(groupedCameras).map(([region, cams]) => (
+                <div key={region} className="mb-4">
+                  <h4 className={`text-xs font-semibold uppercase tracking-wider px-2 mb-2 ${
+                    region === '★ Favorites' ? 'text-yellow-500' : 'text-white/40'
+                  }`}>{region}</h4>
+                  <div className="space-y-1">
+                    {cams.map(camera => {
+                      const isSelected = selectedCameras.some(c => c?._id === camera._id);
+                      const hasAccess = canAccess(userTier, camera.min_tier);
+                      const isFavorite = favorites.includes(camera._id);
+                      
+                      return (
+                        <div
+                          key={camera._id}
+                          className={`relative flex items-center gap-3 p-2 rounded-lg transition-all ${
+                            isSelected 
+                              ? 'bg-[#ff7a00]/20 border border-[#ff7a00]/50' 
+                              : hasAccess
+                                ? 'hover:bg-white/5 border border-transparent'
+                                : 'opacity-50 border border-transparent'
+                          }`}
+                        >
+                          <button
+                            onClick={() => hasAccess && onSelect(camera)}
+                            disabled={!hasAccess}
+                            className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                          >
+                            <div className="relative w-16 h-10 rounded overflow-hidden flex-shrink-0">
+                              <img src={camera.thumbnail_path} alt="" className="w-full h-full object-cover" />
+                              {camera.status === 'online' && (
+                                <div className="absolute top-1 left-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                              )}
+                              {!hasAccess && (
+                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                  <Lock className="w-3 h-3 text-white/60" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-white truncate">{camera.name}</p>
+                              <p className="text-xs text-white/40 truncate">{camera.location}</p>
+                            </div>
+                          </button>
+                          
+                          {/* Favorite button */}
+                          <button
+                            onClick={(e) => toggleFavorite(camera._id, e)}
+                            className={`p-1.5 rounded transition ${
+                              isFavorite ? 'text-yellow-500' : 'text-white/20 hover:text-yellow-500'
+                            }`}
+                          >
+                            <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+                          </button>
+                          
+                          {isSelected && (
+                            <div className="w-6 h-6 rounded-full bg-[#ff7a00] flex items-center justify-center text-white text-xs font-bold">
+                              {selectedCameras.findIndex(c => c?._id === camera._id) + 1}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              
+              {Object.keys(groupedCameras).length === 0 && (
+                <div className="text-center py-8 text-white/30">
+                  <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No cameras found</p>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </>
+      )}
     </div>
   );
 }
