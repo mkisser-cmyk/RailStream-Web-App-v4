@@ -1,13 +1,66 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Head from 'next/head';
 
 export default function TestPlayerPage() {
   const videoRef = useRef(null);
+  const playerRef = useRef(null);
   const [status, setStatus] = useState('Initializing...');
   const [hlsUrl, setHlsUrl] = useState(null);
+  const [scriptsLoaded, setScriptsLoaded] = useState(false);
 
-  // First, fetch a playback URL
+  // Load CSS
+  useEffect(() => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '/vendor/nuevo/nuevo-skin.css';
+    document.head.appendChild(link);
+  }, []);
+
+  // Load scripts in sequence
+  useEffect(() => {
+    const scripts = [
+      '/vendor/nuevo/video.min.js',
+      '/vendor/nuevo/nuevo.min.js',
+      '/vendor/nuevo/plugins/hlsjs.js',
+    ];
+
+    let loadedCount = 0;
+
+    const loadScript = (src) => {
+      return new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) {
+          resolve();
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.body.appendChild(script);
+      });
+    };
+
+    async function loadAllScripts() {
+      try {
+        setStatus('Loading Video.js...');
+        await loadScript(scripts[0]);
+        setStatus('Loading Nuevo plugin...');
+        await loadScript(scripts[1]);
+        setStatus('Loading HLS.js plugin...');
+        await loadScript(scripts[2]);
+        setStatus('All scripts loaded!');
+        setScriptsLoaded(true);
+      } catch (err) {
+        setStatus(`Script load error: ${err.message}`);
+      }
+    }
+
+    loadAllScripts();
+  }, []);
+
+  // Fetch playback URL
   useEffect(() => {
     async function fetchPlayback() {
       try {
@@ -21,7 +74,7 @@ export default function TestPlayerPage() {
           return;
         }
 
-        setStatus(`Found camera: ${onlineCamera.name}, authorizing playback...`);
+        setStatus(`Found camera: ${onlineCamera.name}`);
         
         const playbackRes = await fetch('/api/playback/authorize', {
           method: 'POST',
@@ -32,48 +85,75 @@ export default function TestPlayerPage() {
         const playback = await playbackRes.json();
         
         if (playback.hls_url) {
-          setStatus(`Got HLS URL: ${playback.hls_url}`);
+          setStatus(`Got HLS URL - waiting for scripts...`);
           setHlsUrl(playback.hls_url);
         } else {
-          setStatus(`No HLS URL returned: ${JSON.stringify(playback)}`);
+          setStatus(`No HLS URL returned`);
         }
       } catch (err) {
-        setStatus(`Error: ${err.message}`);
+        setStatus(`Fetch error: ${err.message}`);
       }
     }
     
     fetchPlayback();
   }, []);
 
-  // Initialize Video.js when we have the URL
+  // Initialize player when both scripts and URL are ready
   useEffect(() => {
-    if (!hlsUrl || !videoRef.current) return;
+    if (!scriptsLoaded || !hlsUrl || !videoRef.current) return;
 
     let player = null;
 
-    async function initPlayer() {
+    const initPlayer = () => {
       try {
-        setStatus('Loading Video.js...');
-        const vjsModule = await import('video.js');
-        const videojs = vjsModule.default;
+        const videojs = window.videojs;
+        if (!videojs) {
+          setStatus('ERROR: videojs not on window');
+          return;
+        }
 
-        setStatus('Creating player...');
+        setStatus('Creating player instance...');
         
+        // Dispose existing
+        if (playerRef.current) {
+          try { playerRef.current.dispose(); } catch(e) {}
+          playerRef.current = null;
+        }
+
         player = videojs(videoRef.current, {
           controls: true,
           autoplay: true,
           muted: true,
           preload: 'auto',
           liveui: true,
+          playsinline: true,
           html5: {
+            hlsjsConfig: {
+              maxBufferLength: 15,
+              backBufferLength: 30,
+              liveSyncDurationCount: 3,
+              enableWorker: true,
+            },
             vhs: {
               overrideNative: true,
-              handleManifestRedirects: true,
+              enableLowInitialPlaylist: true,
             },
             nativeAudioTracks: false,
             nativeVideoTracks: false,
           },
         });
+
+        playerRef.current = player;
+
+        // Try Nuevo
+        if (player.nuevo) {
+          try {
+            player.nuevo({ contextMenu: false, shareMenu: false });
+            setStatus('Nuevo initialized!');
+          } catch(e) {
+            setStatus('Nuevo error: ' + e.message);
+          }
+        }
 
         setStatus('Setting source...');
         player.src({
@@ -84,34 +164,36 @@ export default function TestPlayerPage() {
         player.on('loadstart', () => setStatus('Load started...'));
         player.on('loadedmetadata', () => setStatus('Metadata loaded!'));
         player.on('canplay', () => setStatus('Can play!'));
-        player.on('playing', () => setStatus('PLAYING!'));
+        player.on('playing', () => setStatus('✅ PLAYING!'));
         player.on('error', () => {
           const err = player.error();
-          setStatus(`Error: ${err?.code} - ${err?.message}`);
+          setStatus(`❌ Error: ${err?.code} - ${err?.message}`);
         });
 
         player.ready(() => {
           setStatus('Player ready, attempting play...');
-          player.play().catch(e => setStatus(`Play failed: ${e.message}`));
+          player.play().catch(e => setStatus(`Play blocked: ${e.message}`));
         });
 
       } catch (err) {
         setStatus(`Init error: ${err.message}`);
       }
-    }
+    };
 
-    initPlayer();
+    // Small delay for DOM
+    setTimeout(initPlayer, 200);
 
     return () => {
-      if (player) {
-        try { player.dispose(); } catch (e) {}
+      if (playerRef.current) {
+        try { playerRef.current.dispose(); } catch (e) {}
+        playerRef.current = null;
       }
     };
-  }, [hlsUrl]);
+  }, [scriptsLoaded, hlsUrl]);
 
   return (
     <div className="min-h-screen bg-black text-white p-8">
-      <h1 className="text-2xl font-bold mb-4 text-orange-500">Video Player Test Page</h1>
+      <h1 className="text-2xl font-bold mb-4 text-orange-500">Video Player Test Page (Nuevo + hlsjs)</h1>
       
       <div className="mb-4 p-4 bg-gray-900 rounded">
         <p className="font-mono text-sm">Status: {status}</p>
@@ -132,9 +214,9 @@ export default function TestPlayerPage() {
       <div className="mt-8 p-4 bg-gray-900 rounded">
         <h2 className="font-bold mb-2">Debug Info:</h2>
         <ul className="text-sm text-gray-400">
-          <li>• Video.js loaded via dynamic import</li>
-          <li>• Using VHS (Video.js HTTP Streaming) for HLS</li>
-          <li>• Native tracks disabled for browser compatibility</li>
+          <li>• Video.js + Nuevo + hlsjs.js from /public/vendor/nuevo/</li>
+          <li>• Scripts loaded: {scriptsLoaded ? '✅' : '⏳'}</li>
+          <li>• HLS URL: {hlsUrl ? '✅' : '⏳'}</li>
         </ul>
       </div>
     </div>
