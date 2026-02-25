@@ -39,8 +39,8 @@ const CONTRIBUTORS = [
   },
   {
     name: "Andrea",
-    role: "Creative Director",
-    description: "Andrea transformed RailStream's visual identity, bringing warmth and professionalism to every pixel. Her eye for design made the site feel like home.",
+    role: "Creative Director & Co-Founder",
+    description: "Andrea transformed RailStream's visual identity, bringing warmth and professionalism to every pixel. Her eye for design makes the site feel like home. The other half of RailStream!",
     highlight: "Heart & Soul of RailStream"
   },
   {
