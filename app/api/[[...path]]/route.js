@@ -163,7 +163,7 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json(camera));
     }
 
-    // Playback: Authorize
+    // Playback: Authorize (legacy mobile endpoint)
     if (route === '/playback/authorize' && method === 'POST') {
       const body = await request.json();
       const token = getToken(request);
@@ -182,6 +182,56 @@ async function handleRoute(request, { params }) {
       });
       const data = await res.json();
       return handleCORS(NextResponse.json(data, { status: res.status }));
+    }
+
+    // Playback: Web Authorize - Returns web_hls URL + wms_auth for Video.js player
+    if (route === '/playback/web-authorize' && method === 'POST') {
+      const body = await request.json();
+      const cameraId = body.camera_id;
+      
+      try {
+        // Get admin token
+        const adminToken = await getAdminToken();
+        
+        // Get camera with streams from admin API
+        const camera = await getCameraStreams(cameraId, adminToken);
+        if (!camera) {
+          return handleCORS(NextResponse.json({ error: 'Camera not found' }, { status: 404 }));
+        }
+        
+        // Get wms_auth token from web-authorize endpoint
+        const authRes = await fetch(`${API_BASE}/api/playback/web-authorize`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ camera_id: camera.short_code || cameraId }),
+        });
+        
+        const authData = await authRes.json();
+        if (!authData.ok) {
+          return handleCORS(NextResponse.json({ error: 'Failed to authorize playback' }, { status: 500 }));
+        }
+        
+        // Build response with correct web_hls from streams
+        const webHls = camera.streams?.web_hls || camera.streams?.website_hls;
+        const thumbBase = camera.streams?.thumb_base || `/thumbs/${camera.short_code || cameraId}/`;
+        
+        return handleCORS(NextResponse.json({
+          ok: true,
+          cam_id: camera.short_code || cameraId,
+          camera_name: camera.name,
+          location: camera.location,
+          edge_base: webHls,
+          thumb_base: thumbBase,
+          wms_auth: authData.wms_auth,
+          token_expires_in: authData.token_expires_in || 540,
+          dvr_days: authData.dvr_days || 7,
+          status: camera.status,
+        }));
+        
+      } catch (error) {
+        console.error('Web authorize error:', error);
+        return handleCORS(NextResponse.json({ error: 'Internal server error' }, { status: 500 }));
+      }
     }
 
     // Route not found
