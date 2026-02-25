@@ -530,6 +530,45 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
         </div>
       </section>
 
+      {/* COMING SOON SECTION */}
+      {comingSoonCameras.length > 0 && (
+        <section className="py-20 px-4 bg-black" aria-labelledby="coming-soon-heading">
+          <div className="max-w-6xl mx-auto">
+            <h2 id="coming-soon-heading" className="text-3xl md:text-4xl font-bold text-white text-center mb-4">
+              Coming Soon
+            </h2>
+            <p className="text-white/70 text-center text-xl mb-12">
+              New camera locations on the horizon
+            </p>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {comingSoonCameras.map((camera, i) => (
+                <div key={i} className="relative bg-zinc-900 rounded-2xl overflow-hidden group">
+                  <div className="aspect-video relative">
+                    {camera.thumbnail_path ? (
+                      <img src={camera.thumbnail_path} alt="" className="w-full h-full object-cover opacity-50" />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-zinc-800 to-zinc-900" />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Badge className="bg-[#ff7a00] text-white text-sm px-4 py-2">
+                        <Clock className="w-4 h-4 mr-2" aria-hidden="true" />
+                        Coming Soon
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <h3 className="font-semibold text-white text-lg mb-1">{camera.name}</h3>
+                    <p className="text-white/60 text-sm">{camera.location}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* FOOTER CTA */}
       <section className="py-20 px-4 bg-gradient-to-r from-[#ff7a00] to-orange-600" aria-labelledby="final-cta">
         <div className="max-w-4xl mx-auto text-center">
