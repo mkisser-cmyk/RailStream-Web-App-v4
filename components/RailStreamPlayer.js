@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 
 /**
  * RailStreamPlayer - Video.js based player component
@@ -21,8 +22,6 @@ export default function RailStreamPlayer({
   cameraId,
   hlsUrl,
   authToken,
-  edgeBase,
-  thumbBase,
   viewMode = 'single',
   autoPlay = true,
   muted = true,
@@ -30,54 +29,35 @@ export default function RailStreamPlayer({
   onError,
   onPlaying,
   className = '',
-  dvrEnabled = false,
-  dvrDays = 7,
 }) {
+  const containerRef = useRef(null);
   const videoRef = useRef(null);
   const playerRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentToken, setCurrentToken] = useState(authToken);
-
-  // Get stream URL with quality suffix based on view mode
-  const getStreamUrl = useCallback((baseUrl, mode) => {
-    if (!baseUrl) return null;
-    
-    // For now, use the provided HLS URL directly
-    // In the future, we can modify the URL to include quality suffix
-    const quality = QUALITY_PRESETS[mode] || QUALITY_PRESETS.single;
-    
-    // Add token if available
-    let url = baseUrl;
-    if (currentToken && !url.includes('wmsAuthSign')) {
-      const separator = url.includes('?') ? '&' : '?';
-      url = `${url}${separator}wmsAuthSign=${encodeURIComponent(currentToken)}`;
-    }
-    
-    return url;
-  }, [currentToken]);
+  const [isReady, setIsReady] = useState(false);
 
   // Initialize Video.js player
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !hlsUrl) return;
+    if (!hlsUrl || !isReady) return;
 
-    let videojs;
-    let player;
+    let player = null;
+    let isMounted = true;
 
     const initPlayer = async () => {
       try {
         // Dynamic import of video.js
         const vjsModule = await import('video.js');
-        videojs = vjsModule.default;
+        const videojs = vjsModule.default;
 
-        // Destroy previous instance if exists
+        if (!isMounted || !videoRef.current) return;
+
+        // Dispose previous instance
         if (playerRef.current) {
           try {
             playerRef.current.dispose();
           } catch (e) {
-            console.log('Error disposing player:', e);
+            console.log('Dispose error:', e);
           }
           playerRef.current = null;
         }
@@ -85,8 +65,8 @@ export default function RailStreamPlayer({
         setIsLoading(true);
         setError(null);
 
-        // Create player with configuration similar to rs-media.js
-        player = videojs(video, {
+        // Create player
+        player = videojs(videoRef.current, {
           controls: controls,
           autoplay: autoPlay,
           muted: muted,
@@ -95,14 +75,19 @@ export default function RailStreamPlayer({
           responsive: true,
           playsinline: true,
           liveui: true,
-          playbackRates: [0.5, 1, 1.5, 2],
+          liveTracker: {
+            trackingThreshold: 0,
+            liveTolerance: 15,
+          },
           html5: {
             vhs: {
               overrideNative: true,
-              enableLowInitialPlaylist: true,
+              enableLowInitialPlaylist: false,
               limitRenditionByPlayerDimensions: true,
-              maxInitialBitrate: QUALITY_PRESETS[viewMode]?.maxBitrate || 7500000,
-              bandwidthVariance: 1.4,
+              bandwidth: QUALITY_PRESETS[viewMode]?.maxBitrate || 8000000,
+              useBandwidthFromLocalStorage: true,
+              smoothQualityChange: true,
+              handleManifestRedirects: true,
             },
             nativeAudioTracks: false,
             nativeVideoTracks: false,
@@ -110,96 +95,95 @@ export default function RailStreamPlayer({
           },
         });
 
+        if (!isMounted) {
+          player.dispose();
+          return;
+        }
+
         playerRef.current = player;
 
         // Set source
-        const streamUrl = getStreamUrl(hlsUrl, viewMode);
-        console.log('Loading stream:', streamUrl);
-        
+        console.log('Setting source:', hlsUrl);
         player.src({
           type: 'application/x-mpegURL',
-          src: streamUrl,
+          src: hlsUrl,
         });
 
         // Event handlers
         player.on('loadedmetadata', () => {
-          console.log('Video metadata loaded');
+          console.log('Video metadata loaded for', cameraId);
           setIsLoading(false);
         });
 
         player.on('playing', () => {
-          console.log('Video playing');
-          setIsPlaying(true);
+          console.log('Video playing:', cameraId);
           setIsLoading(false);
           if (onPlaying) onPlaying();
         });
 
         player.on('waiting', () => {
-          console.log('Video buffering...');
+          console.log('Video buffering:', cameraId);
         });
 
         player.on('error', (e) => {
           const err = player.error();
           console.error('Video.js error:', err);
           
-          // Try to recover from certain errors
           if (err && err.code === 4) {
-            // Media error - try to reload
-            console.log('Attempting to recover from media error...');
+            // Media error - try to reload after delay
+            console.log('Attempting recovery for', cameraId);
             setTimeout(() => {
-              if (playerRef.current) {
+              if (playerRef.current && isMounted) {
                 playerRef.current.src({
                   type: 'application/x-mpegURL',
-                  src: getStreamUrl(hlsUrl, viewMode),
+                  src: hlsUrl,
                 });
-                playerRef.current.play();
+                playerRef.current.play().catch(() => {});
               }
-            }, 2000);
+            }, 3000);
           } else {
             setError(err?.message || 'Playback error');
-            if (onError) onError(err?.message || 'Playback error');
+            setIsLoading(false);
+            if (onError) onError(err?.message);
           }
-        });
-
-        player.on('ended', () => {
-          console.log('Stream ended');
         });
 
         // Ready callback
         player.ready(() => {
-          console.log('Player ready');
-          
-          // Start playback
-          if (autoPlay) {
+          console.log('Player ready:', cameraId);
+          if (autoPlay && isMounted) {
             player.play().catch((err) => {
-              console.log('Autoplay blocked:', err);
-              // Autoplay was prevented, user needs to click
+              console.log('Autoplay prevented:', err.message);
             });
           }
         });
 
       } catch (err) {
         console.error('Failed to initialize Video.js:', err);
-        setError('Failed to initialize player');
-        setIsLoading(false);
-        if (onError) onError('Failed to initialize player');
+        if (isMounted) {
+          setError('Failed to initialize player');
+          setIsLoading(false);
+          if (onError) onError('Failed to initialize player');
+        }
       }
     };
 
-    initPlayer();
+    // Small delay to ensure DOM is ready
+    const timeoutId = setTimeout(initPlayer, 100);
 
-    // Cleanup
     return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
       if (playerRef.current) {
         try {
           playerRef.current.dispose();
         } catch (e) {
-          console.log('Error disposing player:', e);
+          console.log('Cleanup dispose error:', e);
         }
         playerRef.current = null;
       }
     };
-  }, [hlsUrl, controls, autoPlay, viewMode]);
+  }, [hlsUrl, isReady, controls, autoPlay]);
 
   // Handle muted state changes
   useEffect(() => {
@@ -208,41 +192,20 @@ export default function RailStreamPlayer({
     }
   }, [muted]);
 
-  // Handle view mode changes (quality switching)
+  // Mark as ready when container mounts
   useEffect(() => {
-    if (playerRef.current && hlsUrl) {
-      const newUrl = getStreamUrl(hlsUrl, viewMode);
-      const currentSrc = playerRef.current.currentSrc();
-      
-      // Only reload if URL actually changed
-      if (newUrl !== currentSrc) {
-        const currentTime = playerRef.current.currentTime();
-        const wasPaused = playerRef.current.paused();
-        
-        playerRef.current.src({
-          type: 'application/x-mpegURL',
-          src: newUrl,
-        });
-        
-        playerRef.current.one('loadedmetadata', () => {
-          if (currentTime > 0) {
-            playerRef.current.currentTime(currentTime);
-          }
-          if (!wasPaused) {
-            playerRef.current.play();
-          }
-        });
-      }
+    if (containerRef.current) {
+      setIsReady(true);
     }
-  }, [viewMode, hlsUrl, getStreamUrl]);
+  }, []);
 
   return (
-    <div className={`railstream-player relative w-full h-full bg-black ${className}`}>
+    <div ref={containerRef} className={`railstream-player relative w-full h-full bg-black ${className}`}>
       {/* Video Element */}
       <div data-vjs-player className="w-full h-full">
         <video
           ref={videoRef}
-          className="video-js vjs-default-skin vjs-fill w-full h-full"
+          className="video-js vjs-default-skin vjs-big-play-centered vjs-fill"
           playsInline
           crossOrigin="anonymous"
         />
@@ -250,7 +213,7 @@ export default function RailStreamPlayer({
 
       {/* Loading Overlay */}
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10 pointer-events-none">
           <div className="flex flex-col items-center gap-3">
             <div className="w-10 h-10 border-4 border-[#ff7a00] border-t-transparent rounded-full animate-spin" />
             <span className="text-white/70 text-sm">Loading stream...</span>
@@ -259,7 +222,7 @@ export default function RailStreamPlayer({
       )}
 
       {/* Error Overlay */}
-      {error && (
+      {error && !isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/90 z-10">
           <div className="text-center p-4">
             <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-3">
@@ -276,26 +239,34 @@ export default function RailStreamPlayer({
   );
 }
 
-// Simplified player for background video (no controls, minimal features)
+// Background video player (muted, no controls, for hero sections)
 export function BackgroundVideoPlayer({ hlsUrl, className = '' }) {
+  const containerRef = useRef(null);
   const videoRef = useRef(null);
   const playerRef = useRef(null);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !hlsUrl) return;
+    if (!hlsUrl || !isReady) return;
+
+    let player = null;
+    let isMounted = true;
 
     const initPlayer = async () => {
       try {
         const vjsModule = await import('video.js');
         const videojs = vjsModule.default;
 
+        if (!isMounted || !videoRef.current) return;
+
         if (playerRef.current) {
-          playerRef.current.dispose();
+          try {
+            playerRef.current.dispose();
+          } catch (e) {}
           playerRef.current = null;
         }
 
-        const player = videojs(video, {
+        player = videojs(videoRef.current, {
           controls: false,
           autoplay: true,
           muted: true,
@@ -308,12 +279,18 @@ export function BackgroundVideoPlayer({ hlsUrl, className = '' }) {
             vhs: {
               overrideNative: true,
               enableLowInitialPlaylist: true,
+              handleManifestRedirects: true,
             },
             nativeAudioTracks: false,
             nativeVideoTracks: false,
             nativeTextTracks: false,
           },
         });
+
+        if (!isMounted) {
+          player.dispose();
+          return;
+        }
 
         playerRef.current = player;
 
@@ -326,14 +303,29 @@ export function BackgroundVideoPlayer({ hlsUrl, className = '' }) {
           player.play().catch(() => {});
         });
 
+        player.on('error', () => {
+          console.log('Background video error, retrying...');
+          setTimeout(() => {
+            if (playerRef.current && isMounted) {
+              playerRef.current.src({
+                type: 'application/x-mpegURL',
+                src: hlsUrl,
+              });
+              playerRef.current.play().catch(() => {});
+            }
+          }, 5000);
+        });
+
       } catch (err) {
         console.error('Background player error:', err);
       }
     };
 
-    initPlayer();
+    const timeoutId = setTimeout(initPlayer, 100);
 
     return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
       if (playerRef.current) {
         try {
           playerRef.current.dispose();
@@ -341,10 +333,16 @@ export function BackgroundVideoPlayer({ hlsUrl, className = '' }) {
         playerRef.current = null;
       }
     };
-  }, [hlsUrl]);
+  }, [hlsUrl, isReady]);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      setIsReady(true);
+    }
+  }, []);
 
   return (
-    <div data-vjs-player className={`w-full h-full ${className}`}>
+    <div ref={containerRef} data-vjs-player className={`w-full h-full ${className}`}>
       <video
         ref={videoRef}
         className="video-js w-full h-full object-cover"
