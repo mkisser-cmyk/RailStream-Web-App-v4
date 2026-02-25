@@ -164,6 +164,84 @@ function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
 }
 
 // ============================================
+// HLS VIDEO PLAYER COMPONENT
+// ============================================
+function HLSVideoPlayer({ src, autoPlay = true, muted = false, controls = true, onError }) {
+  const videoRef = useRef(null);
+  const hlsRef = useRef(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !src) return;
+
+    // Dynamic import of hls.js
+    import('hls.js').then((HlsModule) => {
+      const Hls = HlsModule.default;
+      
+      if (Hls.isSupported()) {
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+        });
+        
+        hlsRef.current = hls;
+        hls.loadSource(src);
+        hls.attachMedia(video);
+        
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          if (autoPlay) {
+            video.play().catch(() => {
+              // Autoplay blocked, user needs to interact
+            });
+          }
+        });
+        
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            console.error('HLS fatal error:', data);
+            if (onError) onError(data.details || 'Stream error');
+          }
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Native HLS support (Safari)
+        video.src = src;
+        if (autoPlay) {
+          video.play().catch(() => {});
+        }
+      } else {
+        if (onError) onError('HLS not supported');
+      }
+    }).catch((err) => {
+      console.error('Failed to load HLS.js:', err);
+      if (onError) onError('Failed to load player');
+    });
+
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
+  }, [src, autoPlay, onError]);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = muted;
+    }
+  }, [muted]);
+
+  return (
+    <video
+      ref={videoRef}
+      className="w-full h-full object-contain bg-black"
+      controls={controls}
+      muted={muted}
+      playsInline
+    />
+  );
+}
+
+// ============================================
 // VIDEO PLAYER COMPONENT
 // ============================================
 function VideoPlayer({ camera, playbackData, isLoading, error, onClose, isMuted, setIsMuted, isMain = false }) {
