@@ -246,23 +246,17 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
 
   return (
     <main className="min-h-screen bg-black">
-      {/* HERO SECTION - Full screen with live video background */}
+      {/* HERO SECTION - Full screen with live video/thumbnail background */}
       <section className="relative h-screen flex items-center justify-center overflow-hidden" aria-label="Welcome to RailStream">
-        {/* Background Video */}
-        {heroPlayback?.hls_url && (
-          <div className="absolute inset-0 z-0">
-            <BackgroundVideoPlayer
-              hlsUrl={heroPlayback.hls_url}
-              className="w-full h-full object-cover opacity-40"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-black/30" />
-          </div>
-        )}
-        
-        {/* If no video, show gradient with thumbnail */}
-        {!heroPlayback?.hls_url && heroCamera && (
+        {/* Background - Use thumbnail for now, video will work on production domain */}
+        {heroCamera && (
           <div className="absolute inset-0">
-            <img src={heroCamera.thumbnail_path} alt="" className="w-full h-full object-cover opacity-30" />
+            <img 
+              src={heroCamera.thumbnail_path} 
+              alt="" 
+              className="w-full h-full object-cover opacity-40"
+              onError={(e) => e.target.style.display = 'none'}
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/40" />
           </div>
         )}
