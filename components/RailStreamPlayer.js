@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import dynamic from 'next/dynamic';
+import { useEffect, useRef, useState } from 'react';
+import Script from 'next/script';
 
 /**
- * RailStreamPlayer - Video.js based player component
+ * RailStreamPlayer - Video.js based player using Nuevo plugin with hlsjs
  * 
- * Adapted from the RailStream player source (rs-media.js v3.4.0)
- * Uses Video.js with HLS support for live streaming and DVR
+ * This player uses the same Video.js + Nuevo + hlsjs.js stack as the production
+ * player.railstream.net implementation.
  */
 
 // Stream quality presets based on view mode
@@ -18,10 +18,79 @@ const QUALITY_PRESETS = {
   nine: { suffix: '_540', maxBitrate: 2000000 }, // 540p for 9-view
 };
 
+// Track if scripts are loaded globally
+let scriptsLoaded = false;
+let scriptLoadPromise = null;
+
+function loadScripts() {
+  if (scriptsLoaded) return Promise.resolve();
+  if (scriptLoadPromise) return scriptLoadPromise;
+
+  scriptLoadPromise = new Promise((resolve, reject) => {
+    const scripts = [
+      '/vendor/nuevo/video.min.js',
+      '/vendor/nuevo/nuevo.min.js',
+      '/vendor/nuevo/plugins/hlsjs.js',
+    ];
+
+    let loaded = 0;
+    
+    scripts.forEach((src, index) => {
+      // Check if already loaded
+      if (document.querySelector(`script[src="${src}"]`)) {
+        loaded++;
+        if (loaded === scripts.length) {
+          scriptsLoaded = true;
+          resolve();
+        }
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = false;
+      
+      if (index === 0) {
+        script.onload = () => {
+          loaded++;
+          // Load others after video.js
+          loadRemainingScripts(scripts.slice(1), () => {
+            scriptsLoaded = true;
+            resolve();
+          }, reject);
+        };
+        script.onerror = reject;
+        document.body.appendChild(script);
+      }
+    });
+  });
+
+  return scriptLoadPromise;
+}
+
+function loadRemainingScripts(scripts, onComplete, onError) {
+  let loaded = 0;
+  scripts.forEach(src => {
+    if (document.querySelector(`script[src="${src}"]`)) {
+      loaded++;
+      if (loaded === scripts.length) onComplete();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = false;
+    script.onload = () => {
+      loaded++;
+      if (loaded === scripts.length) onComplete();
+    };
+    script.onerror = onError;
+    document.body.appendChild(script);
+  });
+}
+
 export default function RailStreamPlayer({
   cameraId,
   hlsUrl,
-  authToken,
   viewMode = 'single',
   autoPlay = true,
   muted = true,
@@ -35,22 +104,39 @@ export default function RailStreamPlayer({
   const playerRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [isReady, setIsReady] = useState(false);
+  const [scriptsReady, setScriptsReady] = useState(false);
 
-  // Initialize Video.js player
+  // Load scripts once on mount
   useEffect(() => {
-    if (!hlsUrl || !isReady) return;
+    loadScripts()
+      .then(() => {
+        console.log('Video.js scripts loaded');
+        setScriptsReady(true);
+      })
+      .catch(err => {
+        console.error('Failed to load scripts:', err);
+        setError('Failed to load player scripts');
+        setIsLoading(false);
+      });
+  }, []);
+
+  // Initialize player when scripts are ready
+  useEffect(() => {
+    if (!scriptsReady || !hlsUrl || !videoRef.current) return;
 
     let player = null;
     let isMounted = true;
 
-    const initPlayer = async () => {
+    const initPlayer = () => {
       try {
-        // Dynamic import of video.js
-        const vjsModule = await import('video.js');
-        const videojs = vjsModule.default;
-
-        if (!isMounted || !videoRef.current) return;
+        // Access videojs from window (loaded via script tag)
+        const videojs = window.videojs;
+        if (!videojs) {
+          console.error('Video.js not found on window');
+          setError('Player library not loaded');
+          setIsLoading(false);
+          return;
+        }
 
         // Dispose previous instance
         if (playerRef.current) {
@@ -65,29 +151,27 @@ export default function RailStreamPlayer({
         setIsLoading(true);
         setError(null);
 
-        // Create player
+        // Create player with configuration matching rs-media.js
         player = videojs(videoRef.current, {
           controls: controls,
           autoplay: autoPlay,
           muted: muted,
           preload: 'auto',
-          fluid: false,
-          responsive: true,
           playsinline: true,
           liveui: true,
-          liveTracker: {
-            trackingThreshold: 0,
-            liveTolerance: 15,
-          },
           html5: {
+            hlsjsConfig: {
+              maxBufferLength: 15,
+              backBufferLength: 30,
+              liveSyncDurationCount: 3,
+              enableWorker: true,
+            },
             vhs: {
               overrideNative: true,
-              enableLowInitialPlaylist: false,
+              enableLowInitialPlaylist: true,
               limitRenditionByPlayerDimensions: true,
-              bandwidth: QUALITY_PRESETS[viewMode]?.maxBitrate || 8000000,
-              useBandwidthFromLocalStorage: true,
-              smoothQualityChange: true,
-              handleManifestRedirects: true,
+              maxInitialBitrate: QUALITY_PRESETS[viewMode]?.maxBitrate || 7500000,
+              bandwidthVariance: 1.4,
             },
             nativeAudioTracks: false,
             nativeVideoTracks: false,
@@ -101,6 +185,20 @@ export default function RailStreamPlayer({
         }
 
         playerRef.current = player;
+
+        // Initialize Nuevo plugin if available
+        if (player.nuevo) {
+          try {
+            player.nuevo({
+              contextMenu: false,
+              resOnly: true,
+              shareMenu: false,
+              zoomMenu: false,
+            });
+          } catch (e) {
+            console.log('Nuevo init:', e);
+          }
+        }
 
         // Set source
         console.log('Setting source:', hlsUrl);
@@ -125,12 +223,12 @@ export default function RailStreamPlayer({
           console.log('Video buffering:', cameraId);
         });
 
-        player.on('error', (e) => {
+        player.on('error', () => {
           const err = player.error();
           console.error('Video.js error:', err);
           
           if (err && err.code === 4) {
-            // Media error - try to reload after delay
+            // Media error - try to reload
             console.log('Attempting recovery for', cameraId);
             setTimeout(() => {
               if (playerRef.current && isMounted) {
@@ -159,7 +257,7 @@ export default function RailStreamPlayer({
         });
 
       } catch (err) {
-        console.error('Failed to initialize Video.js:', err);
+        console.error('Failed to initialize player:', err);
         if (isMounted) {
           setError('Failed to initialize player');
           setIsLoading(false);
@@ -168,7 +266,7 @@ export default function RailStreamPlayer({
       }
     };
 
-    // Small delay to ensure DOM is ready
+    // Small delay for DOM stability
     const timeoutId = setTimeout(initPlayer, 100);
 
     return () => {
@@ -183,7 +281,7 @@ export default function RailStreamPlayer({
         playerRef.current = null;
       }
     };
-  }, [hlsUrl, isReady, controls, autoPlay]);
+  }, [scriptsReady, hlsUrl, controls, autoPlay]);
 
   // Handle muted state changes
   useEffect(() => {
@@ -191,13 +289,6 @@ export default function RailStreamPlayer({
       playerRef.current.muted(muted);
     }
   }, [muted]);
-
-  // Mark as ready when container mounts
-  useEffect(() => {
-    if (containerRef.current) {
-      setIsReady(true);
-    }
-  }, []);
 
   return (
     <div ref={containerRef} className={`railstream-player relative w-full h-full bg-black ${className}`}>
@@ -244,25 +335,28 @@ export function BackgroundVideoPlayer({ hlsUrl, className = '' }) {
   const containerRef = useRef(null);
   const videoRef = useRef(null);
   const playerRef = useRef(null);
-  const [isReady, setIsReady] = useState(false);
+  const [scriptsReady, setScriptsReady] = useState(false);
+
+  // Load scripts once on mount
+  useEffect(() => {
+    loadScripts()
+      .then(() => setScriptsReady(true))
+      .catch(err => console.error('Scripts failed:', err));
+  }, []);
 
   useEffect(() => {
-    if (!hlsUrl || !isReady) return;
+    if (!scriptsReady || !hlsUrl || !videoRef.current) return;
 
     let player = null;
     let isMounted = true;
 
-    const initPlayer = async () => {
+    const initPlayer = () => {
       try {
-        const vjsModule = await import('video.js');
-        const videojs = vjsModule.default;
-
-        if (!isMounted || !videoRef.current) return;
+        const videojs = window.videojs;
+        if (!videojs) return;
 
         if (playerRef.current) {
-          try {
-            playerRef.current.dispose();
-          } catch (e) {}
+          try { playerRef.current.dispose(); } catch (e) {}
           playerRef.current = null;
         }
 
@@ -272,14 +366,17 @@ export function BackgroundVideoPlayer({ hlsUrl, className = '' }) {
           muted: true,
           loop: true,
           preload: 'auto',
-          fluid: false,
-          responsive: false,
           playsinline: true,
           html5: {
+            hlsjsConfig: {
+              maxBufferLength: 15,
+              backBufferLength: 30,
+              liveSyncDurationCount: 3,
+              enableWorker: true,
+            },
             vhs: {
               overrideNative: true,
               enableLowInitialPlaylist: true,
-              handleManifestRedirects: true,
             },
             nativeAudioTracks: false,
             nativeVideoTracks: false,
@@ -327,19 +424,11 @@ export function BackgroundVideoPlayer({ hlsUrl, className = '' }) {
       isMounted = false;
       clearTimeout(timeoutId);
       if (playerRef.current) {
-        try {
-          playerRef.current.dispose();
-        } catch (e) {}
+        try { playerRef.current.dispose(); } catch (e) {}
         playerRef.current = null;
       }
     };
-  }, [hlsUrl, isReady]);
-
-  useEffect(() => {
-    if (containerRef.current) {
-      setIsReady(true);
-    }
-  }, []);
+  }, [scriptsReady, hlsUrl]);
 
   return (
     <div ref={containerRef} data-vjs-player className={`w-full h-full ${className}`}>
