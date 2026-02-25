@@ -1049,8 +1049,10 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                           </div>
                         </div>
                       ) : state.data?.hls_url ? (
-                        <HLSVideoPlayer
-                          src={state.data.hls_url}
+                        <RailStreamPlayer
+                          cameraId={camera.cam_id}
+                          hlsUrl={state.data.hls_url}
+                          viewMode={selectedCameras.filter(Boolean).length === 1 ? 'single' : selectedCameras.filter(Boolean).length === 2 ? 'dual' : selectedCameras.filter(Boolean).length <= 4 ? 'quad' : 'nine'}
                           className="w-full h-full object-contain bg-black"
                           muted={isMuted || i > 0}
                           autoPlay={true}
