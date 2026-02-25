@@ -358,6 +358,81 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
         </div>
       </section>
 
+      {/* 15 YEAR ANNIVERSARY TRIBUTE */}
+      <section className="py-20 px-4 bg-gradient-to-b from-black to-zinc-950" aria-labelledby="anniversary-heading">
+        <div className="max-w-4xl mx-auto text-center">
+          <div className="inline-flex items-center gap-2 bg-[#ff7a00]/20 text-[#ff7a00] px-4 py-2 rounded-full text-sm font-semibold mb-6">
+            <span className="text-2xl">🎉</span>
+            Celebrating 15 Years
+          </div>
+          
+          <h2 id="anniversary-heading" className="text-4xl md:text-5xl font-bold text-white mb-6">
+            15 Years of RailStream
+          </h2>
+          <p className="text-xl text-white/80 mb-8">
+            March 2011 — March 2026
+          </p>
+          
+          <div className="bg-zinc-900/80 backdrop-blur rounded-2xl p-8 md:p-12 mb-8 text-left">
+            <p className="text-white/90 text-lg leading-relaxed mb-6">
+              What started as a single camera at the Fostoria Iron Triangle has grown into something 
+              we never could have imagined — <span className="text-[#ff7a00] font-semibold">46 cameras</span>, 
+              millions of hours watched, and a community of railfans spanning <span className="text-[#ff7a00] font-semibold">175 countries</span>.
+            </p>
+            <p className="text-white/90 text-lg leading-relaxed mb-6">
+              None of this would be possible without the incredible support of our family, friends, 
+              and the amazing RailStream community.
+            </p>
+            
+            <div className="border-t border-white/10 pt-6 mt-6">
+              <h3 className="text-white font-bold text-xl mb-4">Special Thanks</h3>
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="bg-black/30 rounded-xl p-6">
+                  <p className="text-[#ff7a00] font-bold text-lg mb-2">Andrea</p>
+                  <p className="text-white/70">
+                    My wife and partner in everything. Your endless support, creativity, and dedication 
+                    has made RailStream what it is today. This journey wouldn't exist without you. ❤️
+                  </p>
+                </div>
+                <div className="bg-black/30 rounded-xl p-6">
+                  <p className="text-[#ff7a00] font-bold text-lg mb-2">Mr. Mark Hinsdale</p>
+                  <p className="text-white/70">
+                    10,000+ miles traveled and countless hours helping grow this network. Your dedication 
+                    to the railfan community is unmatched. Thank you for believing in us from the start.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <p className="text-white/90 text-lg leading-relaxed mt-6">
+              To our hosts, our subscribers, and everyone who tunes in — <span className="text-white font-semibold">thank you</span> for 
+              being part of this incredible journey. Here's to the next 15 years!
+            </p>
+            
+            <p className="text-[#ff7a00] font-bold text-xl mt-6">— Mike</p>
+          </div>
+          
+          <div className="flex flex-wrap justify-center gap-4">
+            <div className="bg-zinc-900 rounded-xl px-6 py-4 text-center">
+              <div className="text-3xl font-bold text-[#ff7a00]">15</div>
+              <div className="text-white/60 text-sm">Years</div>
+            </div>
+            <div className="bg-zinc-900 rounded-xl px-6 py-4 text-center">
+              <div className="text-3xl font-bold text-[#ff7a00]">46</div>
+              <div className="text-white/60 text-sm">Cameras</div>
+            </div>
+            <div className="bg-zinc-900 rounded-xl px-6 py-4 text-center">
+              <div className="text-3xl font-bold text-[#ff7a00]">24+</div>
+              <div className="text-white/60 text-sm">Hosts</div>
+            </div>
+            <div className="bg-zinc-900 rounded-xl px-6 py-4 text-center">
+              <div className="text-3xl font-bold text-[#ff7a00]">175</div>
+              <div className="text-white/60 text-sm">Countries</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* STATS SECTION */}
       <section className="py-20 px-4 bg-zinc-950" aria-labelledby="stats-heading">
         <h2 id="stats-heading" className="sr-only">RailStream Statistics</h2>
