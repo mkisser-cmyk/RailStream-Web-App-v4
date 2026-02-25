@@ -364,7 +364,7 @@ export default function CelebrationPage() {
       {/* Footer */}
       <footer className="py-8 px-6 border-t border-gray-800">
         <div className="max-w-6xl mx-auto text-center text-gray-500 text-sm">
-          <p>© 2010-2025 RailStream. 15 years of connecting railfans worldwide.</p>
+          <p>© March 2011 - March 2026 RailStream. 15 years of connecting railfans worldwide.</p>
         </div>
       </footer>
     </main>
