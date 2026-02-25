@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
 const API_BASE = process.env.RAILSTREAM_API_URL || 'https://api.railstream.net';
+const ADMIN_USER = process.env.RAILSTREAM_ADMIN_USER;
+const ADMIN_PASS = process.env.RAILSTREAM_ADMIN_PASS;
+
+// Cache for admin token (simple in-memory cache)
+let adminTokenCache = { token: null, expiresAt: 0 };
 
 // Helper function to handle CORS
 function handleCORS(response) {
@@ -27,6 +32,57 @@ function getToken(request) {
   // Check cookies
   const cookieStore = cookies();
   return cookieStore.get('railstream_token')?.value;
+}
+
+// Get admin token (with caching)
+async function getAdminToken() {
+  const now = Date.now();
+  
+  // Return cached token if still valid (with 5 min buffer)
+  if (adminTokenCache.token && adminTokenCache.expiresAt > now + 300000) {
+    return adminTokenCache.token;
+  }
+  
+  // Login to get new token
+  const res = await fetch(`${API_BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: ADMIN_USER, password: ADMIN_PASS }),
+  });
+  
+  if (!res.ok) {
+    throw new Error('Admin login failed');
+  }
+  
+  const data = await res.json();
+  adminTokenCache = {
+    token: data.access_token,
+    expiresAt: now + (data.expires_in * 1000),
+  };
+  
+  return data.access_token;
+}
+
+// Get camera streams from admin API
+async function getCameraStreams(cameraId, adminToken) {
+  // First get camera list to find by short_code or _id
+  const res = await fetch(`${API_BASE}/api/admin/cameras?limit=200`, {
+    headers: { 'Authorization': `Bearer ${adminToken}` },
+  });
+  
+  if (!res.ok) {
+    return null;
+  }
+  
+  const data = await res.json();
+  const cameras = data.cameras || [];
+  
+  // Find camera by short_code or _id
+  const camera = cameras.find(c => 
+    c.short_code === cameraId || c._id === cameraId
+  );
+  
+  return camera;
 }
 
 // Route handler function
