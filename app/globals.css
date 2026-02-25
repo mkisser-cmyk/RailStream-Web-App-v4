@@ -2,8 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Video.js CSS */
-@import 'video.js/dist/video-js.css';
+/* Nuevo Video.js Skin CSS - loaded from public */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
