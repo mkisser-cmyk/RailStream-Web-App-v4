@@ -809,29 +809,46 @@ function CamerasPage({ cameras, user, onSelectCamera }) {
 function AboutPage() {
   return (
     <div className="min-h-screen pt-14 bg-zinc-950">
-      <div className="max-w-4xl mx-auto px-4 py-16">
-        <h1 className="text-4xl font-bold text-white text-center mb-4">About RailStream</h1>
-        <p className="text-white/60 text-center mb-12 max-w-2xl mx-auto">
-          Superior image with sound quality that is only second to being trackside.
-        </p>
+      <div className="max-w-5xl mx-auto px-4 py-16">
+        {/* Hero with Logo */}
+        <div className="text-center mb-16">
+          <img 
+            src="https://railstream.net/images/Homepage/Transparent_Stroke.png" 
+            alt="RailStream Logo" 
+            className="h-24 mx-auto mb-6"
+          />
+          <h1 className="text-4xl font-bold text-white mb-4">About RailStream</h1>
+          <p className="text-xl text-white/60 max-w-2xl mx-auto">
+            Superior image with sound quality that is only second to being trackside.
+          </p>
+        </div>
         
-        <div className="space-y-8">
-          <div className="bg-zinc-900 rounded-2xl p-8">
-            <h2 className="text-2xl font-semibold text-white mb-4">Our Story</h2>
-            <p className="text-white/70 leading-relaxed mb-4">
-              Over a decade ago we had the idea for a railcam at the historic Fostoria Iron Triangle. 
-              It was the first live railcam with sound and it took off like hotcakes! We've grown a lot 
-              since the original cam, but we stay true to our roots.
-            </p>
-            <p className="text-white/70 leading-relaxed">
-              It is through this commitment to excellence that Railstream has amassed a worldwide following. 
-              We strive to make Railstream a place for all railfans to come and feel welcomed. From first-rate 
-              customer service, to our vigorous installation and testing process, we go the extra mile to make 
-              sure you get the best railfanning experience next to sitting trackside!
-            </p>
-            <p className="text-[#ff7a00] font-semibold mt-4">— Mike & Andrea</p>
+        <div className="space-y-12">
+          {/* Our Story with Photo */}
+          <div className="grid md:grid-cols-2 gap-8 items-center">
+            <div>
+              <img 
+                src="https://railstream.net/images/us2.png" 
+                alt="Mike and Andrea" 
+                className="rounded-2xl w-full shadow-2xl"
+              />
+            </div>
+            <div className="bg-zinc-900 rounded-2xl p-8">
+              <h2 className="text-3xl font-bold text-white mb-4">Our Story</h2>
+              <p className="text-white/70 leading-relaxed mb-4">
+                Over a decade ago we had the idea for a railcam at the historic Fostoria Iron Triangle. 
+                It was the first live railcam with sound and it took off like hotcakes! We've grown a lot 
+                since the original cam, but we stay true to our roots.
+              </p>
+              <p className="text-white/70 leading-relaxed mb-4">
+                It is through this commitment to excellence that Railstream has amassed a worldwide following. 
+                We strive to make Railstream a place for all railfans to come and feel welcomed.
+              </p>
+              <p className="text-[#ff7a00] font-semibold text-lg">— Mike & Andrea</p>
+            </div>
           </div>
 
+          {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
               { icon: Monitor, value: '46', label: 'Live Cameras' },
@@ -847,44 +864,99 @@ function AboutPage() {
             ))}
           </div>
 
+          {/* Two People on a Mission with Photo */}
+          <div className="grid md:grid-cols-2 gap-8 items-center">
+            <div className="bg-zinc-900 rounded-2xl p-8 order-2 md:order-1">
+              <h2 className="text-3xl font-bold text-white mb-4">Two People On a Mission</h2>
+              <p className="text-white/70 leading-relaxed mb-4">
+                We aim to create the most immersive and reliable rail-viewing experience online. 
+                Whether you're a lifelong railfan or just discovering the joy of trains, Railstream 
+                brings you closer to the tracks than ever before.
+              </p>
+              <p className="text-white/70 leading-relaxed">
+                Our team is dedicated to quality, innovation, and community — always striving to make 
+                Railstream better for everyone who loves the rails.
+              </p>
+            </div>
+            <div className="order-1 md:order-2">
+              <img 
+                src="https://railstream.net/images/us3.png" 
+                alt="RailStream team in Selma" 
+                className="rounded-2xl w-full shadow-2xl"
+              />
+            </div>
+          </div>
+
+          {/* The RailStream Difference */}
           <div className="bg-zinc-900 rounded-2xl p-8">
-            <h2 className="text-2xl font-semibold text-white mb-4">The RailStream Difference</h2>
-            <div className="grid sm:grid-cols-2 gap-6">
+            <h2 className="text-3xl font-bold text-white mb-6 text-center">The RailStream Difference</h2>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {[
                 { icon: Eye, title: 'Superior Video', desc: 'Our video quality and clarity is second to none.' },
                 { icon: Volume2, title: 'Exquisite Audio', desc: 'Simulate the trackside experience with crystal-clear sound.' },
                 { icon: Zap, title: 'Night Vision', desc: 'Additional lighting for 24/7 nighttime viewing.' },
                 { icon: Radio, title: 'Scanner Feeds', desc: 'Railroad radio at most locations.' },
               ].map((feature, i) => (
-                <div key={i} className="flex gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-[#ff7a00]/20 flex items-center justify-center flex-shrink-0">
-                    <feature.icon className="w-6 h-6 text-[#ff7a00]" />
+                <div key={i} className="text-center">
+                  <div className="w-16 h-16 rounded-xl bg-[#ff7a00]/20 flex items-center justify-center mx-auto mb-4">
+                    <feature.icon className="w-8 h-8 text-[#ff7a00]" />
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-white mb-1">{feature.title}</h3>
-                    <p className="text-sm text-white/60">{feature.desc}</p>
-                  </div>
+                  <h3 className="font-semibold text-white mb-2">{feature.title}</h3>
+                  <p className="text-sm text-white/60">{feature.desc}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="bg-zinc-900 rounded-2xl p-8">
-            <h2 className="text-2xl font-semibold text-white mb-4">Watch Everywhere</h2>
-            <p className="text-white/60 mb-6">Available 24/7/365 on all your favorite platforms.</p>
-            <div className="flex flex-wrap gap-4">
+          {/* With Help of Friends */}
+          <div className="grid md:grid-cols-2 gap-8 items-center">
+            <div>
+              <img 
+                src="https://railstream.net/images/uslong.png" 
+                alt="RailStream team on site" 
+                className="rounded-2xl w-full shadow-2xl"
+              />
+            </div>
+            <div className="bg-zinc-900 rounded-2xl p-8">
+              <h2 className="text-3xl font-bold text-white mb-4">With the Help of Friends</h2>
+              <p className="text-white/70 leading-relaxed mb-4">
+                We're blessed to work with an incredible network of partners, organizations, and 
+                generous families who help make our camera locations possible.
+              </p>
+              <p className="text-white/70 leading-relaxed mb-4">
+                Many of our most beloved views exist thanks to railfans who've opened their backyards, 
+                businesses, and properties so we can bring you the next best thing to railfanning trackside.
+              </p>
+              <p className="text-white/50 text-sm mb-4">
+                A Special Thanks to: Mark, Kevin, Lloyd, Ron, Tom, Thomas, Justin, and Warren — your 
+                support and guidance have made a meaningful difference.
+              </p>
+              <p className="text-[#ff7a00] font-semibold">— Mike & Andrea</p>
+            </div>
+          </div>
+
+          {/* Watch Everywhere */}
+          <div className="bg-gradient-to-r from-[#ff7a00] to-orange-600 rounded-2xl p-8 text-center">
+            <h2 className="text-3xl font-bold text-white mb-4">Watch Everywhere</h2>
+            <p className="text-white/90 mb-6">Available 24/7/365 on all your favorite platforms.</p>
+            <div className="flex flex-wrap justify-center gap-4">
               {[
-                { name: 'Roku', icon: Tv },
-                { name: 'Amazon Fire TV', icon: Tv },
-                { name: 'Apple TV', icon: Tv },
-                { name: 'iOS App', icon: Smartphone },
-                { name: 'Android App', icon: Smartphone },
-                { name: 'Web', icon: Monitor },
+                { name: 'Roku', url: 'https://channelstore.roku.com/details/74e07738778cf9dfb74340ef94503257' },
+                { name: 'Amazon Fire TV', url: 'https://www.amazon.com/Railstream/dp/B08466FH5Q' },
+                { name: 'Apple TV / iOS', url: 'https://apps.apple.com/us/app/railstream/id1520484749' },
+                { name: 'Android', url: 'https://play.google.com/store/apps/details?id=com.maz.combo2225rs' },
               ].map((platform, i) => (
-                <div key={i} className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-lg">
-                  <platform.icon className="w-4 h-4 text-[#ff7a00]" />
-                  <span className="text-white/70 text-sm">{platform.name}</span>
-                </div>
+                <a 
+                  key={i} 
+                  href={platform.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-6 py-3 bg-white/20 hover:bg-white/30 rounded-lg transition"
+                >
+                  <Tv className="w-5 h-5 text-white" />
+                  <span className="text-white font-medium">{platform.name}</span>
+                  <ExternalLink className="w-4 h-4 text-white/70" />
+                </a>
               ))}
             </div>
           </div>
