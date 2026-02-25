@@ -1119,11 +1119,18 @@ function CamerasPage({ cameras, user, onSelectCamera }) {
 
   const tierGroups = {
     fireman: { title: 'Fireman Cameras', subtitle: 'FREE - 14 complimentary railcams', cameras: [] },
-    conductor: { title: 'Conductor Cameras', subtitle: '$8.95/mo - All Fireman + exclusive locations', cameras: [] },
-    engineer: { title: 'Engineer Cameras', subtitle: '$12.95/mo - Access to ALL railcams', cameras: [] },
+    conductor: { title: 'Conductor Cameras', subtitle: '$8.95/mo - Includes all Fireman + exclusive locations', cameras: [] },
+    engineer: { title: 'Engineer Cameras', subtitle: '$12.95/mo - Access to ALL cameras', cameras: [] },
+    coming_soon: { title: 'Coming Soon', subtitle: 'New locations on the horizon', cameras: [] },
   };
 
-  filtered.forEach(c => { if (tierGroups[c.min_tier]) tierGroups[c.min_tier].cameras.push(c); });
+  filtered.forEach(c => { 
+    if (c.status === 'coming_soon') {
+      tierGroups.coming_soon.cameras.push(c);
+    } else if (tierGroups[c.min_tier]) {
+      tierGroups[c.min_tier].cameras.push(c);
+    }
+  });
 
   return (
     <main className="min-h-screen pt-16 bg-zinc-950">
