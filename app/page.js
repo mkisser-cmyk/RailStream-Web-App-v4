@@ -445,8 +445,12 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
     const matchesSearch = !search || 
       c.name?.toLowerCase().includes(search.toLowerCase()) ||
       c.location?.toLowerCase().includes(search.toLowerCase());
-    const matchesFilter = filter === 'all' || 
-      filter === 'favorites' ? favorites.includes(c._id) : c.min_tier === filter;
+    let matchesFilter = true;
+    if (filter === 'favorites') {
+      matchesFilter = favorites.includes(c._id);
+    } else if (filter !== 'all') {
+      matchesFilter = c.min_tier === filter;
+    }
     return matchesSearch && matchesFilter;
   });
 
