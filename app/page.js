@@ -623,7 +623,7 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
             <span className="text-4xl">🎉</span>
           </div>
           <p className="text-white/90 text-lg mb-4">
-            2010 - 2025 · Thank you for being part of our journey
+            March 2011 - March 2026 · Thank you for being part of our journey
           </p>
           <a
             href="/15years"
