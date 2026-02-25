@@ -73,6 +73,42 @@ const VIEW_MODES = [
 ];
 
 // ============================================
+// LOCAL STORAGE HELPERS
+// ============================================
+const storage = {
+  getFavorites: () => {
+    if (typeof window === 'undefined') return [];
+    try {
+      return JSON.parse(localStorage.getItem('railstream_favorites') || '[]');
+    } catch { return []; }
+  },
+  setFavorites: (favorites) => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('railstream_favorites', JSON.stringify(favorites));
+  },
+  getPresets: () => {
+    if (typeof window === 'undefined') return [];
+    try {
+      return JSON.parse(localStorage.getItem('railstream_presets') || '[]');
+    } catch { return []; }
+  },
+  setPresets: (presets) => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('railstream_presets', JSON.stringify(presets));
+  },
+  getLastView: () => {
+    if (typeof window === 'undefined') return null;
+    try {
+      return JSON.parse(localStorage.getItem('railstream_lastview'));
+    } catch { return null; }
+  },
+  setLastView: (view) => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('railstream_lastview', JSON.stringify(view));
+  },
+};
+
+// ============================================
 // NAVIGATION
 // ============================================
 function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
