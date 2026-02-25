@@ -249,6 +249,7 @@ function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
 function HomePage({ cameras, onStartWatching, onLogin, user }) {
   const [heroCamera, setHeroCamera] = useState(null);
   const [heroPlayback, setHeroPlayback] = useState(null);
+  const [videoLoaded, setVideoLoaded] = useState(false);
 
   // Pick a random online camera for the hero background
   useEffect(() => {
@@ -256,15 +257,21 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
     if (onlineCameras.length > 0) {
       const randomCam = onlineCameras[Math.floor(Math.random() * onlineCameras.length)];
       setHeroCamera(randomCam);
+      setVideoLoaded(false);
       
       // Get playback URL for background video
       clientApi.authorizePlayback(randomCam._id).then(data => {
         if (data.ok && data.hls_url) {
           setHeroPlayback(data);
         }
-      }).catch(() => {});
+      }).catch((err) => {
+        console.log('Hero video failed to load:', err);
+      });
     }
   }, [cameras]);
+
+  // Get coming soon cameras
+  const comingSoonCameras = cameras.filter(c => c.status === 'coming_soon');
 
   return (
     <main className="min-h-screen bg-black">
@@ -279,13 +286,22 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
               muted={true}
               autoPlay={true}
               controls={false}
+              onLoaded={() => setVideoLoaded(true)}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-black/30" />
           </div>
         )}
         
-        {/* If no video, show gradient */}
-        {!heroPlayback?.hls_url && (
+        {/* If no video, show gradient with thumbnail */}
+        {!heroPlayback?.hls_url && heroCamera && (
+          <div className="absolute inset-0">
+            <img src={heroCamera.thumbnail_path} alt="" className="w-full h-full object-cover opacity-30" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/40" />
+          </div>
+        )}
+        
+        {/* Fallback gradient */}
+        {!heroCamera && (
           <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 via-black to-zinc-900" />
         )}
         
@@ -330,20 +346,15 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
             )}
           </div>
           
-          {/* Live indicator */}
-          {heroCamera && (
-            <div className="inline-flex items-center gap-2 text-white bg-black/50 px-4 py-2 rounded-full">
+          {/* Live indicator - only show when video is actually playing */}
+          {heroCamera && heroPlayback?.hls_url && (
+            <div className="inline-flex items-center gap-2 text-white bg-black/60 backdrop-blur-sm px-4 py-2 rounded-full border border-white/10">
               <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse" aria-hidden="true" />
               <span className="text-sm">
-                Now showing: <span className="font-semibold">{heroCamera.name}</span>
+                Live: <span className="font-semibold">{heroCamera.name}</span>
               </span>
             </div>
           )}
-        </div>
-        
-        {/* Scroll indicator */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white animate-bounce" aria-hidden="true">
-          <ChevronRight className="w-8 h-8 rotate-90" />
         </div>
       </section>
 
