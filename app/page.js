@@ -96,32 +96,61 @@ const storage = {
 function HLSVideoPlayer({ src, autoPlay = true, muted = true, controls = false, className = '', onError }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !src) return;
+    
+    // Clean up previous instance
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+    setIsPlaying(false);
 
     import('hls.js').then((HlsModule) => {
       const Hls = HlsModule.default;
       if (Hls.isSupported()) {
-        const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+        const hls = new Hls({ 
+          enableWorker: true, 
+          lowLatencyMode: true,
+          maxBufferLength: 30,
+        });
         hlsRef.current = hls;
         hls.loadSource(src);
         hls.attachMedia(video);
+        
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          if (autoPlay) video.play().catch(() => {});
+          console.log('HLS manifest parsed, starting playback');
+          if (autoPlay) {
+            video.play().then(() => setIsPlaying(true)).catch((e) => console.log('Autoplay blocked:', e));
+          }
         });
+        
         hls.on(Hls.Events.ERROR, (_, data) => {
-          if (data.fatal && onError) onError(data.details);
+          console.log('HLS Error:', data.type, data.details);
+          if (data.fatal) {
+            if (onError) onError(data.details);
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+              hls.startLoad();
+            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+              hls.recoverMediaError();
+            }
+          }
         });
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = src;
-        if (autoPlay) video.play().catch(() => {});
+        if (autoPlay) video.play().then(() => setIsPlaying(true)).catch(() => {});
       }
-    }).catch(() => {});
+    }).catch((err) => console.error('HLS.js load error:', err));
 
     return () => { if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; } };
-  }, [src, autoPlay, onError]);
+  }, [src]);
+
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = muted;
+  }, [muted]);
 
   return (
     <video
@@ -131,7 +160,6 @@ function HLSVideoPlayer({ src, autoPlay = true, muted = true, controls = false, 
       muted={muted}
       playsInline
       loop
-      aria-hidden="true"
     />
   );
 }
