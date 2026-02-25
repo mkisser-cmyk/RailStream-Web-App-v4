@@ -705,7 +705,7 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
 // ============================================
 // MULTI-VIEW WATCH PAGE
 // ============================================
-function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera }) {
+function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera, favorites, setFavorites, presets, setPresets }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
@@ -715,6 +715,30 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
     const actualSlot = slot === -1 ? 0 : slot;
     
     loadCamera(camera, actualSlot);
+  };
+
+  const handleSavePreset = (name) => {
+    const newPreset = {
+      name,
+      viewMode,
+      cameras: selectedCameras.slice(0, VIEW_MODES.find(m => m.id === viewMode)?.slots || 1),
+      createdAt: new Date().toISOString(),
+    };
+    const newPresets = [...presets, newPreset];
+    setPresets(newPresets);
+    storage.setPresets(newPresets);
+  };
+
+  const handleLoadPreset = (preset) => {
+    setViewMode(preset.viewMode);
+    // Clear current selections
+    setSelectedCameras([null, null, null, null, null, null, null, null, null]);
+    // Load cameras from preset
+    preset.cameras.forEach((camera, i) => {
+      if (camera) {
+        setTimeout(() => loadCamera(camera, i), i * 200);
+      }
+    });
   };
 
   const gridClass = {
