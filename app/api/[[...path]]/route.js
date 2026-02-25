@@ -234,6 +234,75 @@ async function handleRoute(request, { params }) {
       }
     }
 
+    // Playback: Generate signed embed URL (like Joomla does)
+    if (route === '/playback/embed-url' && method === 'POST') {
+      const body = await request.json();
+      const { camera_id, peers = [], timezone = 'America/New_York' } = body;
+      
+      try {
+        const EMBED_SECRET = process.env.PLAYER_EMBED_SECRET;
+        if (!EMBED_SECRET) {
+          return handleCORS(NextResponse.json({ error: 'Embed secret not configured' }, { status: 500 }));
+        }
+        
+        // Get camera info
+        const adminToken = await getAdminToken();
+        const camera = await getCameraStreams(camera_id, adminToken);
+        if (!camera) {
+          return handleCORS(NextResponse.json({ error: 'Camera not found' }, { status: 404 }));
+        }
+        
+        // Build payload like Joomla does
+        const now = Math.floor(Date.now() / 1000);
+        const camId = camera.short_code || camera_id;
+        const peerList = peers.length > 0 ? peers : [camId];
+        const labels = peerList.map(p => {
+          // Try to get label from camera name
+          return camera.name || p;
+        }).join('|');
+        
+        // Generate random nonce
+        const nonce = Array.from(crypto.getRandomValues(new Uint8Array(12)))
+          .map(b => b.toString(16).padStart(2, '0')).join('');
+        
+        const payload = {
+          cam: camId,
+          peers: peerList,
+          labels: labels,
+          dev: 0,
+          tz: timezone,
+          iat: now,
+          exp: now + 300, // 5 minutes
+          nonce: nonce,
+        };
+        
+        // Base64url encode
+        const json = JSON.stringify(payload);
+        const p = Buffer.from(json).toString('base64')
+          .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        
+        // HMAC-SHA256 signature
+        const crypto_mod = await import('crypto');
+        const s = crypto_mod.createHmac('sha256', EMBED_SECRET).update(p).digest('hex');
+        
+        // Build embed URL
+        const embedUrl = `https://railstream.tv/embed/v3.1.0/?p=${encodeURIComponent(p)}&s=${s}`;
+        
+        return handleCORS(NextResponse.json({
+          ok: true,
+          embed_url: embedUrl,
+          cam_id: camId,
+          camera_name: camera.name,
+          location: camera.location,
+          expires_in: 300,
+        }));
+        
+      } catch (error) {
+        console.error('Embed URL error:', error);
+        return handleCORS(NextResponse.json({ error: 'Internal server error' }, { status: 500 }));
+      }
+    }
+
     // Route not found
     return handleCORS(NextResponse.json({ error: `Route ${route} not found` }, { status: 404 }));
 
