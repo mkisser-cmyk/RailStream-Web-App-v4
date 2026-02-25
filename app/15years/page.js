@@ -130,7 +130,7 @@ export default function CelebrationPage() {
           {/* Anniversary Badge */}
           <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-orange-500/20 to-yellow-500/20 border border-orange-500/30 mb-8 animate-pulse">
             <Sparkles className="w-5 h-5 text-orange-400" />
-            <span className="text-orange-300 font-semibold tracking-wide">2010 - 2025</span>
+            <span className="text-orange-300 font-semibold tracking-wide">March 2011 - March 2026</span>
             <Sparkles className="w-5 h-5 text-orange-400" />
           </div>
 
