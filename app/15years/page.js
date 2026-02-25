@@ -314,19 +314,20 @@ export default function CelebrationPage() {
               </div>
               
               <h3 className="text-3xl md:text-4xl font-bold mb-4">
-                A Special Thank You to <span className="text-orange-400">Andrea</span>
+                Thank You, <span className="text-orange-400">Andrea</span>! 💕
               </h3>
               
               <p className="text-xl text-gray-300 leading-relaxed max-w-2xl mx-auto mb-6">
-                For years, Andrea poured her heart into making RailStream beautiful. 
-                Every color, every layout, every detail was touched by her creative spirit. 
-                Her work lives on in every corner of what RailStream has become.
+                For 15 years, Andrea has poured her heart into making RailStream beautiful. 
+                Every color, every layout, every detail is touched by her creative spirit. 
+                She's the other half of RailStream - and we couldn't do this without her!
               </p>
               
               <div className="flex justify-center gap-4 flex-wrap">
                 <span className="px-4 py-2 rounded-full bg-white/10 text-sm">Designer</span>
                 <span className="px-4 py-2 rounded-full bg-white/10 text-sm">Visionary</span>
-                <span className="px-4 py-2 rounded-full bg-white/10 text-sm">Friend</span>
+                <span className="px-4 py-2 rounded-full bg-white/10 text-sm">Co-Founder</span>
+                <span className="px-4 py-2 rounded-full bg-white/10 text-sm">The Other Half</span>
               </div>
             </div>
           </div>
