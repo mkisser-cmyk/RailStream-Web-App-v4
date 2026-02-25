@@ -1564,6 +1564,10 @@ export default function App() {
           setSelectedCameras={setSelectedCameras}
           playbackStates={playbackStates}
           loadCamera={loadCamera}
+          favorites={favorites}
+          setFavorites={setFavorites}
+          presets={presets}
+          setPresets={setPresets}
         />
       )}
 
