@@ -239,13 +239,9 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
         {/* Background Video */}
         {heroPlayback?.hls_url && (
           <div className="absolute inset-0 z-0">
-            <HLSVideoPlayer
-              src={heroPlayback.hls_url}
+            <BackgroundVideoPlayer
+              hlsUrl={heroPlayback.hls_url}
               className="w-full h-full object-cover opacity-40"
-              muted={true}
-              autoPlay={true}
-              controls={false}
-              onLoaded={() => setVideoLoaded(true)}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-black/30" />
           </div>
