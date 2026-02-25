@@ -132,18 +132,29 @@ export default function TestPlayerPage() {
           playsinline: true,
           html5: {
             hlsjsConfig: {
-              maxBufferLength: 15,
-              backBufferLength: 30,
+              maxBufferLength: 30,
+              backBufferLength: 60,
               liveSyncDurationCount: 3,
               enableWorker: true,
+              // Handle alternate audio tracks
+              audioCodec: undefined,
+              // Ignore certain errors
+              fragLoadingMaxRetry: 6,
+              manifestLoadingMaxRetry: 4,
+              // Broader codec support
+              enableSoftwareAES: true,
             },
             vhs: {
               overrideNative: true,
               enableLowInitialPlaylist: true,
               limitRenditionByPlayerDimensions: true,
+              // Handle alternate audio
+              useDevicePixelRatio: true,
+              handleManifestRedirects: true,
             },
             nativeAudioTracks: false,
             nativeVideoTracks: false,
+            nativeTextTracks: false,
           },
         });
 
