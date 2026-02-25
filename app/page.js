@@ -120,7 +120,9 @@ function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
           {user ? (
             <div className="flex items-center gap-3">
               <div className={`px-3 py-1.5 rounded-full bg-gradient-to-r ${TIERS[user.membership_tier]?.color || 'from-gray-600 to-gray-500'} text-white text-xs font-semibold flex items-center gap-1.5`}>
-                {TIERS[user.membership_tier]?.icon && <TIERS[user.membership_tier].icon className="w-3 h-3" />}
+                {user.membership_tier === 'engineer' && <Crown className="w-3 h-3" />}
+                {user.membership_tier === 'conductor' && <Shield className="w-3 h-3" />}
+                {user.membership_tier === 'fireman' && <Zap className="w-3 h-3" />}
                 {TIERS[user.membership_tier]?.label || user.membership_tier}
               </div>
               <span className="text-sm text-white/70 hidden sm:block">{user.username}</span>
