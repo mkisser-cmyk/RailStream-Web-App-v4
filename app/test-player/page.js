@@ -1,13 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Head from 'next/head';
 
 export default function TestPlayerPage() {
   const videoRef = useRef(null);
   const playerRef = useRef(null);
   const [status, setStatus] = useState('Initializing...');
-  const [hlsUrl, setHlsUrl] = useState(null);
+  const [playbackData, setPlaybackData] = useState(null);
   const [scriptsLoaded, setScriptsLoaded] = useState(false);
 
   // Load CSS
@@ -25,8 +24,6 @@ export default function TestPlayerPage() {
       '/vendor/nuevo/nuevo.min.js',
       '/vendor/nuevo/plugins/hlsjs.js',
     ];
-
-    let loadedCount = 0;
 
     const loadScript = (src) => {
       return new Promise((resolve, reject) => {
@@ -60,7 +57,7 @@ export default function TestPlayerPage() {
     loadAllScripts();
   }, []);
 
-  // Fetch playback URL
+  // Fetch playback URL using NEW web-authorize endpoint
   useEffect(() => {
     async function fetchPlayback() {
       try {
@@ -68,27 +65,33 @@ export default function TestPlayerPage() {
         const catalogRes = await fetch('/api/cameras/catalog');
         const cameras = await catalogRes.json();
         
-        const onlineCamera = cameras.find(c => c.status === 'online');
-        if (!onlineCamera) {
+        // Find a Fostoria camera (they have web_hls configured)
+        const camera = cameras.find(c => c.short_code && c.short_code.includes('FOS')) 
+          || cameras.find(c => c.status === 'online');
+        
+        if (!camera) {
           setStatus('No online camera found');
           return;
         }
 
-        setStatus(`Found camera: ${onlineCamera.name}`);
+        setStatus(`Found camera: ${camera.name} (${camera.short_code || camera._id})`);
         
-        const playbackRes = await fetch('/api/playback/authorize', {
+        // Use the NEW web-authorize endpoint that returns streams.web_hls
+        const playbackRes = await fetch('/api/playback/web-authorize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ camera_id: onlineCamera._id }),
+          body: JSON.stringify({ camera_id: camera.short_code || camera._id }),
         });
         
         const playback = await playbackRes.json();
         
-        if (playback.hls_url) {
-          setStatus(`Got HLS URL - waiting for scripts...`);
-          setHlsUrl(playback.hls_url);
+        if (playback.ok && playback.edge_base) {
+          // Build the full HLS URL
+          const hlsUrl = `${playback.edge_base}playlist_dvr_timeshift-0-7200.m3u8?wmsAuthSign=${encodeURIComponent(playback.wms_auth)}`;
+          setPlaybackData({ ...playback, hlsUrl });
+          setStatus(`Ready to play: ${playback.camera_name}`);
         } else {
-          setStatus(`No HLS URL returned`);
+          setStatus(`Playback error: ${playback.error || 'Unknown error'}`);
         }
       } catch (err) {
         setStatus(`Fetch error: ${err.message}`);
@@ -100,7 +103,7 @@ export default function TestPlayerPage() {
 
   // Initialize player when both scripts and URL are ready
   useEffect(() => {
-    if (!scriptsLoaded || !hlsUrl || !videoRef.current) return;
+    if (!scriptsLoaded || !playbackData?.hlsUrl || !videoRef.current) return;
 
     let player = null;
 
@@ -137,6 +140,7 @@ export default function TestPlayerPage() {
             vhs: {
               overrideNative: true,
               enableLowInitialPlaylist: true,
+              limitRenditionByPlayerDimensions: true,
             },
             nativeAudioTracks: false,
             nativeVideoTracks: false,
@@ -149,22 +153,21 @@ export default function TestPlayerPage() {
         if (player.nuevo) {
           try {
             player.nuevo({ contextMenu: false, shareMenu: false });
-            setStatus('Nuevo initialized!');
           } catch(e) {
-            setStatus('Nuevo error: ' + e.message);
+            console.log('Nuevo init:', e);
           }
         }
 
         setStatus('Setting source...');
         player.src({
           type: 'application/x-mpegURL',
-          src: hlsUrl,
+          src: playbackData.hlsUrl,
         });
 
         player.on('loadstart', () => setStatus('Load started...'));
         player.on('loadedmetadata', () => setStatus('Metadata loaded!'));
         player.on('canplay', () => setStatus('Can play!'));
-        player.on('playing', () => setStatus('✅ PLAYING!'));
+        player.on('playing', () => setStatus('✅ PLAYING - ' + playbackData.camera_name));
         player.on('error', () => {
           const err = player.error();
           setStatus(`❌ Error: ${err?.code} - ${err?.message}`);
@@ -189,18 +192,24 @@ export default function TestPlayerPage() {
         playerRef.current = null;
       }
     };
-  }, [scriptsLoaded, hlsUrl]);
+  }, [scriptsLoaded, playbackData]);
 
   return (
     <div className="min-h-screen bg-black text-white p-8">
-      <h1 className="text-2xl font-bold mb-4 text-orange-500">Video Player Test Page (Nuevo + hlsjs)</h1>
+      <h1 className="text-2xl font-bold mb-4 text-orange-500">RailStream Player Test (Web HLS)</h1>
       
       <div className="mb-4 p-4 bg-gray-900 rounded">
         <p className="font-mono text-sm">Status: {status}</p>
-        {hlsUrl && <p className="font-mono text-xs text-gray-400 mt-2 break-all">URL: {hlsUrl}</p>}
+        {playbackData && (
+          <div className="mt-2 text-xs text-gray-400">
+            <p>Camera: {playbackData.camera_name} - {playbackData.location}</p>
+            <p>Edge Base: {playbackData.edge_base}</p>
+            <p className="break-all">HLS URL: {playbackData.hlsUrl?.substring(0, 100)}...</p>
+          </div>
+        )}
       </div>
 
-      <div className="aspect-video bg-gray-800 rounded overflow-hidden" style={{ maxWidth: '800px' }}>
+      <div className="aspect-video bg-gray-800 rounded overflow-hidden" style={{ maxWidth: '900px' }}>
         <div data-vjs-player className="w-full h-full">
           <video
             ref={videoRef}
@@ -214,9 +223,10 @@ export default function TestPlayerPage() {
       <div className="mt-8 p-4 bg-gray-900 rounded">
         <h2 className="font-bold mb-2">Debug Info:</h2>
         <ul className="text-sm text-gray-400">
-          <li>• Video.js + Nuevo + hlsjs.js from /public/vendor/nuevo/</li>
+          <li>• Using /api/playback/web-authorize endpoint</li>
+          <li>• Gets streams.web_hls from admin API</li>
           <li>• Scripts loaded: {scriptsLoaded ? '✅' : '⏳'}</li>
-          <li>• HLS URL: {hlsUrl ? '✅' : '⏳'}</li>
+          <li>• Playback data: {playbackData ? '✅' : '⏳'}</li>
         </ul>
       </div>
     </div>
