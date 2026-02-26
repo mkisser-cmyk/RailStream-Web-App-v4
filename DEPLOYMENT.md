@@ -1,239 +1,377 @@
-# RailStream Next.js Application - Deployment Checklist
+# RailStream Web App - Complete Deployment Guide
 
-## Server Requirements
+## Overview
 
-### Software
-- **Node.js**: v18.x or higher (LTS recommended)
-- **Yarn**: v1.22.x (package manager)
-- **PM2** or **systemd**: For process management
-- **Nginx** or **Caddy**: Reverse proxy (optional but recommended)
+This guide will walk you through setting up a fresh Ubuntu server to host the RailStream Next.js web application.
 
-### Hardware
-- **RAM**: Minimum 2GB, 4GB+ recommended
-- **CPU**: 2+ cores
-- **Storage**: 10GB minimum
+**GitHub Repository:** `github.com/mkisser-cmyk/RailStream-Web-App-v4`
 
 ---
 
-## Environment Variables (.env)
+## Part 1: Create Your VM
 
-Create a `.env` file in the project root with these values:
+### Option A: DigitalOcean (Recommended)
+
+1. Go to [DigitalOcean](https://digitalocean.com)
+2. Create a Droplet:
+   - **Image:** Ubuntu 22.04 LTS
+   - **Plan:** Basic - $12/mo (2GB RAM, 1 vCPU, 50GB SSD)
+   - **Datacenter:** Choose closest to your users
+   - **Authentication:** SSH Key (recommended) or Password
+   - **Hostname:** `railstream-web`
+
+### Option B: Vultr
+
+1. Go to [Vultr](https://vultr.com)
+2. Deploy New Server:
+   - **Type:** Cloud Compute
+   - **Location:** Your choice
+   - **Image:** Ubuntu 22.04 LTS
+   - **Plan:** $12/mo (2GB RAM, 1 vCPU)
+
+### Option C: AWS EC2
+
+1. Launch EC2 Instance:
+   - **AMI:** Ubuntu Server 22.04 LTS
+   - **Instance Type:** t3.small (2GB RAM)
+   - **Storage:** 30GB gp3
+   - **Security Group:** Allow ports 22, 80, 443
+
+### Option D: Self-Hosted / Proxmox / VMware
+
+1. Create VM with:
+   - **OS:** Ubuntu 22.04 LTS Server
+   - **RAM:** 2GB minimum (4GB recommended)
+   - **CPU:** 2 cores
+   - **Storage:** 30GB minimum
+   - **Network:** Static IP or DHCP reservation
+
+---
+
+## Part 2: DNS Configuration
+
+Before setting up the server, configure your DNS:
+
+1. Go to your domain registrar (GoDaddy, Cloudflare, etc.)
+2. Add/Update DNS records:
+
+```
+Type    Name    Value                   TTL
+A       @       YOUR_SERVER_IP          300
+A       www     YOUR_SERVER_IP          300
+CNAME   www     railstream.net          300  (alternative)
+```
+
+---
+
+## Part 3: Server Setup (Automated)
+
+### Connect to Your Server
 
 ```bash
-# MongoDB (if using local features - optional for this app)
-MONGO_URL=mongodb://localhost:27017/railstream
+ssh root@YOUR_SERVER_IP
+```
 
-# Public URL (your domain)
+### Download and Run Setup Script
+
+```bash
+# Download the setup script
+curl -o setup-railstream.sh https://raw.githubusercontent.com/mkisser-cmyk/RailStream-Web-App-v4/main/setup-railstream.sh
+
+# Make it executable
+chmod +x setup-railstream.sh
+
+# Run it
+sudo ./setup-railstream.sh
+```
+
+The script will:
+- ✅ Update system packages
+- ✅ Install Node.js 20 LTS
+- ✅ Install MongoDB 7.0
+- ✅ Install Nginx
+- ✅ Install PM2 process manager
+- ✅ Clone your GitHub repository
+- ✅ Build the Next.js app
+- ✅ Configure Nginx reverse proxy
+- ✅ Start the application
+
+---
+
+## Part 4: Manual Setup (Alternative)
+
+If you prefer to set up manually, here are all the steps:
+
+### 4.1 Update System
+
+```bash
+sudo apt update && sudo apt upgrade -y
+```
+
+### 4.2 Install Node.js 20
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+sudo npm install -g yarn
+```
+
+### 4.3 Install MongoDB
+
+```bash
+curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | sudo gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor
+echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+sudo apt update
+sudo apt install -y mongodb-org
+sudo systemctl start mongod
+sudo systemctl enable mongod
+```
+
+### 4.4 Install PM2 and Nginx
+
+```bash
+sudo npm install -g pm2
+sudo apt install -y nginx
+```
+
+### 4.5 Clone and Build App
+
+```bash
+cd /var/www
+sudo git clone https://github.com/mkisser-cmyk/RailStream-Web-App-v4.git railstream
+cd railstream
+sudo yarn install
+sudo yarn build
+```
+
+### 4.6 Create .env File
+
+```bash
+sudo nano /var/www/railstream/.env
+```
+
+Add:
+```
 NEXT_PUBLIC_BASE_URL=https://www.railstream.net
-
-# RailStream API
 RAILSTREAM_API_URL=https://api.railstream.net
-
-# Player embed secret (for signed URLs)
 PLAYER_EMBED_SECRET=Ki$$leAndrea04
-
-# Admin credentials for API access (get streams.web_hls data)
 RAILSTREAM_ADMIN_USER=WEBSITE_ADMIN
 RAILSTREAM_ADMIN_PASS=O3c4DFmES
+MONGO_URL=mongodb://localhost:27017/railstream
 ```
 
----
-
-## Nuevo License Domain
-
-**CRITICAL**: Your Nuevo Video.js license must include the deployment domain.
-
-Currently allowed domains (from player.railstream.net CSP):
-- `railstream.net`
-- `www.railstream.net`
-- `railstream.tv`
-- `www.railstream.tv`
-- `*.railstream.net`
-- `*.railstream.tv`
-
-If deploying to a new domain, update your Nuevo license.
-
----
-
-## Deployment Steps
-
-### 1. Clone and Install
+### 4.7 Start with PM2
 
 ```bash
-# Clone the repo (or copy files)
 cd /var/www/railstream
-
-# Install dependencies
-yarn install --production
-
-# Build the application
-yarn build
-```
-
-### 2. Configure Process Manager (PM2)
-
-```bash
-# Install PM2 globally
-npm install -g pm2
-
-# Start the application
-pm2 start yarn --name "railstream" -- start
-
-# Save PM2 config
+pm2 start yarn --name railstream -- start
 pm2 save
-
-# Enable startup on boot
 pm2 startup
 ```
 
-### 3. Nginx Configuration (Recommended)
+---
 
-```nginx
-server {
-    listen 80;
-    server_name www.railstream.net railstream.net;
-    return 301 https://www.railstream.net$request_uri;
-}
+## Part 5: SSL Certificate Setup
 
-server {
-    listen 443 ssl http2;
-    server_name www.railstream.net;
-
-    ssl_certificate /etc/letsencrypt/live/railstream.net/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/railstream.net/privkey.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
-
-### 4. SSL Certificate (Let's Encrypt)
+After DNS propagation (can take up to 24 hours, usually minutes):
 
 ```bash
-# Install certbot
-apt install certbot python3-certbot-nginx
+# Install Certbot
+sudo apt install -y certbot python3-certbot-nginx
 
-# Get certificate
-certbot --nginx -d railstream.net -d www.railstream.net
+# Get SSL certificate
+sudo certbot --nginx -d www.railstream.net -d railstream.net
+
+# Certbot will automatically configure Nginx
 ```
 
 ---
 
-## API Endpoints Used
+## Part 6: Post-Setup Tasks
 
-Your FastAPI server provides these endpoints:
+### 6.1 Configure Camera Stream URLs
 
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/cameras/catalog` | GET | List all cameras |
-| `/api/auth/login` | POST | User authentication |
-| `/api/playback/authorize` | POST | Legacy mobile playback |
-| `/api/playback/web-authorize` | POST | Web playback with wms_auth |
-| `/api/admin/cameras` | GET | Admin camera data (requires auth) |
+In your RailStream Admin panel, for EACH camera, set `streams.website_hls`:
 
----
-
-## Files Structure
-
-```
-/app/
-├── app/                    # Next.js pages
-│   ├── page.js            # Main app (home, watch, about)
-│   ├── cameras/page.js    # Camera directory
-│   ├── 15years/page.js    # Anniversary celebration
-│   ├── host/page.js       # Host recruitment
-│   ├── api/[[...path]]/   # API proxy routes
-│   └── globals.css        # Global styles
-├── components/
-│   ├── RailStreamPlayer.js # Video player component
-│   └── ui/                 # Shadcn UI components
-├── lib/
-│   ├── api.js             # API client
-│   └── auth.js            # Auth helpers
-├── public/
-│   └── vendor/nuevo/      # Video.js + Nuevo assets
-├── .env                   # Environment variables
-└── package.json
-```
-
----
-
-## Post-Deployment Tasks
-
-### 1. Configure Camera web_hls URLs
-For each camera in your admin panel, ensure `streams.website_hls` is set:
 ```
 https://media01.railstream.net/q3ChrEVX4nmXXuAu/{NIMBLE_CAM_ID}/
 ```
 
-### 2. Test Video Playback
-1. Navigate to /cameras
-2. Click a Fostoria camera (FOS-WEST, etc.)
-3. Verify video plays in the embed player
+Example camera mappings:
+- FOS-WEST → `https://media01.railstream.net/q3ChrEVX4nmXXuAu/FOS_CAM01/`
+- FOS-EAST → `https://media01.railstream.net/q3ChrEVX4nmXXuAu/FOS_CAM02/`
+- etc.
 
-### 3. Monitor Logs
+### 6.2 Test the Application
+
+1. Visit `https://www.railstream.net`
+2. Check that cameras load
+3. Try logging in
+4. Test the chat
+5. Verify all pages work
+
+---
+
+## Useful Commands
+
 ```bash
-# PM2 logs
+# View app status
+pm2 status
+
+# View app logs
 pm2 logs railstream
 
-# Nginx logs
-tail -f /var/log/nginx/error.log
+# Restart app (after code changes)
+pm2 restart railstream
+
+# Monitor resources
+pm2 monit
+
+# Rebuild after git pull
+cd /var/www/railstream
+git pull origin main
+yarn build
+pm2 restart railstream
+
+# View Nginx logs
+tail -f /var/log/nginx/railstream_access.log
+tail -f /var/log/nginx/railstream_error.log
+
+# Restart Nginx
+sudo systemctl restart nginx
+
+# Check MongoDB status
+sudo systemctl status mongod
+```
+
+---
+
+## Updating the Application
+
+When you push new code to GitHub:
+
+```bash
+cd /var/www/railstream
+git pull origin main
+yarn install          # Only if dependencies changed
+yarn build
+pm2 restart railstream
 ```
 
 ---
 
 ## Troubleshooting
 
-### Video Not Playing
-1. Check Nuevo license covers domain
-2. Verify `streams.website_hls` is set in camera config
-3. Check `wmsAuthSign` token generation in API
+### App Not Starting
 
-### API Errors
-1. Verify RAILSTREAM_ADMIN credentials
-2. Check API server is reachable
-3. Review Next.js server logs
-
-### Build Errors
 ```bash
-# Clear cache and rebuild
-rm -rf .next node_modules
-yarn install
-yarn build
+# Check PM2 logs
+pm2 logs railstream --lines 100
+
+# Check if port 3000 is in use
+sudo lsof -i :3000
+
+# Restart PM2
+pm2 restart railstream
+```
+
+### 502 Bad Gateway
+
+```bash
+# Check if app is running
+pm2 status
+
+# Check Nginx config
+sudo nginx -t
+
+# Restart services
+pm2 restart railstream
+sudo systemctl restart nginx
+```
+
+### SSL Certificate Issues
+
+```bash
+# Renew certificate
+sudo certbot renew
+
+# Check certificate status
+sudo certbot certificates
+```
+
+### MongoDB Connection Issues
+
+```bash
+# Check MongoDB status
+sudo systemctl status mongod
+
+# Restart MongoDB
+sudo systemctl restart mongod
+
+# View MongoDB logs
+sudo tail -f /var/log/mongodb/mongod.log
 ```
 
 ---
 
-## Future Development Notes
+## File Locations
 
-### DVR Feature (Coming)
-The player source includes DVR/Review Ops code. To enable:
-1. Study `/player_source/assets/js/v3.1.0/rs-media.js`
-2. The timeshift URL format: `playlist_dvr_timeshift-{offset}-{duration}.m3u8`
-3. Thumbnails available at: `{thumb_base}/{unix_timestamp}.jpg`
-
-### Multi-View Quality Switching
-For dual/quad views, use lower quality streams:
-- Single: `streams.website_hls` (1080p)
-- Dual: `streams.hls_720p`
-- Quad+: `streams.hls_540p`
+| What | Where |
+|------|-------|
+| Application | `/var/www/railstream/` |
+| Environment Config | `/var/www/railstream/.env` |
+| Nginx Config | `/etc/nginx/sites-available/railstream` |
+| PM2 Config | `/var/www/railstream/ecosystem.config.js` |
+| Nginx Logs | `/var/log/nginx/railstream_*.log` |
+| MongoDB Data | `/var/lib/mongodb/` |
+| SSL Certificates | `/etc/letsencrypt/live/www.railstream.net/` |
 
 ---
 
-## Contact
+## Security Recommendations
 
-For issues with this application, check:
-- Next.js docs: https://nextjs.org/docs
-- Video.js docs: https://videojs.com/guides
-- Nuevo docs: https://www.nuevodevel.com/nuevo/
+1. **Firewall:** Enable UFW
+   ```bash
+   sudo ufw allow 22
+   sudo ufw allow 80
+   sudo ufw allow 443
+   sudo ufw enable
+   ```
 
-For RailStream API issues, contact your API team.
+2. **SSH Key Auth:** Disable password login
+   ```bash
+   sudo nano /etc/ssh/sshd_config
+   # Set: PasswordAuthentication no
+   sudo systemctl restart sshd
+   ```
+
+3. **Auto Updates:** Enable unattended upgrades
+   ```bash
+   sudo apt install unattended-upgrades
+   sudo dpkg-reconfigure unattended-upgrades
+   ```
+
+---
+
+## Future Enhancement: CMS Admin
+
+A backend admin panel for editing static pages can be added later. This would allow:
+- Edit About, Hosts, FAQ pages
+- Add/remove host cards
+- Update timeline events
+- Manage announcements
+
+This will be a separate feature added to the application.
+
+---
+
+## Support
+
+For issues:
+1. Check PM2 logs: `pm2 logs railstream`
+2. Check Nginx logs: `/var/log/nginx/railstream_error.log`
+3. Check MongoDB: `sudo systemctl status mongod`
+
+---
+
+**Good luck! 🚂 Your RailStream app will be live soon!**
