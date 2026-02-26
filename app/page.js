@@ -1159,23 +1159,11 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
 
           {/* Chat Panel */}
           {chatOpen && (
-            <div className="w-80 bg-zinc-900/95 border-l border-white/10 flex flex-col" role="complementary" aria-label="Live chat">
-              <div className="p-4 border-b border-white/10 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <MessageCircle className="w-5 h-5 text-[#ff7a00]" aria-hidden="true" />
-                  <span className="font-semibold text-white">Live Chat</span>
-                  <Badge className="bg-green-500/20 text-green-400 text-xs">47 online</Badge>
-                </div>
-                <button onClick={() => setChatOpen(false)} className="p-1 hover:bg-white/10 rounded" aria-label="Close chat">
-                  <X className="w-4 h-4 text-white" />
-                </button>
-              </div>
-              <div className="flex-1 p-4">
-                <p className="text-white/50 text-sm text-center">Chat coming soon!</p>
-                <p className="text-white/30 text-xs text-center mt-2">
-                  Join our <a href="https://discord.gg/railstream" className="text-[#ff7a00] hover:underline">Discord</a> in the meantime!
-                </p>
-              </div>
+            <div className="w-80 flex-shrink-0 border-l border-white/10">
+              <YardChat 
+                user={user}
+                onToggleMinimize={() => setChatOpen(false)}
+              />
             </div>
           )}
         </div>
