@@ -186,14 +186,17 @@ export default function RailStreamPlayer({
 
         playerRef.current = player;
 
-        // Initialize Nuevo plugin if available
+        // Initialize Nuevo plugin if available - WITH LICENSE KEY
         if (player.nuevo) {
           try {
             player.nuevo({
+              license: "1606585f17134356050a1f4712",  // railstream.tv license
               contextMenu: false,
               resOnly: true,
               shareMenu: false,
               zoomMenu: false,
+              snapshot: true,
+              snapshotType: "png",
             });
           } catch (e) {
             console.log('Nuevo init:', e);
