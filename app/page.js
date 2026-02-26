@@ -54,6 +54,7 @@ import {
 } from 'lucide-react';
 import { clientApi } from '@/lib/api';
 import { auth } from '@/lib/auth';
+import YardChat from '@/components/YardChat';
 
 // ============================================
 // CONSTANTS & HELPERS
