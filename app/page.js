@@ -1017,7 +1017,13 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   }, [focusedSlot]);
 
   const handleSelectCamera = (camera) => {
-    const slot = selectedCameras.findIndex(c => !c);
+    // In single view, always replace slot 0
+    if (viewMode === 'single') {
+      loadCamera(camera, 0);
+      return;
+    }
+    // In multi-view, find next empty slot or replace slot 0
+    const slot = selectedCameras.slice(0, slots).findIndex(c => !c);
     loadCamera(camera, slot === -1 ? 0 : slot);
   };
 
