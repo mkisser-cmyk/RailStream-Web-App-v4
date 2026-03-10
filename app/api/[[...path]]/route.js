@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 const API_BASE = process.env.RAILSTREAM_API_URL || 'https://api.railstream.net';
 const ADMIN_USER = process.env.RAILSTREAM_ADMIN_USER;
 const ADMIN_PASS = process.env.RAILSTREAM_ADMIN_PASS;
+const API_KEY = process.env.RAILSTREAM_API_KEY || '';
 
 // Cache for admin token (simple in-memory cache)
 let adminTokenCache = { token: null, expiresAt: 0 };
@@ -46,7 +47,7 @@ async function getAdminToken() {
   // Login to get new token
   const res = await fetch(`${API_BASE}/api/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
     body: JSON.stringify({ username: ADMIN_USER, password: ADMIN_PASS }),
   });
   
@@ -67,7 +68,7 @@ async function getAdminToken() {
 async function getCameraStreams(cameraId, adminToken) {
   // First get camera list to find by short_code or _id
   const res = await fetch(`${API_BASE}/api/admin/cameras?limit=200`, {
-    headers: { 'Authorization': `Bearer ${adminToken}` },
+    headers: { 'Authorization': `Bearer ${adminToken}`, 'X-API-Key': API_KEY },
   });
   
   if (!res.ok) {
@@ -102,7 +103,7 @@ async function handleRoute(request, { params }) {
       const body = await request.json();
       const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
         body: JSON.stringify(body),
       });
       const data = await res.json();
@@ -134,7 +135,7 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ error: 'Not authenticated' }, { status: 401 }));
       }
       const res = await fetch(`${API_BASE}/api/auth/me`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { 'Authorization': `Bearer ${token}`, 'X-API-Key': API_KEY },
       });
       if (!res.ok) {
         return handleCORS(NextResponse.json({ error: 'Session expired' }, { status: 401 }));
@@ -145,7 +146,9 @@ async function handleRoute(request, { params }) {
 
     // Cameras: Get catalog
     if (route === '/cameras/catalog' && method === 'GET') {
-      const res = await fetch(`${API_BASE}/api/cameras/catalog`);
+      const res = await fetch(`${API_BASE}/api/cameras/catalog`, {
+        headers: { 'X-API-Key': API_KEY },
+      });
       const data = await res.json();
       return handleCORS(NextResponse.json(data));
     }
@@ -172,6 +175,7 @@ async function handleRoute(request, { params }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-API-Key': API_KEY,
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
@@ -184,49 +188,33 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json(data, { status: res.status }));
     }
 
-    // Playback: Web Authorize - Returns web_hls URL + wms_auth for Video.js player
+    // Playback: Web Authorize - Returns edge_base + wms_auth for HLS player
     if (route === '/playback/web-authorize' && method === 'POST') {
       const body = await request.json();
       const cameraId = body.camera_id;
       
+      if (!cameraId) {
+        return handleCORS(NextResponse.json({ error: 'camera_id required' }, { status: 400 }));
+      }
+      
       try {
-        // Get admin token
-        const adminToken = await getAdminToken();
-        
-        // Get camera with streams from admin API
-        const camera = await getCameraStreams(cameraId, adminToken);
-        if (!camera) {
-          return handleCORS(NextResponse.json({ error: 'Camera not found' }, { status: 404 }));
-        }
-        
-        // Get wms_auth token from web-authorize endpoint
+        // Call upstream web-authorize directly with API key
         const authRes = await fetch(`${API_BASE}/api/playback/web-authorize`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ camera_id: camera.short_code || cameraId }),
+          headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+          body: JSON.stringify({ camera_id: cameraId }),
         });
         
         const authData = await authRes.json();
-        if (!authData.ok) {
-          return handleCORS(NextResponse.json({ error: 'Failed to authorize playback' }, { status: 500 }));
+        
+        if (!authRes.ok || !authData.ok) {
+          return handleCORS(NextResponse.json({ 
+            error: authData.error || authData.detail || 'Failed to authorize playback' 
+          }, { status: authRes.status || 500 }));
         }
         
-        // Build response with correct web_hls from streams
-        const webHls = camera.streams?.web_hls || camera.streams?.website_hls;
-        const thumbBase = camera.streams?.thumb_base || `/thumbs/${camera.short_code || cameraId}/`;
-        
-        return handleCORS(NextResponse.json({
-          ok: true,
-          cam_id: camera.short_code || cameraId,
-          camera_name: camera.name,
-          location: camera.location,
-          edge_base: webHls,
-          thumb_base: thumbBase,
-          wms_auth: authData.wms_auth,
-          token_expires_in: authData.token_expires_in || 540,
-          dvr_days: authData.dvr_days || 7,
-          status: camera.status,
-        }));
+        // Pass through the upstream response
+        return handleCORS(NextResponse.json(authData));
         
       } catch (error) {
         console.error('Web authorize error:', error);
