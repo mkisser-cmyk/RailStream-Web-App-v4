@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import SiteHeader from '@/components/SiteHeader';
 import { 
   Camera, MapPin, Search, Filter, Train, Lock, Crown, 
   Shield, Star, Radio, ChevronDown, X, Loader2, AlertCircle,
@@ -305,28 +306,10 @@ export default function CamerasPage() {
   return (
     <main className="min-h-screen bg-black text-white">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-black/90 backdrop-blur-lg border-b border-gray-800">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between gap-4">
-            <Link href="/" className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
-                <Train className="w-6 h-6 text-white" />
-              </div>
-              <span className="text-xl font-bold text-white">RailStream</span>
-            </Link>
-
-            <nav className="hidden md:flex items-center gap-6">
-              <Link href="/" className="text-gray-400 hover:text-white transition-colors">Home</Link>
-              <Link href="/cameras" className="text-orange-400 font-medium">Cameras</Link>
-              <Link href="/15years" className="text-gray-400 hover:text-white transition-colors">15 Years</Link>
-              <Link href="/host" className="text-gray-400 hover:text-white transition-colors">Host</Link>
-            </nav>
-          </div>
-        </div>
-      </header>
+      <SiteHeader currentPage="cameras" />
 
       {/* Hero */}
-      <section className="py-12 px-6 bg-gradient-to-b from-gray-900/50 to-black">
+      <section className="pt-24 pb-12 px-6 bg-gradient-to-b from-gray-900/50 to-black">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
             <div>

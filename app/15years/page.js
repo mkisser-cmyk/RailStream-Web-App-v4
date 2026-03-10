@@ -8,6 +8,7 @@ import {
   ChevronDown, Play, Volume2, VolumeX, Award, Sparkles,
   MapPin, Clock, Radio, Zap
 } from 'lucide-react';
+import SiteHeader from '@/components/SiteHeader';
 
 // Timeline milestones
 const MILESTONES = [
@@ -93,6 +94,7 @@ export default function CelebrationPage() {
 
   return (
     <main className="min-h-screen bg-black text-white">
+      <SiteHeader currentPage="15years" />
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
         {/* Animated Background */}

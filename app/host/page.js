@@ -7,6 +7,7 @@ import {
   CheckCircle, ArrowRight, Train, Radio, Zap, Globe, 
   Heart, Star, ChevronRight, Mail, Phone
 } from 'lucide-react';
+import SiteHeader from '@/components/SiteHeader';
 
 const BENEFITS = [
   {
@@ -129,6 +130,7 @@ export default function HostPage() {
 
   return (
     <main className="min-h-screen bg-black text-white">
+      <SiteHeader currentPage="host" />
       {/* Hero Section */}
       <section className="relative py-24 px-6 overflow-hidden">
         {/* Background */}

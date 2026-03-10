@@ -94,7 +94,7 @@ const storage = {
 // ============================================
 // VIDEO PLAYER COMPONENTS
 // ============================================
-import HlsPlayer from '@/components/HlsPlayer';
+import HlsPlayer, { BackgroundHlsPlayer } from '@/components/HlsPlayer';
 
 // ============================================
 // NAVIGATION
@@ -220,26 +220,48 @@ function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
 // ============================================
 function HomePage({ cameras, onStartWatching, onLogin, user }) {
   const [heroCamera, setHeroCamera] = useState(null);
-  const [heroPlayback, setHeroPlayback] = useState(null);
-  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [heroStreamUrl, setHeroStreamUrl] = useState(null);
 
-  // Pick a random online camera for the hero background
+  // Pick a random online camera for the live hero background
   useEffect(() => {
     const onlineCameras = cameras.filter(c => c.status === 'online' && c.min_tier === 'fireman');
-    if (onlineCameras.length > 0) {
-      const randomCam = onlineCameras[Math.floor(Math.random() * onlineCameras.length)];
-      setHeroCamera(randomCam);
-      setVideoLoaded(false);
-      
-      // Get playback URL for background video
-      clientApi.authorizePlayback(randomCam._id).then(data => {
+    if (onlineCameras.length === 0) return;
+
+    const pickAndLoad = async () => {
+      const cam = onlineCameras[Math.floor(Math.random() * onlineCameras.length)];
+      setHeroCamera(cam);
+      try {
+        const res = await fetch('/api/playback/authorize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ camera_id: cam._id, device_id: `hero-${Date.now()}`, platform: 'web' }),
+        });
+        const data = await res.json();
         if (data.ok && data.hls_url) {
-          setHeroPlayback(data);
+          setHeroStreamUrl(data.hls_url);
         }
-      }).catch((err) => {
-        console.log('Hero video failed to load:', err);
-      });
-    }
+      } catch (e) {
+        console.log('Hero video load failed:', e);
+      }
+    };
+
+    pickAndLoad();
+
+    // Cycle to a new camera every 45 seconds
+    const interval = setInterval(() => {
+      const cam = onlineCameras[Math.floor(Math.random() * onlineCameras.length)];
+      setHeroCamera(cam);
+      setHeroStreamUrl(null);
+      fetch('/api/playback/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ camera_id: cam._id, device_id: `hero-${Date.now()}`, platform: 'web' }),
+      }).then(r => r.json()).then(data => {
+        if (data.ok && data.hls_url) setHeroStreamUrl(data.hls_url);
+      }).catch(() => {});
+    }, 45000);
+
+    return () => clearInterval(interval);
   }, [cameras]);
 
   // Get coming soon cameras
@@ -247,17 +269,21 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
 
   return (
     <main className="min-h-screen bg-black">
-      {/* HERO SECTION - Full screen with live video/thumbnail background */}
+      {/* HERO SECTION - Full screen with live video background */}
       <section className="relative h-screen flex items-center justify-center overflow-hidden" aria-label="Welcome to RailStream">
-        {/* Background - Use thumbnail for now, video will work on production domain */}
+        {/* Background - Live video stream */}
         {heroCamera && (
           <div className="absolute inset-0">
-            <img 
-              src={heroCamera.thumbnail_path} 
-              alt="" 
-              className="w-full h-full object-cover opacity-40"
-              onError={(e) => e.target.style.display = 'none'}
-            />
+            {heroStreamUrl ? (
+              <BackgroundHlsPlayer src={heroStreamUrl} className="opacity-50" />
+            ) : (
+              <img 
+                src={heroCamera.thumbnail_path} 
+                alt="" 
+                className="w-full h-full object-cover opacity-40"
+                onError={(e) => e.target.style.display = 'none'}
+              />
+            )}
             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/40" />
           </div>
         )}
@@ -308,12 +334,12 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
             )}
           </div>
           
-          {/* Live indicator - only show when video is actually playing */}
-          {heroCamera && heroPlayback?.hls_url && (
+          {/* Live camera indicator */}
+          {heroCamera && (
             <div className="inline-flex items-center gap-2 text-white bg-black/60 backdrop-blur-sm px-4 py-2 rounded-full border border-white/10">
-              <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse" aria-hidden="true" />
+              <span className={`w-3 h-3 rounded-full ${heroStreamUrl ? 'bg-red-500 animate-pulse' : 'bg-orange-500'}`} aria-hidden="true" />
               <span className="text-sm">
-                Live: <span className="font-semibold">{heroCamera.name}</span>
+                {heroStreamUrl ? 'Live' : 'Now Showing'}: <span className="font-semibold">{heroCamera.name}</span>
               </span>
             </div>
           )}
