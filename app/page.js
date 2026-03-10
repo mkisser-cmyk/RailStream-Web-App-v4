@@ -1062,9 +1062,9 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
             userTier={user?.membership_tier}
             viewMode={viewMode}
             favorites={favorites}
-            setFavorites={(f) => { setFavorites(f); storage.setFavorites(f); }}
+            setFavorites={(f) => { setFavorites(f); storage.setFavorites(f); syncPrefsToServer(f, undefined); }}
             presets={presets}
-            setPresets={(p) => { setPresets(p); storage.setPresets(p); }}
+            setPresets={(p) => { setPresets(p); storage.setPresets(p); syncPrefsToServer(undefined, p); }}
             onLoadPreset={handleLoadPreset}
             onSavePreset={handleSavePreset}
           />
@@ -1699,15 +1699,97 @@ export default function App() {
   const [favorites, setFavorites] = useState([]);
   const [presets, setPresets] = useState([]);
 
+  // Sync preferences to server (debounced)
+  const syncPrefsToServer = useCallback(async (newFavs, newPresets) => {
+    const token = auth.getToken();
+    if (!token) return; // Only sync for logged-in users
+    try {
+      const body = {};
+      if (newFavs !== undefined) body.favorites = newFavs;
+      if (newPresets !== undefined) body.presets = newPresets;
+      await fetch('/api/user/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      console.log('Preference sync failed:', e);
+    }
+  }, []);
+
+  // Load preferences from server on login
+  const loadServerPrefs = useCallback(async () => {
+    const token = auth.getToken();
+    if (!token) return;
+    try {
+      const res = await fetch('/api/user/preferences', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.ok) {
+        if (data.favorites?.length > 0) {
+          setFavorites(data.favorites);
+          storage.setFavorites(data.favorites);
+        }
+        if (data.presets?.length > 0) {
+          setPresets(data.presets);
+          storage.setPresets(data.presets);
+        }
+      }
+    } catch (e) {
+      console.log('Failed to load server preferences:', e);
+    }
+  }, []);
+
+  // Update favorites — save to localStorage + server
+  const updateFavorites = useCallback((newFavs) => {
+    setFavorites(newFavs);
+    storage.setFavorites(newFavs);
+    syncPrefsToServer(newFavs, undefined);
+  }, [syncPrefsToServer]);
+
+  // Update presets — save to localStorage + server
+  const updatePresets = useCallback((newPresets) => {
+    setPresets(newPresets);
+    storage.setPresets(newPresets);
+    syncPrefsToServer(undefined, newPresets);
+  }, [syncPrefsToServer]);
+
   useEffect(() => {
     const init = async () => {
       try {
         const catalog = await clientApi.getCatalog();
         if (Array.isArray(catalog)) setCameras(catalog);
         const savedUser = auth.getUser();
-        if (savedUser) setUser(savedUser);
-        setFavorites(storage.getFavorites());
-        setPresets(storage.getPresets());
+        if (savedUser) {
+          setUser(savedUser);
+          // Load from localStorage first (instant), then sync from server
+          setFavorites(storage.getFavorites());
+          setPresets(storage.getPresets());
+          // Fetch server prefs (overwrites localStorage if server has data)
+          const token = auth.getToken();
+          if (token) {
+            try {
+              const res = await fetch('/api/user/preferences', {
+                headers: { 'Authorization': `Bearer ${token}` },
+              });
+              const data = await res.json();
+              if (data.ok) {
+                if (data.favorites?.length > 0) {
+                  setFavorites(data.favorites);
+                  storage.setFavorites(data.favorites);
+                }
+                if (data.presets?.length > 0) {
+                  setPresets(data.presets);
+                  storage.setPresets(data.presets);
+                }
+              }
+            } catch (e) { console.log('Server prefs load skipped'); }
+          }
+        } else {
+          setFavorites(storage.getFavorites());
+          setPresets(storage.getPresets());
+        }
       } catch (e) {
         console.error('Init error:', e);
       } finally {
@@ -1817,9 +1899,9 @@ export default function App() {
             playbackStates={playbackStates}
             loadCamera={loadCamera}
             favorites={favorites}
-            setFavorites={(f) => { setFavorites(f); storage.setFavorites(f); }}
+            setFavorites={updateFavorites}
             presets={presets}
-            setPresets={(p) => { setPresets(p); storage.setPresets(p); }}
+            setPresets={updatePresets}
           />
         )}
 
@@ -1829,7 +1911,7 @@ export default function App() {
         {currentPage === 'faq' && <FAQPage />}
       </div>
 
-      <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onSuccess={setUser} />
+      <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onSuccess={(u) => { setUser(u); loadServerPrefs(); }} />
     </div>
   );
 }

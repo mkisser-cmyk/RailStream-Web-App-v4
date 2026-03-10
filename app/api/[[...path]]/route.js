@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { MongoClient } from 'mongodb';
 
 const API_BASE = process.env.RAILSTREAM_API_URL || 'https://api.railstream.net';
 const ADMIN_USER = process.env.RAILSTREAM_ADMIN_USER;
 const ADMIN_PASS = process.env.RAILSTREAM_ADMIN_PASS;
 const API_KEY = process.env.RAILSTREAM_API_KEY || '';
+const MONGO_URL = process.env.MONGO_URL || 'mongodb://localhost:27017';
 
 // Cache for admin token (simple in-memory cache)
 let adminTokenCache = { token: null, expiresAt: 0 };
@@ -287,6 +289,88 @@ async function handleRoute(request, { params }) {
         
       } catch (error) {
         console.error('Embed URL error:', error);
+        return handleCORS(NextResponse.json({ error: 'Internal server error' }, { status: 500 }));
+      }
+    }
+
+    // ── User Preferences (Favorites & Presets) ──
+    // GET /api/user/preferences — Load user's saved favorites & presets
+    if (route === '/user/preferences' && method === 'GET') {
+      const token = request.headers.get('authorization')?.split(' ')[1];
+      if (!token) {
+        return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }));
+      }
+
+      try {
+        // Verify user with upstream API
+        const meRes = await fetch(`${API_BASE}/api/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'X-API-Key': API_KEY },
+        });
+        if (!meRes.ok) {
+          return handleCORS(NextResponse.json({ error: 'Invalid token' }, { status: 401 }));
+        }
+        const userData = await meRes.json();
+        const userId = userData._id || userData.id || userData.username;
+
+        // Connect to MongoDB directly
+        const client = new MongoClient(MONGO_URL);
+        await client.connect();
+        const db = client.db('railstream');
+        
+        const prefs = await db.collection('user_preferences').findOne({ userId });
+        await client.close();
+
+        return handleCORS(NextResponse.json({
+          ok: true,
+          favorites: prefs?.favorites || [],
+          presets: prefs?.presets || [],
+        }));
+      } catch (error) {
+        console.error('Get preferences error:', error);
+        return handleCORS(NextResponse.json({ error: 'Internal server error' }, { status: 500 }));
+      }
+    }
+
+    // PUT /api/user/preferences — Save user's favorites & presets
+    if (route === '/user/preferences' && method === 'PUT') {
+      const token = request.headers.get('authorization')?.split(' ')[1];
+      if (!token) {
+        return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }));
+      }
+
+      try {
+        // Verify user
+        const meRes = await fetch(`${API_BASE}/api/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'X-API-Key': API_KEY },
+        });
+        if (!meRes.ok) {
+          return handleCORS(NextResponse.json({ error: 'Invalid token' }, { status: 401 }));
+        }
+        const userData = await meRes.json();
+        const userId = userData._id || userData.id || userData.username;
+
+        const body = await request.json();
+        const { favorites, presets } = body;
+
+        // Connect to MongoDB directly
+        const client = new MongoClient(MONGO_URL);
+        await client.connect();
+        const db = client.db('railstream');
+
+        const update = { updatedAt: new Date() };
+        if (favorites !== undefined) update.favorites = favorites;
+        if (presets !== undefined) update.presets = presets;
+
+        await db.collection('user_preferences').updateOne(
+          { userId },
+          { $set: update, $setOnInsert: { userId, username: userData.username || '', createdAt: new Date() } },
+          { upsert: true }
+        );
+        await client.close();
+
+        return handleCORS(NextResponse.json({ ok: true }));
+      } catch (error) {
+        console.error('Save preferences error:', error);
         return handleCORS(NextResponse.json({ error: 'Internal server error' }, { status: 500 }));
       }
     }
