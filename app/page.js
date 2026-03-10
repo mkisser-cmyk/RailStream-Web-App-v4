@@ -985,6 +985,135 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
 }
 
 // ============================================
+
+// LAYOUTS MENU — Quick access to save/load multi-view presets
+function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCameras, slots }) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [name, setName] = useState('');
+  const menuRef = useRef(null);
+
+  // Close on click outside
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false);
+    };
+    if (open) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  const activeCams = selectedCameras.slice(0, slots).filter(Boolean).length;
+
+  const handleSave = () => {
+    if (!name.trim()) return;
+    onSave(name.trim());
+    setName('');
+    setSaving(false);
+    toast.success(`Layout "${name}" saved!`);
+  };
+
+  const VIEW_LABELS = { single: '1', dual: '2', quad: '4', nine: '9', sixteen: '16' };
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${
+          open ? 'bg-[#ff7a00] text-white' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
+        }`}
+      >
+        <Bookmark className="w-4 h-4" />
+        <span className="hidden sm:inline">My Layouts</span>
+        {presets.length > 0 && (
+          <span className="bg-white/20 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+            {presets.length}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-2 w-72 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+          {/* Header */}
+          <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+            <h3 className="text-white font-bold text-sm">My Layouts</h3>
+            {!saving && activeCams > 0 && (
+              <button
+                onClick={() => setSaving(true)}
+                className="text-xs bg-[#ff7a00] hover:bg-[#ff8c20] text-white px-3 py-1 rounded-full font-medium transition"
+              >
+                + Save Current
+              </button>
+            )}
+          </div>
+
+          {/* Save Form */}
+          {saving && (
+            <div className="px-4 py-3 border-b border-white/10 bg-white/5">
+              <p className="text-white/50 text-xs mb-2">
+                Saving {activeCams} cameras in {VIEW_LABELS[viewMode] || '1'}-view layout
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Layout name (e.g. All Ohio)"
+                  className="flex-1 bg-black/50 border border-white/10 text-white text-sm rounded-lg px-3 py-2 focus:border-[#ff7a00] focus:outline-none"
+                  autoFocus
+                  onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+                />
+                <button onClick={handleSave} className="bg-[#ff7a00] hover:bg-[#ff8c20] text-white px-3 py-2 rounded-lg text-sm font-bold transition">
+                  Save
+                </button>
+              </div>
+              <button onClick={() => { setSaving(false); setName(''); }} className="text-white/40 text-xs mt-2 hover:text-white/60">
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {/* Presets List */}
+          <div className="max-h-64 overflow-y-auto">
+            {presets.length === 0 ? (
+              <div className="px-4 py-8 text-center">
+                <Bookmark className="w-8 h-8 text-white/10 mx-auto mb-2" />
+                <p className="text-white/40 text-sm">No layouts saved yet</p>
+                <p className="text-white/25 text-xs mt-1">Set up your cameras and click "Save Current"</p>
+              </div>
+            ) : (
+              presets.map((preset, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition group cursor-pointer border-b border-white/5 last:border-0"
+                  onClick={() => { onLoad(preset); setOpen(false); toast.success(`Loaded "${preset.name}"`); }}
+                >
+                  <div className="w-8 h-8 rounded-lg bg-[#ff7a00]/10 border border-[#ff7a00]/20 flex items-center justify-center flex-shrink-0">
+                    <span className="text-[#ff7a00] text-xs font-bold">{VIEW_LABELS[preset.viewMode] || '?'}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm font-medium truncate">{preset.name}</p>
+                    <p className="text-white/40 text-xs">
+                      {preset.cameras?.filter(Boolean).length || 0} cameras • {VIEW_LABELS[preset.viewMode] || '1'}-view
+                    </p>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDelete(i); toast.success('Layout deleted'); }}
+                    className="p-1 text-white/20 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
+                    aria-label={`Delete ${preset.name}`}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 // WATCH PAGE
 // ============================================
 function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera, favorites, setFavorites, presets, setPresets }) {
@@ -1120,6 +1249,20 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                 );
               })}
             </div>
+            
+            {/* Save & Load Layouts */}
+            <LayoutsMenu 
+              presets={presets} 
+              onSave={handleSavePreset} 
+              onLoad={handleLoadPreset}
+              onDelete={(i) => {
+                const newPresets = presets.filter((_, idx) => idx !== i);
+                updatePresets(newPresets);
+              }}
+              viewMode={viewMode}
+              selectedCameras={selectedCameras}
+              slots={slots}
+            />
           </div>
 
           <div className="flex items-center gap-2">
