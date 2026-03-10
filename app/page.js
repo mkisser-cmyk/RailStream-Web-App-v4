@@ -1000,8 +1000,16 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
     }
   };
 
-  // Return from focused single view back to the grid
+  // Return from focused single view back to the grid (resets to live)
   const handleUnfocus = () => {
+    // If we were in review mode on the focused slot, reload it as live
+    if (focusedSlot !== null) {
+      const camera = selectedCameras[focusedSlot];
+      if (camera) {
+        // Reload to get fresh live URL
+        loadCamera(camera, focusedSlot);
+      }
+    }
     setFocusedSlot(null);
   };
 
@@ -1041,7 +1049,8 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
 
   const handleLoadPreset = (preset) => {
     setViewMode(preset.viewMode);
-    setSelectedCameras([null, null, null, null, null, null, null, null, null]);
+    setFocusedSlot(null);
+    setSelectedCameras([null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]);
     preset.cameras.forEach((camera, i) => {
       if (camera) setTimeout(() => loadCamera(camera, i), i * 200);
     });
@@ -1256,10 +1265,20 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                       aria-label="Add camera to this slot"
                     >
                       <div className="text-center">
-                        <div className={`${isCompact ? 'w-8 h-8' : 'w-12 h-12'} rounded-full bg-white/5 flex items-center justify-center mx-auto mb-1`}>
-                          <Play className={`${isCompact ? 'w-4 h-4' : 'w-6 h-6'} text-white/30`} />
-                        </div>
-                        {!isCompact && <p className="text-white/30 text-sm">Click to add camera</p>}
+                        <img 
+                          src="https://railstream.net/images/Homepage/WebsiteLogo.png" 
+                          alt="RailStream" 
+                          className={`${isCompact ? 'h-6' : 'h-10'} mx-auto mb-2 opacity-20`}
+                        />
+                        {!isCompact && (
+                          <>
+                            <p className="text-white/40 text-sm font-medium mb-1">Select a Camera</p>
+                            <p className="text-white/25 text-xs">Choose from the sidebar to start watching</p>
+                          </>
+                        )}
+                        {isCompact && (
+                          <p className="text-white/30 text-[10px]">+ Add</p>
+                        )}
                       </div>
                     </button>
                   )}
