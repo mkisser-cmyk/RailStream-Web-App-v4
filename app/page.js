@@ -1109,6 +1109,10 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                           muted={isMuted || i > 0}
                           autoPlay={true}
                           controls={true}
+                          viewMode={viewMode}
+                          dvrDays={state.data.dvr_days || 7}
+                          cameraName={camera.name || ''}
+                          cameraLocation={camera.location || ''}
                           poster={camera.thumbnail_path || null}
                         />
                       ) : null}
@@ -1710,9 +1714,9 @@ export default function App() {
             playbackStates={playbackStates}
             loadCamera={loadCamera}
             favorites={favorites}
-            setFavorites={setFavorites}
+            setFavorites={(f) => { setFavorites(f); storage.setFavorites(f); }}
             presets={presets}
-            setPresets={setPresets}
+            setPresets={(p) => { setPresets(p); storage.setPresets(p); }}
           />
         )}
 
