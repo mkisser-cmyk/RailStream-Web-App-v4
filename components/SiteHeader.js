@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { id: '15years', label: '🎉 15 Years', href: '/15years', special: true },
   { id: 'watch', label: 'Watch', href: '/?page=watch' },
   { id: 'cameras', label: 'Cameras', href: '/cameras' },
+  { id: 'status', label: 'Status', href: '/status' },
   { id: 'host', label: 'Host', href: '/host' },
   { id: 'about', label: 'About', href: '/?page=about' },
 ];
