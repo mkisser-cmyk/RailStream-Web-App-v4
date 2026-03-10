@@ -94,7 +94,7 @@ const storage = {
 // ============================================
 // VIDEO PLAYER COMPONENTS
 // ============================================
-import HlsPlayer, { buildStreamUrl } from '@/components/HlsPlayer';
+import HlsPlayer from '@/components/HlsPlayer';
 
 // ============================================
 // NAVIGATION
@@ -1620,28 +1620,34 @@ export default function App() {
     setSelectedCameras(newCameras);
     setPlaybackStates(prev => ({ ...prev, [slotIndex]: { loading: true, data: null, error: null } }));
     try {
-      // Use web-authorize which returns edge_base + wms_auth
-      const res = await fetch('/api/playback/web-authorize', {
+      const token = auth.getToken();
+      // Use playback/authorize with user's token — returns full, signed HLS URL
+      const res = await fetch('/api/playback/authorize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ camera_id: camera.short_code || camera._id }),
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          camera_id: camera._id,
+          device_id: `web-${Date.now()}`,
+          platform: 'web',
+        }),
       });
       const data = await res.json();
-      if (data.ok && data.edge_base && data.wms_auth) {
-        // Build the full HLS URL
-        const hlsUrl = buildStreamUrl(data.edge_base, data.wms_auth, 0, 7200);
+      if (data.ok && data.hls_url) {
         setPlaybackStates(prev => ({
           ...prev,
           [slotIndex]: {
             loading: false,
-            data: { ...data, hls_url: hlsUrl },
+            data: { ...data },
             error: null,
           },
         }));
       } else {
         setPlaybackStates(prev => ({
           ...prev,
-          [slotIndex]: { loading: false, data: null, error: data.error || 'Unable to authorize stream' },
+          [slotIndex]: { loading: false, data: null, error: data.detail || data.error || 'Unable to authorize stream' },
         }));
       }
     } catch (err) {

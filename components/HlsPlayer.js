@@ -131,8 +131,19 @@ export default function HlsPlayer({
                 });
                 break;
               case Hls.ErrorTypes.MEDIA_ERROR:
-                console.error('Fatal media error, recovering...');
-                hls.recoverMediaError();
+                setRetryCount(prev => {
+                  const next = prev + 1;
+                  if (next <= 2) {
+                    console.error('Fatal media error, recovering... (attempt ' + next + ')');
+                    hls.recoverMediaError();
+                  } else {
+                    console.error('Fatal media error after retries:', data.details);
+                    setError('Unable to decode stream. Please try a different browser.');
+                    setIsLoading(false);
+                    if (onError) onError('Media error');
+                  }
+                  return next;
+                });
                 break;
               default:
                 setError('Unable to play stream');
