@@ -23,7 +23,6 @@ import {
   Radio,
   Grid2X2,
   Grid3X3,
-  LayoutGrid,
   Square,
   Columns2,
   MessageCircle,
@@ -71,12 +70,36 @@ const canAccess = (userTier, cameraTier) => {
   return (TIERS[userTier]?.level || 0) >= (TIERS[cameraTier]?.level || 0);
 };
 
+// Custom 4x4 grid icon for 16-way view
+function Grid4X4({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="4" height="4" rx="0.5" />
+      <rect x="8" y="2" width="4" height="4" rx="0.5" />
+      <rect x="14" y="2" width="4" height="4" rx="0.5" />
+      <rect x="20" y="2" width="2" height="4" rx="0.5" />
+      <rect x="2" y="8" width="4" height="4" rx="0.5" />
+      <rect x="8" y="8" width="4" height="4" rx="0.5" />
+      <rect x="14" y="8" width="4" height="4" rx="0.5" />
+      <rect x="20" y="8" width="2" height="4" rx="0.5" />
+      <rect x="2" y="14" width="4" height="4" rx="0.5" />
+      <rect x="8" y="14" width="4" height="4" rx="0.5" />
+      <rect x="14" y="14" width="4" height="4" rx="0.5" />
+      <rect x="20" y="14" width="2" height="4" rx="0.5" />
+      <rect x="2" y="20" width="4" height="2" rx="0.5" />
+      <rect x="8" y="20" width="4" height="2" rx="0.5" />
+      <rect x="14" y="20" width="4" height="2" rx="0.5" />
+      <rect x="20" y="20" width="2" height="2" rx="0.5" />
+    </svg>
+  );
+}
+
 const VIEW_MODES = [
   { id: 'single', label: '1', icon: Square, slots: 1 },
   { id: 'dual', label: '2', icon: Columns2, slots: 2 },
   { id: 'quad', label: '4', icon: Grid2X2, slots: 4 },
   { id: 'nine', label: '9', icon: Grid3X3, slots: 9 },
-  { id: 'sixteen', label: '16', icon: LayoutGrid, slots: 16 },
+  { id: 'sixteen', label: '16', icon: Grid4X4, slots: 16 },
 ];
 
 // Local Storage
@@ -731,7 +754,7 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
 // ============================================
 // CAMERA PICKER WITH FAVORITES & PRESETS
 // ============================================
-function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, favorites, setFavorites, presets, setPresets, onLoadPreset, onSavePreset, thumbnailMap, thumbTimestamp }) {
+function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, favorites, setFavorites, presets, setPresets, onLoadPreset, onSavePreset, thumbnailMap, thumbTimestamp, targetSlot, setTargetSlot }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [showPresets, setShowPresets] = useState(false);
@@ -912,6 +935,21 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
               </TabsList>
             </Tabs>
           </div>
+
+          {/* Target slot indicator */}
+          {targetSlot !== null && viewMode !== 'single' && (
+            <div className="mx-3 mb-2 px-3 py-2 rounded-lg bg-[#ff7a00]/10 border border-[#ff7a00]/30 flex items-center justify-between">
+              <span className="text-[#ff7a00] text-xs font-medium">
+                Adding to Slot {targetSlot + 1}
+              </span>
+              <button
+                onClick={() => setTargetSlot(null)}
+                className="text-[#ff7a00]/60 hover:text-[#ff7a00] text-xs"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
 
           <ScrollArea className="flex-1">
             <div className="p-2">
@@ -1132,6 +1170,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   const [pickerOpen, setPickerOpen] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [focusedSlot, setFocusedSlot] = useState(null); // For click-to-fullscreen
+  const [targetSlot, setTargetSlot] = useState(null); // For pick-where-to-place
   const [reviewOpsCounter, setReviewOpsCounter] = useState(0); // Trigger Review Ops in player
 
   const isHighTier = user && (user.membership_tier === 'conductor' || user.membership_tier === 'engineer');
@@ -1172,6 +1211,12 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
     // In single view, always replace slot 0
     if (viewMode === 'single') {
       loadCamera(camera, 0);
+      return;
+    }
+    // If user clicked a specific slot to target, place camera there
+    if (targetSlot !== null && targetSlot < slots) {
+      loadCamera(camera, targetSlot);
+      setTargetSlot(null); // Clear the target after placing
       return;
     }
     // In multi-view, find next empty slot or replace slot 0
@@ -1228,6 +1273,8 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
             onSavePreset={handleSavePreset}
             thumbnailMap={thumbnailMap}
             thumbTimestamp={thumbTimestamp}
+            targetSlot={targetSlot}
+            setTargetSlot={setTargetSlot}
           />
         </div>
       )}
@@ -1451,9 +1498,20 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                     </>
                   ) : (
                     <button
-                      onClick={() => setPickerOpen(true)}
-                      className="absolute inset-0 flex items-center justify-center hover:bg-white/5 transition"
-                      aria-label="Add camera to this slot"
+                      onClick={() => {
+                        if (targetSlot === i) {
+                          setTargetSlot(null); // Deselect if clicking same slot
+                        } else {
+                          setTargetSlot(i);
+                          setPickerOpen(true);
+                        }
+                      }}
+                      className={`absolute inset-0 flex items-center justify-center transition ${
+                        targetSlot === i 
+                          ? 'bg-[#ff7a00]/10 ring-2 ring-[#ff7a00] ring-inset' 
+                          : 'hover:bg-white/5'
+                      }`}
+                      aria-label={`${targetSlot === i ? 'Selected: ' : ''}Slot ${i + 1} - Click to add camera here`}
                     >
                       <div className="text-center">
                         <img 
@@ -1463,12 +1521,23 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                         />
                         {!isCompact && (
                           <>
-                            <p className="text-white/70 text-sm font-medium mb-1">Select a Camera</p>
-                            <p className="text-white/50 text-xs">Choose from the sidebar to start watching</p>
+                            {targetSlot === i ? (
+                              <>
+                                <p className="text-[#ff7a00] text-sm font-medium mb-1">Slot {i + 1} Selected</p>
+                                <p className="text-white/50 text-xs">Now pick a camera from the sidebar</p>
+                              </>
+                            ) : (
+                              <>
+                                <p className="text-white/70 text-sm font-medium mb-1">Slot {i + 1}</p>
+                                <p className="text-white/50 text-xs">Click to add a camera here</p>
+                              </>
+                            )}
                           </>
                         )}
                         {isCompact && (
-                          <p className="text-white/50 text-[10px]">+ Add</p>
+                          <p className={`text-[10px] ${targetSlot === i ? 'text-[#ff7a00] font-semibold' : 'text-white/50'}`}>
+                            {targetSlot === i ? `Slot ${i + 1} ✓` : `+ Slot ${i + 1}`}
+                          </p>
                         )}
                       </div>
                     </button>
