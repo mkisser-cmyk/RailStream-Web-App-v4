@@ -1126,6 +1126,10 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   const [pickerOpen, setPickerOpen] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [focusedSlot, setFocusedSlot] = useState(null); // For click-to-fullscreen
+  const [reviewOpsCounter, setReviewOpsCounter] = useState(0); // Trigger Review Ops in player
+
+  const isHighTier = user && (user.membership_tier === 'conductor' || user.membership_tier === 'engineer');
+  const canReviewOps = isHighTier && viewMode === 'single' && selectedCameras[0];
 
   // Click a tile in multi-view to expand it to fullscreen single view
   const handleTileFocus = (slotIndex) => {
@@ -1270,6 +1274,28 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
               selectedCameras={selectedCameras}
               slots={slots}
             />
+
+            {/* Review Ops - Conductor & Engineer only, single view only */}
+            {viewMode === 'single' && (
+              <div className="h-6 w-px bg-white/10 mx-1" aria-hidden="true" />
+            )}
+            {viewMode === 'single' && (
+              <button
+                onClick={() => canReviewOps && setReviewOpsCounter(c => c + 1)}
+                disabled={!canReviewOps}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all ${
+                  canReviewOps
+                    ? 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/30 hover:text-amber-300 border border-amber-500/20'
+                    : 'bg-white/5 text-white/30 cursor-not-allowed border border-white/5'
+                }`}
+                title={!user ? 'Sign in required' : !isHighTier ? 'Conductor or Engineer membership required' : !selectedCameras[0] ? 'Select a camera first' : 'Open DVR Review Ops'}
+                aria-label="Review Ops - DVR Rewind"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Review Ops</span>
+                {!isHighTier && user && <Lock className="w-3 h-3 ml-0.5" />}
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -1315,6 +1341,8 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                         cameraName={camera.name || ''}
                         cameraLocation={camera.location || ''}
                         poster={camera.thumbnail_path || null}
+                        openReviewOps={reviewOpsCounter}
+                        hideReviewButton={true}
                       />
                     ) : state.loading ? (
                       <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="w-10 h-10 text-[#ff7a00] animate-spin" /></div>
@@ -1373,6 +1401,8 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                           cameraName={camera.name || ''}
                           cameraLocation={camera.location || ''}
                           poster={camera.thumbnail_path || null}
+                          openReviewOps={viewMode === 'single' && i === 0 ? reviewOpsCounter : 0}
+                          hideReviewButton={true}
                         />
                       ) : null}
                       

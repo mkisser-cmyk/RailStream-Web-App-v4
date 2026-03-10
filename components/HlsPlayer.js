@@ -78,6 +78,8 @@ export default function HlsPlayer({
   onError,
   className = '',
   poster = null,
+  openReviewOps = 0,
+  hideReviewButton = false,
 }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
@@ -117,6 +119,13 @@ export default function HlsPlayer({
   const [reviewBlock, setReviewBlock] = useState(3600);
 
   const MAX_RETRIES = 3;
+
+  // External trigger to open Review Ops modal
+  useEffect(() => {
+    if (openReviewOps > 0) {
+      setShowReviewOps(true);
+    }
+  }, [openReviewOps]);
 
   // Get stream base URL (without timeshift params) for Review Ops
   const streamBase = useMemo(() => {
@@ -608,7 +617,7 @@ export default function HlsPlayer({
             )}
 
             {/* Review Ops Button */}
-            {!isReviewMode && (
+            {!isReviewMode && !hideReviewButton && (
               <button
                 onClick={() => setShowReviewOps(true)}
                 className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-xs font-medium transition-colors"
