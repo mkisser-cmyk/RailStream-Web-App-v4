@@ -762,7 +762,7 @@ export default function HlsPlayer({
                 </button>
               ))}
             </div>
-            <p className="text-white/30 text-xs mb-5">Total Timeline: {dvrDays}d 00h</p>
+            <p className="text-white/50 text-xs mb-5">Total Timeline: {dvrDays}d 00h</p>
 
             {/* Buttons */}
             <div className="flex gap-3">

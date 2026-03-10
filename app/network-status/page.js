@@ -135,7 +135,7 @@ export default function StatusPage() {
               </div>
               <div className="flex items-center gap-3">
                 {lastRefresh && (
-                  <span className="text-white/30 text-xs">
+                  <span className="text-white/50 text-xs">
                     Updated {lastRefresh.toLocaleTimeString()}
                   </span>
                 )}
@@ -196,7 +196,7 @@ export default function StatusPage() {
               <RefreshCw className="w-8 h-8 text-[#ff7a00] animate-spin" />
             </div>
           ) : filteredSites.length === 0 ? (
-            <div className="text-center py-20 text-white/30">
+            <div className="text-center py-20 text-white/60">
               No encoders match this filter
             </div>
           ) : (
@@ -214,7 +214,7 @@ export default function StatusPage() {
           )}
 
           {/* Footer */}
-          <div className="mt-8 flex items-center justify-between text-white/20 text-xs border-t border-white/5 pt-4">
+          <div className="mt-8 flex items-center justify-between text-white/50 text-xs border-t border-white/5 pt-4">
             <p>Encoder status is monitored in real-time via RailStream Studio. Auto-refresh every 15 seconds.</p>
             <p>&copy; 2011&ndash;2026 RailStream. All rights reserved.</p>
           </div>
@@ -258,8 +258,8 @@ function SiteCard({ site, thumbKey, expanded, onToggle }) {
             />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900">
-              <Camera className="w-10 h-10 text-white/10 mb-2" />
-              <span className="text-white/20 text-xs">{isOnline ? 'No Preview' : 'Offline'}</span>
+              <Camera className="w-10 h-10 text-white/30 mb-2" />
+              <span className="text-white/50 text-xs">{isOnline ? 'No Preview' : 'Offline'}</span>
             </div>
           )}
           {/* Status Badge */}
@@ -355,7 +355,7 @@ function MiniStat({ label, value, alert }) {
   return (
     <div className="text-center py-1.5 px-2 bg-white/[0.02] rounded-lg">
       <p className={`text-xs font-semibold ${alert ? 'text-yellow-400' : 'text-white/80'}`}>{value}</p>
-      <p className="text-[10px] text-white/30 mt-0.5">{label}</p>
+      <p className="text-[10px] text-white/50 mt-0.5">{label}</p>
     </div>
   );
 }

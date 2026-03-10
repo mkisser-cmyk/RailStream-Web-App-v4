@@ -1081,9 +1081,9 @@ function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCame
           <div className="max-h-64 overflow-y-auto">
             {presets.length === 0 ? (
               <div className="px-4 py-8 text-center">
-                <Bookmark className="w-8 h-8 text-white/10 mx-auto mb-2" />
+                <Bookmark className="w-8 h-8 text-white/30 mx-auto mb-2" />
                 <p className="text-white/40 text-sm">No layouts saved yet</p>
-                <p className="text-white/25 text-xs mt-1">Set up your cameras and click "Save Current"</p>
+                <p className="text-white/50 text-xs mt-1">Set up your cameras and click "Save Current"</p>
               </div>
             ) : (
               presets.map((preset, i) => (
@@ -1422,12 +1422,12 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                         />
                         {!isCompact && (
                           <>
-                            <p className="text-white/40 text-sm font-medium mb-1">Select a Camera</p>
-                            <p className="text-white/25 text-xs">Choose from the sidebar to start watching</p>
+                            <p className="text-white/70 text-sm font-medium mb-1">Select a Camera</p>
+                            <p className="text-white/50 text-xs">Choose from the sidebar to start watching</p>
                           </>
                         )}
                         {isCompact && (
-                          <p className="text-white/30 text-[10px]">+ Add</p>
+                          <p className="text-white/50 text-[10px]">+ Add</p>
                         )}
                       </div>
                     </button>
