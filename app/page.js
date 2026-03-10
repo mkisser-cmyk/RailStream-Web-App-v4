@@ -900,11 +900,15 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
             <Tabs value={filter} onValueChange={setFilter}>
               <TabsList className="w-full bg-white/5 p-1">
                 <TabsTrigger value="all" className="flex-1 text-xs text-white data-[state=active]:bg-[#ff7a00] data-[state=active]:text-white">All</TabsTrigger>
-                <TabsTrigger value="favorites" className="flex-1 text-xs text-white data-[state=active]:bg-yellow-600 data-[state=active]:text-white">
-                  <Star className="w-3 h-3 mr-1" aria-hidden="true" />
-                  {favorites.length}
-                </TabsTrigger>
-                <TabsTrigger value="fireman" className="flex-1 text-xs text-white data-[state=active]:bg-orange-600 data-[state=active]:text-white">Free</TabsTrigger>
+                {userTier && (
+                  <TabsTrigger value="favorites" className="flex-1 text-xs text-white data-[state=active]:bg-yellow-600 data-[state=active]:text-white">
+                    <Star className="w-3 h-3 mr-1" aria-hidden="true" />
+                    {favorites.length}
+                  </TabsTrigger>
+                )}
+                {!userTier && (
+                  <TabsTrigger value="fireman" className="flex-1 text-xs text-white data-[state=active]:bg-orange-600 data-[state=active]:text-white">Free</TabsTrigger>
+                )}
               </TabsList>
             </Tabs>
           </div>
@@ -954,13 +958,15 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
                               </div>
                             </button>
                             
-                            <button
-                              onClick={(e) => toggleFavorite(camera._id, e)}
-                              className={`p-1.5 rounded transition ${isFavorite ? 'text-yellow-500' : 'text-white/30 hover:text-yellow-500'}`}
-                              aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                            >
-                              <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
-                            </button>
+                            {userTier && (
+                              <button
+                                onClick={(e) => toggleFavorite(camera._id, e)}
+                                className={`p-1.5 rounded transition ${isFavorite ? 'text-yellow-500' : 'text-white/30 hover:text-yellow-500'}`}
+                                aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                              >
+                                <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+                              </button>
+                            )}
                             
                             {isSelected && (
                               <span className="w-6 h-6 rounded-full bg-[#ff7a00] flex items-center justify-center text-white text-xs font-bold">
