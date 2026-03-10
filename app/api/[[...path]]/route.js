@@ -8,8 +8,19 @@ const ADMIN_PASS = process.env.RAILSTREAM_ADMIN_PASS;
 const API_KEY = process.env.RAILSTREAM_API_KEY || '';
 const MONGO_URL = process.env.MONGO_URL || 'mongodb://localhost:27017';
 
+// Studio API config
+const STUDIO_API_URL = process.env.STUDIO_API_URL || 'https://studio.railstream.net';
+const STUDIO_USERNAME = process.env.STUDIO_USERNAME;
+const STUDIO_PASSWORD = process.env.STUDIO_PASSWORD;
+
 // Cache for admin token (simple in-memory cache)
 let adminTokenCache = { token: null, expiresAt: 0 };
+
+// Cache for studio auth token
+let studioTokenCache = { token: null, expiresAt: 0 };
+
+// Cache for studio sites data (refresh every 5 seconds)
+let studioSitesCache = { data: null, thumbnails: {}, fetchedAt: 0 };
 
 // Helper function to handle CORS
 function handleCORS(response) {
@@ -64,6 +75,183 @@ async function getAdminToken() {
   };
   
   return data.access_token;
+}
+
+// Get studio auth token (with caching)
+async function getStudioToken() {
+  const now = Date.now();
+  if (studioTokenCache.token && studioTokenCache.expiresAt > now + 300000) {
+    return studioTokenCache.token;
+  }
+  const res = await fetch(`${STUDIO_API_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: STUDIO_USERNAME, password: STUDIO_PASSWORD }),
+  });
+  if (!res.ok) {
+    throw new Error('Studio login failed');
+  }
+  const data = await res.json();
+  studioTokenCache = {
+    token: data.access_token,
+    expiresAt: now + 3600000, // 1 hour
+  };
+  return data.access_token;
+}
+
+// Fetch studio sites with caching (5-second TTL)
+async function fetchStudioSites() {
+  const now = Date.now();
+  if (studioSitesCache.data && (now - studioSitesCache.fetchedAt) < 5000) {
+    return studioSitesCache;
+  }
+  const token = await getStudioToken();
+  const res = await fetch(`${STUDIO_API_URL}/api/sites`, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch studio sites');
+  }
+  const sites = await res.json();
+  
+  // Separate thumbnails from site data and sanitize
+  const thumbnails = {};
+  const sanitizedSites = sites.map(site => {
+    // Store thumbnail separately
+    if (site.health?.preview_image) {
+      thumbnails[site.id] = site.health.preview_image;
+    }
+    // Return sanitized site data (no passwords, IPs, API keys)
+    return {
+      id: site.id,
+      name: site.name,
+      location: site.location,
+      description: site.description || '',
+      health: {
+        status: site.health?.status || 'unknown',
+        stream_status: site.health?.stream_status || 'unknown',
+        last_heartbeat: site.health?.last_heartbeat || null,
+        uptime_seconds: site.health?.uptime_seconds || 0,
+        video_bitrate: site.health?.video_bitrate || 0,
+        source_bitrate: site.health?.source_bitrate || 0,
+        audio_bitrate: site.health?.audio_bitrate || 0,
+        fps: site.health?.fps || 0,
+        dropped_frames: site.health?.dropped_frames || 0,
+        cpu_usage: site.health?.cpu_usage || 0,
+        gpu_usage: site.health?.gpu_usage || 0,
+        gpu_temp: site.health?.gpu_temp || 0,
+        error_message: site.health?.error_message || '',
+        has_preview: !!site.health?.preview_image,
+      },
+      encoder: {
+        codec: site.encoder?.codec || 'unknown',
+        hardware: site.encoder?.hardware || 'unknown',
+      },
+      output: {
+        resolution: site.output?.resolution || 'unknown',
+        fps: site.output?.fps || 0,
+      },
+    };
+  });
+
+  studioSitesCache = { data: sanitizedSites, thumbnails, fetchedAt: now };
+  return studioSitesCache;
+}
+
+// Build mapping from studio sites to catalog cameras
+function buildStudioToCatalogMapping(studioSites, catalogCameras) {
+  const mapping = {}; // catalogCameraId -> studioSiteId
+  
+  // State abbreviation to full name mapping
+  const stateMap = {
+    'NJ': 'New Jersey', 'TX': 'Texas', 'IL': 'Illinois', 'OH': 'Ohio',
+    'GA': 'Georgia', 'PA': 'Pennsylvania', 'VA': 'Virginia', 'NC': 'North Carolina',
+    'WV': 'West Virginia', 'FL': 'Florida', 'CA': 'California', 'KY': 'Kentucky',
+    'MI': 'Michigan', 'NE': 'Nebraska', 'MN': 'Minnesota', 'IN': 'Indiana',
+  };
+  
+  for (const site of studioSites) {
+    const siteName = (site.name || '').toLowerCase();
+    const siteLoc = (site.location || '').toLowerCase();
+    
+    // Extract city from studio name (before comma)
+    const cityMatch = siteName.match(/^([^,|]+)/);
+    const city = cityMatch ? cityMatch[1].trim() : '';
+    
+    // Extract direction/type keywords
+    const hasEast = /east/i.test(siteName);
+    const hasWest = /west/i.test(siteName);
+    const hasPTZ = /ptz/i.test(siteName);
+    const hasStatic = /static/i.test(siteName);
+    
+    // Special name patterns
+    const specialNames = ['mount carmel', 'mh tower', 'ac tower', 'be tower', 'bi tower', 'nkp'];
+    let specialMatch = null;
+    for (const sp of specialNames) {
+      if (siteName.includes(sp)) { specialMatch = sp; break; }
+    }
+    
+    let bestMatch = null;
+    let bestScore = 0;
+    
+    for (const cam of catalogCameras) {
+      let score = 0;
+      const camName = (cam.name || '').toLowerCase();
+      const camLoc = (cam.location || '').toLowerCase();
+      const camFull = `${camName} ${camLoc}`.toLowerCase();
+      
+      // City match (check if catalog name contains city)
+      if (city && camName.includes(city)) {
+        score += 10;
+      } else if (city) {
+        // Try state expansion: "waldwick, nj" -> check "waldwick" in "waldwick, new jersey"
+        const parts = siteName.split(',');
+        if (parts.length >= 1) {
+          const studioCity = parts[0].trim().toLowerCase();
+          if (camName.includes(studioCity)) score += 10;
+        }
+      }
+      
+      // Location/state match
+      if (siteLoc) {
+        const locCity = siteLoc.split(',')[0].trim().toLowerCase();
+        if (camName.includes(locCity)) score += 5;
+        // State expansion
+        const stateAbbr = siteLoc.split(',')[1]?.trim().toUpperCase();
+        const stateFull = stateMap[stateAbbr];
+        if (stateFull && camName.toLowerCase().includes(stateFull.toLowerCase())) score += 3;
+      }
+      
+      if (score < 5) continue; // No city match, skip
+      
+      // Direction matching
+      if (hasEast && camFull.includes('east')) score += 8;
+      if (hasWest && camFull.includes('west')) score += 8;
+      if (hasPTZ && camFull.includes('ptz')) score += 8;
+      if (hasStatic && camFull.includes('static')) score += 8;
+      
+      // Special name matching
+      if (specialMatch && camFull.includes(specialMatch)) score += 15;
+      
+      // Penalize if direction mismatch
+      if (hasEast && camFull.includes('west') && !camFull.includes('east')) score -= 5;
+      if (hasWest && camFull.includes('east') && !camFull.includes('west')) score -= 5;
+      
+      // NKP special case
+      if (/nkp/i.test(siteName) && camFull.includes('nkp')) score += 10;
+      
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = cam;
+      }
+    }
+    
+    if (bestMatch && bestScore >= 10) {
+      mapping[bestMatch._id] = site.id;
+    }
+  }
+  
+  return mapping;
 }
 
 // Get camera streams from admin API
@@ -372,6 +560,82 @@ async function handleRoute(request, { params }) {
       } catch (error) {
         console.error('Save preferences error:', error);
         return handleCORS(NextResponse.json({ error: 'Internal server error' }, { status: 500 }));
+      }
+    }
+
+    // ── Studio API Endpoints ──
+    // GET /api/studio/sites — Fetch all studio sites with health data
+    if (route === '/studio/sites' && method === 'GET') {
+      try {
+        const cache = await fetchStudioSites();
+        return handleCORS(NextResponse.json({
+          ok: true,
+          sites: cache.data,
+          cached_at: cache.fetchedAt,
+        }));
+      } catch (error) {
+        console.error('Studio sites error:', error);
+        return handleCORS(NextResponse.json({ error: 'Failed to fetch studio data' }, { status: 502 }));
+      }
+    }
+
+    // GET /api/studio/thumbnail?id=SITE_ID — Serve a live preview image for a site
+    if (route === '/studio/thumbnail' && method === 'GET') {
+      const url = new URL(request.url);
+      const siteId = url.searchParams.get('id');
+      if (!siteId) {
+        return handleCORS(NextResponse.json({ error: 'id parameter required' }, { status: 400 }));
+      }
+      try {
+        const cache = await fetchStudioSites();
+        const imageData = cache.thumbnails[siteId];
+        if (!imageData) {
+          // Return a 1x1 transparent pixel as fallback
+          const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+          return new NextResponse(pixel, {
+            status: 200,
+            headers: {
+              'Content-Type': 'image/gif',
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+            },
+          });
+        }
+        // The preview_image is raw JPEG base64 data
+        const imageBuffer = Buffer.from(imageData, 'base64');
+        return new NextResponse(imageBuffer, {
+          status: 200,
+          headers: {
+            'Content-Type': 'image/jpeg',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+          },
+        });
+      } catch (error) {
+        console.error('Studio thumbnail error:', error);
+        return handleCORS(NextResponse.json({ error: 'Failed to fetch thumbnail' }, { status: 502 }));
+      }
+    }
+
+    // GET /api/studio/thumbnails-map — Return mapping of studioSiteId → catalogCameraId
+    if (route === '/studio/thumbnails-map' && method === 'GET') {
+      try {
+        const cache = await fetchStudioSites();
+        // Also fetch catalog to build the mapping
+        const catalogRes = await fetch(`${API_BASE}/api/cameras/catalog`, {
+          headers: { 'X-API-Key': API_KEY },
+        });
+        const catalog = await catalogRes.json();
+        
+        // Build a mapping from studio site to catalog camera
+        const mapping = buildStudioToCatalogMapping(cache.data, catalog);
+        return handleCORS(NextResponse.json({
+          ok: true,
+          mapping, // { catalogCameraId: studioSiteId }
+          available_thumbnails: Object.keys(cache.thumbnails),
+        }));
+      } catch (error) {
+        console.error('Thumbnails map error:', error);
+        return handleCORS(NextResponse.json({ error: 'Failed to build mapping' }, { status: 502 }));
       }
     }
 

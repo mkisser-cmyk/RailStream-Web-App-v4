@@ -109,6 +109,7 @@ function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
     { id: '15years', label: '🎉 15 Years', href: '/15years' },
     { id: 'watch', label: 'Watch', href: null },
     { id: 'cameras', label: 'Cameras', href: '/cameras' },
+    { id: 'status', label: 'Status', href: '/network-status' },
     { id: 'host', label: 'Host', href: '/host' },
     { id: 'about', label: 'About', href: null },
   ];
@@ -730,7 +731,7 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
 // ============================================
 // CAMERA PICKER WITH FAVORITES & PRESETS
 // ============================================
-function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, favorites, setFavorites, presets, setPresets, onLoadPreset, onSavePreset }) {
+function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, favorites, setFavorites, presets, setPresets, onLoadPreset, onSavePreset, thumbnailMap, thumbTimestamp }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [showPresets, setShowPresets] = useState(false);
@@ -933,7 +934,11 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
                               aria-label={`${hasAccess ? 'Select' : 'Locked'} ${camera.name}`}
                             >
                               <div className="relative w-16 h-10 rounded overflow-hidden flex-shrink-0">
-                                <img src={camera.thumbnail_path} alt="" className="w-full h-full object-cover" />
+                                {thumbnailMap?.[camera._id] ? (
+                                  <img src={`/api/studio/thumbnail?id=${thumbnailMap[camera._id]}&_t=${thumbTimestamp}`} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  <img src={camera.thumbnail_path} alt="" className="w-full h-full object-cover" />
+                                )}
                                 {camera.status === 'online' && (
                                   <span className="absolute top-1 left-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" aria-label="Live" />
                                 )}
@@ -1116,7 +1121,7 @@ function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCame
 
 // WATCH PAGE
 // ============================================
-function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera, favorites, setFavorites, presets, setPresets }) {
+function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
@@ -1211,6 +1216,8 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
             setPresets={(p) => { setPresets(p); storage.setPresets(p); syncPrefsToServer(undefined, p); }}
             onLoadPreset={handleLoadPreset}
             onSavePreset={handleSavePreset}
+            thumbnailMap={thumbnailMap}
+            thumbTimestamp={thumbTimestamp}
           />
         </div>
       )}
@@ -1866,6 +1873,10 @@ export default function App() {
   const [playbackStates, setPlaybackStates] = useState({});
   const [favorites, setFavorites] = useState([]);
   const [presets, setPresets] = useState([]);
+  
+  // Live thumbnail mapping from studio (studioSiteId -> catalogCameraId)
+  const [thumbnailMap, setThumbnailMap] = useState({}); // catalogCameraId -> studioSiteId
+  const [thumbTimestamp, setThumbTimestamp] = useState(Date.now());
 
   // Sync preferences to server (debounced)
   const syncPrefsToServer = useCallback(async (newFavs, newPresets) => {
@@ -1965,6 +1976,32 @@ export default function App() {
       }
     };
     init();
+  }, []);
+
+  // Fetch studio thumbnail mapping and poll every 5 seconds
+  useEffect(() => {
+    let active = true;
+    const fetchMapping = async () => {
+      try {
+        const res = await fetch('/api/studio/thumbnails-map');
+        const data = await res.json();
+        if (data.ok && data.mapping && active) {
+          setThumbnailMap(data.mapping);
+          setThumbTimestamp(Date.now());
+        }
+      } catch (e) {
+        // Silent fail - thumbnails are a nice-to-have
+      }
+    };
+    fetchMapping();
+    const interval = setInterval(() => {
+      if (active) {
+        setThumbTimestamp(Date.now()); // Just update timestamp to force img reload
+      }
+    }, 5000);
+    // Re-fetch mapping every 60 seconds (in case new cameras come online)
+    const mapInterval = setInterval(fetchMapping, 60000);
+    return () => { active = false; clearInterval(interval); clearInterval(mapInterval); };
   }, []);
 
   const loadCamera = async (camera, slotIndex) => {
@@ -2070,6 +2107,8 @@ export default function App() {
             setFavorites={updateFavorites}
             presets={presets}
             setPresets={updatePresets}
+            thumbnailMap={thumbnailMap}
+            thumbTimestamp={thumbTimestamp}
           />
         )}
 

@@ -180,10 +180,64 @@ backend:
         agent: "testing"
         comment: "✅ TESTED: Playback authorize works correctly. With valid camera_id, returns ok: true, hls_url, camera_name, and session_id. Properly uses authentication token from login."
 
+  - task: "Studio Sites API"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented GET /api/studio/sites that authenticates with studio.railstream.net, fetches sites data with health info, strips sensitive data (passwords, IPs, API keys), returns sanitized site health data. Uses 5-second in-memory cache for the studio data."
+      - working: true
+        agent: "main"
+        comment: "Verified via curl: returns ok:true with 19 sites, each having health data (status, uptime_seconds, video_bitrate, fps, cpu_usage, etc)"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Studio Sites API works perfectly. Returns {ok: true, sites: [...], cached_at: timestamp} with exactly 19 sites. Each site has all required fields (id, name, location, health) and health data includes all specified fields (status, stream_status, uptime_seconds, video_bitrate, fps, cpu_usage, gpu_usage, etc). Studio authentication and caching working correctly."
+
+  - task: "Studio Thumbnail API"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented GET /api/studio/thumbnail?id=SITE_ID that serves live preview JPEG images from studio. Returns actual image/jpeg binary response. Falls back to 1x1 transparent pixel if no preview available."
+      - working: true
+        agent: "main"
+        comment: "Verified: successfully downloaded 46KB JPEG thumbnail image"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Studio Thumbnail API works perfectly. Returns live JPEG preview images (Content-Type: image/jpeg, 42KB binary data) for valid site IDs. Properly returns fallback 1x1 transparent GIF for invalid site IDs. Correctly returns 400 error when id parameter is missing. Cache headers properly set (no-cache, no-store, must-revalidate)."
+
+  - task: "Studio Thumbnails Map API"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented GET /api/studio/thumbnails-map that builds and returns a mapping from catalog camera IDs to studio site IDs using fuzzy name matching. This allows the watch page to know which studio thumbnail to display for each catalog camera."
+      - working: true
+        agent: "main"
+        comment: "Verified: returns mapping with 19 entries, correctly mapping all 19 studio sites to catalog cameras"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Studio Thumbnails Map API works perfectly. Returns {ok: true, mapping: {...}, available_thumbnails: [...]} with exactly 19 mapping entries from catalog camera IDs to studio site IDs. Available thumbnails array contains 19 entries. Fuzzy matching algorithm correctly maps studio sites to catalog cameras based on location and name matching."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 2
+  test_sequence: 3
   run_ui: false
 
 test_plan:
@@ -198,4 +252,8 @@ agent_communication:
   - agent: "testing"
     message: "✅ BACKEND TESTING COMPLETE: All 5 RailStream API proxy endpoints tested successfully. Comprehensive test suite created and executed - all 8 test cases passed (100% success rate). All backend APIs are working correctly including auth flow, camera catalog, single camera lookup, and playback authorization. No issues found."
   - agent: "testing"
-    message: "✅ REVIEW REQUEST TESTING COMPLETE: Conducted comprehensive testing of all specified endpoints with exact credentials and parameters from review request. Created backend_test_review.py and executed 5 targeted test cases with 100% success rate. All endpoints working correctly: 1) GET /api/cameras/catalog returns 46 cameras with all required fields, 2) POST /api/auth/login works with chicagotest/sZyE8cDFk credentials, 3) POST /api/playback/authorize works with Atlanta camera ID 699894a055761e18195294e3 (both with/without auth), returns proper HLS URLs from media01.railstream.net, 4) POST /api/playback/web-authorize works with FOS-WEST camera, returns edge_base and wms_auth. All API calls properly use X-API-Key header. No critical issues found."
+    message: "✅ REVIEW REQUEST TESTING COMPLETE: Conducted comprehensive testing of all specified endpoints with exact credentials and parameters from review request. Created backend_test_review.py and executed 5 targeted test cases with 100% success rate. All endpoints working correctly: 1) GET /api/cameras/catalog returns 46 cameras with all required fields, 2) POST /api/auth/login works with chicagotest/sZyE8cDFk credentials, 3) POST /api/playbook/authorize works with Atlanta camera ID 699894a055761e18195294e3 (both with/without auth), returns proper HLS URLs from media01.railstream.net, 4) POST /api/playback/web-authorize works with FOS-WEST camera, returns edge_base and wms_auth. All API calls properly use X-API-Key header. No critical issues found."
+  - agent: "main"
+    message: "NEW: Added 3 Studio integration endpoints. 1) GET /api/studio/sites - authenticates with studio.railstream.net (env: STUDIO_USERNAME=WebAPP_RS$, STUDIO_PASSWORD in .env), fetches site health data, returns sanitized data (no passwords/IPs). Response: {ok:true, sites:[...]} with 19 sites each having health info. 2) GET /api/studio/thumbnail?id=SITE_ID - serves live JPEG preview images. 3) GET /api/studio/thumbnails-map - builds mapping from catalog camera IDs to studio site IDs. All verified working via curl on localhost. Studio credentials must be present in .env for tests to work."
+  - agent: "testing"
+    message: "✅ STUDIO API TESTING COMPLETE: Conducted comprehensive testing of all 3 Studio integration endpoints as requested. Created backend_test_studio.py and executed 5 test cases with 100% success rate. All endpoints working perfectly: 1) GET /api/studio/sites returns {ok:true, sites:[...], cached_at} with exactly 19 sites, each having all required fields (id, name, location, health with status, stream_status, uptime_seconds, video_bitrate, fps, cpu_usage, etc.), 2) GET /api/studio/thumbnail?id=SITE_ID returns live JPEG images (42KB binary data), fallback 1x1 GIF for invalid IDs, 400 error for missing id parameter, 3) GET /api/studio/thumbnails-map returns {ok:true, mapping, available_thumbnails} with 19 mapping entries from catalog camera IDs to studio site IDs. Studio authentication and 5-second caching working correctly. All specifications from review request met exactly."
