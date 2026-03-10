@@ -94,7 +94,7 @@ const storage = {
 // ============================================
 // VIDEO PLAYER COMPONENTS
 // ============================================
-import RailStreamPlayer, { BackgroundVideoPlayer } from '@/components/RailStreamPlayer';
+import HlsPlayer, { buildStreamUrl } from '@/components/HlsPlayer';
 
 // ============================================
 // NAVIGATION
@@ -1103,14 +1103,13 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                           </div>
                         </div>
                       ) : state.data?.hls_url ? (
-                        <RailStreamPlayer
-                          cameraId={camera.cam_id}
-                          hlsUrl={state.data.hls_url}
-                          viewMode={selectedCameras.filter(Boolean).length === 1 ? 'single' : selectedCameras.filter(Boolean).length === 2 ? 'dual' : selectedCameras.filter(Boolean).length <= 4 ? 'quad' : 'nine'}
-                          className="w-full h-full object-contain bg-black"
+                        <HlsPlayer
+                          src={state.data.hls_url}
+                          className="w-full h-full"
                           muted={isMuted || i > 0}
                           autoPlay={true}
-                          controls={i === 0}
+                          controls={true}
+                          poster={camera.thumbnail_path || null}
                         />
                       ) : null}
                       
@@ -1621,13 +1620,32 @@ export default function App() {
     setSelectedCameras(newCameras);
     setPlaybackStates(prev => ({ ...prev, [slotIndex]: { loading: true, data: null, error: null } }));
     try {
-      const data = await clientApi.authorizePlayback(camera._id);
-      if (data.ok && data.hls_url) {
-        setPlaybackStates(prev => ({ ...prev, [slotIndex]: { loading: false, data, error: null } }));
+      // Use web-authorize which returns edge_base + wms_auth
+      const res = await fetch('/api/playback/web-authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ camera_id: camera.short_code || camera._id }),
+      });
+      const data = await res.json();
+      if (data.ok && data.edge_base && data.wms_auth) {
+        // Build the full HLS URL
+        const hlsUrl = buildStreamUrl(data.edge_base, data.wms_auth, 0, 7200);
+        setPlaybackStates(prev => ({
+          ...prev,
+          [slotIndex]: {
+            loading: false,
+            data: { ...data, hls_url: hlsUrl },
+            error: null,
+          },
+        }));
       } else {
-        setPlaybackStates(prev => ({ ...prev, [slotIndex]: { loading: false, data: null, error: data.detail || 'Unable to load' } }));
+        setPlaybackStates(prev => ({
+          ...prev,
+          [slotIndex]: { loading: false, data: null, error: data.error || 'Unable to authorize stream' },
+        }));
       }
-    } catch {
+    } catch (err) {
+      console.error('loadCamera error:', err);
       setPlaybackStates(prev => ({ ...prev, [slotIndex]: { loading: false, data: null, error: 'Connection error' } }));
     }
   };
