@@ -23,6 +23,7 @@ import {
   Radio,
   Grid2X2,
   Grid3X3,
+  LayoutGrid,
   Square,
   Columns2,
   MessageCircle,
@@ -75,6 +76,7 @@ const VIEW_MODES = [
   { id: 'dual', label: '2', icon: Columns2, slots: 2 },
   { id: 'quad', label: '4', icon: Grid2X2, slots: 4 },
   { id: 'nine', label: '9', icon: Grid3X3, slots: 9 },
+  { id: 'sixteen', label: '16', icon: LayoutGrid, slots: 16 },
 ];
 
 // Local Storage
@@ -989,6 +991,30 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   const [chatOpen, setChatOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
+  const [focusedSlot, setFocusedSlot] = useState(null); // For click-to-fullscreen
+
+  // Click a tile in multi-view to expand it to fullscreen single view
+  const handleTileFocus = (slotIndex) => {
+    if (viewMode !== 'single' && selectedCameras[slotIndex]) {
+      setFocusedSlot(slotIndex);
+    }
+  };
+
+  // Return from focused single view back to the grid
+  const handleUnfocus = () => {
+    setFocusedSlot(null);
+  };
+
+  // Keyboard: Escape unfocuses
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.key === 'Escape' && focusedSlot !== null) {
+        setFocusedSlot(null);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [focusedSlot]);
 
   const handleSelectCamera = (camera) => {
     const slot = selectedCameras.findIndex(c => !c);
@@ -1020,6 +1046,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
     dual: 'grid-cols-2 grid-rows-1',
     quad: 'grid-cols-2 grid-rows-2',
     nine: 'grid-cols-3 grid-rows-3',
+    sixteen: 'grid-cols-4 grid-rows-4',
   }[viewMode];
 
   const slots = VIEW_MODES.find(m => m.id === viewMode)?.slots || 1;
@@ -1103,29 +1130,70 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
 
         {/* Video Grid */}
         <div className="flex-1 flex min-h-0">
+          {/* Focused single-camera fullscreen view */}
+          {focusedSlot !== null && selectedCameras[focusedSlot] ? (
+            <div className="flex-1 relative bg-black">
+              {(() => {
+                const camera = selectedCameras[focusedSlot];
+                const state = playbackStates[focusedSlot] || {};
+                return (
+                  <>
+                    {state.data?.hls_url ? (
+                      <HlsPlayer
+                        src={state.data.hls_url}
+                        className="w-full h-full"
+                        muted={isMuted}
+                        autoPlay={true}
+                        controls={true}
+                        viewMode="single"
+                        dvrDays={state.data.dvr_days || 7}
+                        cameraName={camera.name || ''}
+                        cameraLocation={camera.location || ''}
+                        poster={camera.thumbnail_path || null}
+                      />
+                    ) : state.loading ? (
+                      <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="w-10 h-10 text-[#ff7a00] animate-spin" /></div>
+                    ) : null}
+                    <button
+                      onClick={handleUnfocus}
+                      className="absolute top-4 left-4 z-40 flex items-center gap-2 px-4 py-2 rounded-lg bg-black/70 hover:bg-black/90 border border-white/20 text-white text-sm font-medium transition-all backdrop-blur-sm"
+                    >
+                      <Grid2X2 className="w-4 h-4" />
+                      Back to Grid
+                    </button>
+                    <div className="absolute top-4 right-4 z-40 px-3 py-1.5 rounded-lg bg-black/70 text-white text-sm backdrop-blur-sm border border-white/10">
+                      {camera.name}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          ) : (
           <div className={`flex-1 grid ${gridClass} gap-1 p-1 bg-black`}>
             {Array.from({ length: slots }).map((_, i) => {
               const camera = selectedCameras[i];
               const state = playbackStates[i] || {};
+              const isCompact = viewMode === 'nine' || viewMode === 'sixteen';
               
               return (
                 <div 
                   key={i} 
-                  className="relative bg-zinc-900 rounded overflow-hidden group"
+                  className={`relative bg-zinc-900 rounded overflow-hidden group ${camera && viewMode !== 'single' ? 'cursor-pointer' : ''}`}
                   role="region"
                   aria-label={camera ? `Camera ${i + 1}: ${camera.name}` : `Empty slot ${i + 1}`}
+                  onDoubleClick={() => handleTileFocus(i)}
                 >
                   {camera ? (
                     <>
                       {state.loading ? (
                         <div className="absolute inset-0 flex items-center justify-center bg-black">
-                          <Loader2 className="w-10 h-10 text-[#ff7a00] animate-spin" />
+                          <Loader2 className={`${isCompact ? 'w-6 h-6' : 'w-10 h-10'} text-[#ff7a00] animate-spin`} />
                         </div>
                       ) : state.error ? (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/90">
-                          <div className="text-center p-4">
-                            <X className="w-10 h-10 text-red-400 mx-auto mb-2" aria-hidden="true" />
-                            <p className="text-white">{state.error}</p>
+                          <div className="text-center p-2">
+                            <X className={`${isCompact ? 'w-5 h-5' : 'w-10 h-10'} text-red-400 mx-auto mb-1`} aria-hidden="true" />
+                            <p className={`text-white ${isCompact ? 'text-[10px]' : 'text-sm'}`}>{state.error}</p>
                           </div>
                         </div>
                       ) : state.data?.hls_url ? (
@@ -1134,7 +1202,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                           className="w-full h-full"
                           muted={isMuted || i > 0}
                           autoPlay={true}
-                          controls={true}
+                          controls={!isCompact}
                           viewMode={viewMode}
                           dvrDays={state.data.dvr_days || 7}
                           cameraName={camera.name || ''}
@@ -1143,28 +1211,36 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                         />
                       ) : null}
                       
-                      <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* Camera label + expand button */}
+                      <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity ${isCompact ? 'p-1' : 'p-2'}`}>
                         <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-white text-sm font-medium truncate">{camera.name}</p>
-                            <p className="text-white/70 text-xs truncate">{camera.location}</p>
+                          <div className="min-w-0">
+                            <p className={`text-white font-medium truncate ${isCompact ? 'text-[10px]' : 'text-sm'}`}>{camera.name}</p>
+                            {!isCompact && <p className="text-white/70 text-xs truncate">{camera.location}</p>}
                           </div>
-                          {camera.status === 'online' && (
-                            <Badge className="bg-red-600 text-white text-xs">LIVE</Badge>
+                          {viewMode !== 'single' && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleTileFocus(i); }}
+                              className={`flex-shrink-0 p-1 rounded bg-[#ff7a00]/80 hover:bg-[#ff7a00] text-white transition ${isCompact ? 'ml-1' : 'ml-2'}`}
+                              title="Expand to fullscreen"
+                            >
+                              <Monitor className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'}`} />
+                            </button>
                           )}
                         </div>
                       </div>
                       
                       <button
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           const newCameras = [...selectedCameras];
                           newCameras[i] = null;
                           setSelectedCameras(newCameras);
                         }}
-                        className="absolute top-2 right-2 p-1.5 rounded bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                        className={`absolute top-1 right-1 rounded bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity ${isCompact ? 'p-0.5' : 'p-1.5'}`}
                         aria-label={`Remove ${camera.name}`}
                       >
-                        <X className="w-4 h-4" />
+                        <X className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'}`} />
                       </button>
                     </>
                   ) : (
@@ -1174,10 +1250,10 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                       aria-label="Add camera to this slot"
                     >
                       <div className="text-center">
-                        <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-2">
-                          <Play className="w-6 h-6 text-white/30" />
+                        <div className={`${isCompact ? 'w-8 h-8' : 'w-12 h-12'} rounded-full bg-white/5 flex items-center justify-center mx-auto mb-1`}>
+                          <Play className={`${isCompact ? 'w-4 h-4' : 'w-6 h-6'} text-white/30`} />
                         </div>
-                        <p className="text-white/30 text-sm">Click to add camera</p>
+                        {!isCompact && <p className="text-white/30 text-sm">Click to add camera</p>}
                       </div>
                     </button>
                   )}
@@ -1185,6 +1261,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
               );
             })}
           </div>
+          )}
 
           {/* Chat Panel */}
           {chatOpen && (
@@ -1617,7 +1694,7 @@ export default function App() {
   const [loginOpen, setLoginOpen] = useState(false);
   
   const [viewMode, setViewMode] = useState('single');
-  const [selectedCameras, setSelectedCameras] = useState([null, null, null, null, null, null, null, null, null]);
+  const [selectedCameras, setSelectedCameras] = useState([null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]);
   const [playbackStates, setPlaybackStates] = useState({});
   const [favorites, setFavorites] = useState([]);
   const [presets, setPresets] = useState([]);

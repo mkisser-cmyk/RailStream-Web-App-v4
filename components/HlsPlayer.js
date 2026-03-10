@@ -30,6 +30,7 @@ const QUALITY_CAP = {
   dual: 1,      // Cap at 720p (level index 1)
   quad: 1,      // Cap at 720p
   nine: 2,      // Cap at 540p (level index 2)
+  sixteen: 3,   // Cap at 360p (level index 3, lowest)
 };
 
 // ── Block sizes for Review Ops ──
