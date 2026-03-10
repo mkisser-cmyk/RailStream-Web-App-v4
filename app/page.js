@@ -1232,14 +1232,17 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPickerOpen(!pickerOpen)}
-              className={`p-2 rounded-lg transition ${pickerOpen ? 'bg-white/10 text-white' : 'text-white hover:bg-white/5'}`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${pickerOpen ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'}`}
               aria-label={pickerOpen ? 'Hide camera list' : 'Show camera list'}
             >
-              <ChevronLeft className={`w-4 h-4 transition-transform ${!pickerOpen ? 'rotate-180' : ''}`} />
+              <Camera className="w-4 h-4" />
+              <span className="hidden sm:inline">{pickerOpen ? 'Hide Cameras' : 'Show Cameras'}</span>
+              <ChevronLeft className={`w-3 h-3 transition-transform ${!pickerOpen ? 'rotate-180' : ''}`} />
             </button>
             
-            <div className="h-6 w-px bg-white/10 mx-2" aria-hidden="true" />
+            <div className="h-6 w-px bg-white/10 mx-1" aria-hidden="true" />
             
+            {/* View mode selector with labels */}
             <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1" role="group" aria-label="View mode">
               {VIEW_MODES.map(mode => {
                 const needsUpgrade = (mode.id !== 'single') && (!user || user.membership_tier === 'fireman');
@@ -1248,14 +1251,15 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                     key={mode.id}
                     onClick={() => !needsUpgrade && setViewMode(mode.id)}
                     disabled={needsUpgrade}
-                    className={`relative p-2 rounded transition-all ${
-                      viewMode === mode.id ? 'bg-[#ff7a00] text-white' : needsUpgrade ? 'text-white/20' : 'text-white hover:bg-white/10'
+                    className={`relative flex items-center gap-1 px-2 py-1.5 rounded transition-all text-xs font-medium ${
+                      viewMode === mode.id ? 'bg-[#ff7a00] text-white' : needsUpgrade ? 'text-white/20' : 'text-white/70 hover:bg-white/10 hover:text-white'
                     }`}
                     aria-label={`${mode.label} camera view${needsUpgrade ? ' (upgrade required)' : ''}`}
                     aria-pressed={viewMode === mode.id}
                   >
-                    <mode.icon className="w-4 h-4" />
-                    {needsUpgrade && <Lock className="w-2 h-2 absolute top-1 right-1 text-white/40" aria-hidden="true" />}
+                    <mode.icon className="w-3.5 h-3.5" />
+                    <span className="hidden md:inline">{mode.label}</span>
+                    {needsUpgrade && <Lock className="w-2.5 h-2.5 text-white/40" aria-hidden="true" />}
                   </button>
                 );
               })}
@@ -1292,7 +1296,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                 aria-label="Review Ops - DVR Rewind"
               >
                 <Clock className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Review Ops</span>
+                <span>Review Ops</span>
                 {!isHighTier && user && <Lock className="w-3 h-3 ml-0.5" />}
               </button>
             )}
@@ -1301,20 +1305,21 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsMuted(!isMuted)}
-              className={`p-2 rounded-lg transition ${isMuted ? 'text-red-400' : 'text-white hover:bg-white/10'}`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${isMuted ? 'text-red-400 bg-red-500/10' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}
               aria-label={isMuted ? 'Unmute' : 'Mute'}
             >
               {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              <span className="hidden sm:inline">{isMuted ? 'Unmute' : 'Sound'}</span>
             </button>
             
             <button
               onClick={() => setChatOpen(!chatOpen)}
-              className={`p-2 rounded-lg transition flex items-center gap-2 ${chatOpen ? 'bg-[#ff7a00] text-white' : 'text-white hover:bg-white/10'}`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${chatOpen ? 'bg-[#ff7a00] text-white' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}
               aria-label={chatOpen ? 'Close chat' : 'Open chat'}
               aria-expanded={chatOpen}
             >
               <MessageCircle className="w-4 h-4" />
-              <span className="text-sm hidden sm:inline">Chat</span>
+              <span className="hidden sm:inline">Chat</span>
             </button>
           </div>
         </div>
