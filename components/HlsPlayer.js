@@ -493,6 +493,7 @@ export default function HlsPlayer({
         ref={videoRef}
         className="w-full h-full object-contain"
         playsInline
+        crossOrigin="anonymous"
         muted={isMuted}
         poster={poster || undefined}
         style={{ backgroundColor: '#000' }}
@@ -593,7 +594,7 @@ export default function HlsPlayer({
           )}
 
           {/* Controls Row */}
-          <div className="relative px-4 py-2 flex items-center gap-2">
+          <div className="relative px-4 py-2 flex items-center gap-1.5">
             {/* Play/Pause */}
             <button onClick={togglePlay} className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors" aria-label={isPlaying ? 'Pause' : 'Play'}>
               {isPlaying ? (
@@ -601,6 +602,41 @@ export default function HlsPlayer({
               ) : (
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
               )}
+            </button>
+
+            {/* Rewind 10s */}
+            <button
+              onClick={() => {
+                if (videoRef.current) {
+                  videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
+                }
+              }}
+              className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors"
+              aria-label="Rewind 10 seconds"
+              title="Rewind 10 seconds"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12.5 3C7.81 3 4.01 6.54 3.61 11H1l3.89 3.89.07.14L9 11H6.63C7.03 7.86 9.49 5.4 12.5 5.4c3.31 0 6 2.69 6 6s-2.69 6-6 6c-1.66 0-3.16-.67-4.24-1.76l-1.42 1.42C8.28 18.5 10.29 19.4 12.5 19.4c4.42 0 8-3.58 8-8s-3.58-8-8-8z"/>
+                <text x="10.5" y="14.5" fontSize="7.5" fontWeight="bold" textAnchor="middle" fill="currentColor">10</text>
+              </svg>
+            </button>
+
+            {/* Forward 10s */}
+            <button
+              onClick={() => {
+                if (videoRef.current) {
+                  const max = videoRef.current.duration || Infinity;
+                  videoRef.current.currentTime = Math.min(max, videoRef.current.currentTime + 10);
+                }
+              }}
+              className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors"
+              aria-label="Forward 10 seconds"
+              title="Forward 10 seconds"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M11.5 3c4.69 0 8.49 3.54 8.89 8H23l-3.89 3.89-.07.14L15 11h2.37C16.97 7.86 14.51 5.4 11.5 5.4c-3.31 0-6 2.69-6 6s2.69 6 6 6c1.66 0 3.16-.67 4.24-1.76l1.42 1.42C15.72 18.5 13.71 19.4 11.5 19.4c-4.42 0-8-3.58-8-8s3.58-8 8-8z"/>
+                <text x="13.5" y="14.5" fontSize="7.5" fontWeight="bold" textAnchor="middle" fill="currentColor">10</text>
+              </svg>
             </button>
 
             {/* Live / Back to Live */}
@@ -636,6 +672,7 @@ export default function HlsPlayer({
                   onClick={() => setShowAudioMenu(!showAudioMenu)}
                   className={`p-1.5 rounded-lg hover:bg-white/10 transition-colors ${showAudioMenu ? 'bg-white/10 text-[#ff7a00]' : 'text-white'}`}
                   aria-label="Audio tracks"
+                  title="Audio tracks"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
@@ -668,9 +705,9 @@ export default function HlsPlayer({
               </div>
             )}
 
-            {/* Volume */}
+            {/* Volume with hover slider */}
             <div className="flex items-center gap-1 group/vol">
-              <button onClick={toggleMute} className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors" aria-label={isMuted ? 'Unmute' : 'Mute'}>
+              <button onClick={toggleMute} className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors" aria-label={isMuted ? 'Unmute' : 'Mute'} title={isMuted ? 'Unmute' : 'Mute'}>
                 {isMuted || volume === 0 ? (
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
@@ -693,8 +730,46 @@ export default function HlsPlayer({
               />
             </div>
 
+            {/* Snapshot */}
+            <button
+              onClick={() => {
+                if (!videoRef.current) return;
+                try {
+                  const video = videoRef.current;
+                  const canvas = document.createElement('canvas');
+                  canvas.width = video.videoWidth;
+                  canvas.height = video.videoHeight;
+                  const ctx = canvas.getContext('2d');
+                  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                  // Add watermark
+                  ctx.font = 'bold 16px sans-serif';
+                  ctx.fillStyle = 'rgba(255, 122, 0, 0.7)';
+                  ctx.textAlign = 'right';
+                  ctx.fillText('RailStream.net', canvas.width - 12, canvas.height - 12);
+                  // Add camera name
+                  ctx.textAlign = 'left';
+                  ctx.fillText(cameraName || 'RailStream', 12, canvas.height - 12);
+                  // Download
+                  const link = document.createElement('a');
+                  link.download = `railstream-${(cameraName || 'snapshot').replace(/[^a-z0-9]/gi, '-')}-${new Date().toISOString().slice(0,19).replace(/[T:]/g,'-')}.jpg`;
+                  link.href = canvas.toDataURL('image/jpeg', 0.92);
+                  link.click();
+                } catch (e) {
+                  console.error('Snapshot failed:', e);
+                }
+              }}
+              className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors"
+              aria-label="Take snapshot"
+              title="Capture snapshot"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
+              </svg>
+            </button>
+
             {/* Fullscreen */}
-            <button onClick={toggleFullscreen} className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors" aria-label="Fullscreen">
+            <button onClick={toggleFullscreen} className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors" aria-label="Fullscreen" title="Fullscreen">
               {isFullscreen ? (
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
