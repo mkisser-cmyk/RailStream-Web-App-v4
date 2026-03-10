@@ -1169,12 +1169,29 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   const [chatOpen, setChatOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
+  const [mutedSlots, setMutedSlots] = useState({}); // { slotIndex: true/false } — per-slot mute state
   const [focusedSlot, setFocusedSlot] = useState(null); // For click-to-fullscreen
   const [targetSlot, setTargetSlot] = useState(null); // For pick-where-to-place
   const [reviewOpsCounter, setReviewOpsCounter] = useState(0); // Trigger Review Ops in player
 
   const isHighTier = user && (user.membership_tier === 'conductor' || user.membership_tier === 'engineer');
   const canReviewOps = isHighTier && viewMode === 'single' && selectedCameras[0];
+
+  // Per-slot mute: check if a slot is muted
+  const isSlotMuted = (slotIndex) => {
+    // Global mute overrides everything
+    if (isMuted) return true;
+    // Per-slot mute state (default: slot 0 unmuted, others muted)
+    if (mutedSlots[slotIndex] !== undefined) return mutedSlots[slotIndex];
+    return slotIndex > 0; // Default: only slot 0 has sound
+  };
+
+  const toggleSlotMute = (slotIndex) => {
+    setMutedSlots(prev => ({
+      ...prev,
+      [slotIndex]: !isSlotMuted(slotIndex),
+    }));
+  };
 
   // Click a tile in multi-view to expand it to fullscreen single view
   const handleTileFocus = (slotIndex) => {
@@ -1357,9 +1374,14 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setIsMuted(!isMuted)}
+              onClick={() => {
+                const newMuted = !isMuted;
+                setIsMuted(newMuted);
+                // When unmuting globally, clear per-slot overrides so slot 0 gets sound
+                if (!newMuted) setMutedSlots({});
+              }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${isMuted ? 'text-red-400 bg-red-500/10' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}
-              aria-label={isMuted ? 'Unmute' : 'Mute'}
+              aria-label={isMuted ? 'Unmute all' : 'Mute all'}
             >
               {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
               <span className="hidden sm:inline">{isMuted ? 'Unmute' : 'Sound'}</span>
@@ -1391,7 +1413,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                       <HlsPlayer
                         src={state.data.hls_url}
                         className="w-full h-full"
-                        muted={isMuted}
+                        muted={isSlotMuted(focusedSlot)}
                         autoPlay={true}
                         controls={true}
                         viewMode="single"
@@ -1451,7 +1473,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                         <HlsPlayer
                           src={state.data.hls_url}
                           className="w-full h-full"
-                          muted={isMuted || i > 0}
+                          muted={isSlotMuted(i)}
                           autoPlay={true}
                           controls={!isCompact}
                           viewMode={viewMode}
@@ -1463,6 +1485,25 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                           hideReviewButton={true}
                         />
                       ) : null}
+                      
+                      {/* Per-tile mute button */}
+                      {camera && state?.data?.hls_url && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleSlotMute(i); }}
+                          className={`absolute ${isCompact ? 'top-0.5 left-0.5 p-0.5' : 'top-2 left-2 p-1.5'} rounded-md transition-all z-10 ${
+                            isSlotMuted(i)
+                              ? 'bg-black/60 text-white/50 hover:text-white hover:bg-black/80'
+                              : 'bg-[#ff7a00]/80 text-white hover:bg-[#ff7a00]'
+                          }`}
+                          title={isSlotMuted(i) ? `Unmute ${camera.name}` : `Mute ${camera.name}`}
+                          aria-label={isSlotMuted(i) ? `Unmute ${camera.name}` : `Mute ${camera.name}`}
+                        >
+                          {isSlotMuted(i) 
+                            ? <VolumeX className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'}`} /> 
+                            : <Volume2 className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'}`} />
+                          }
+                        </button>
+                      )}
                       
                       {/* Camera label + expand button */}
                       <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity ${isCompact ? 'p-1' : 'p-2'}`}>
