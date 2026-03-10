@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import SiteHeader from '@/components/SiteHeader';
 import { 
   CheckCircle, XCircle, AlertCircle, RefreshCw, Wifi, 
-  Clock, Camera, MapPin, Shield, Signal, Cpu, Activity,
-  Monitor, Zap, AlertTriangle, ChevronDown, ChevronUp
+  Clock, Camera, MapPin, Shield, Signal, Cpu,
+  Monitor, Zap, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 function formatUptime(seconds) {
@@ -151,13 +151,11 @@ export default function StatusPage() {
           </div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
             <StatCard icon={Camera} label="Total Encoders" value={totalSites} color="text-white" />
             <StatCard icon={Wifi} label="Online" value={onlineCount} color="text-emerald-400" />
             <StatCard icon={XCircle} label="Offline" value={offlineCount} color="text-red-400" />
             <StatCard icon={Signal} label="Network Uptime" value={`${uptimePercent}%`} color="text-[#ff7a00]" />
-            <StatCard icon={Activity} label="Avg Bitrate" value={formatBitrate(avgBitrate)} color="text-blue-400" />
-            <StatCard icon={AlertTriangle} label="Dropped Frames" value={totalDroppedFrames.toLocaleString()} color="text-yellow-400" />
           </div>
 
           {/* Filters */}
