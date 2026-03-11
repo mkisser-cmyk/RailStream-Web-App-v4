@@ -5,7 +5,9 @@ export const metadata = {
   title: 'RailStream - Live Train Cameras',
   description: 'Watch live train cameras from across North America. Premium railfan streaming experience.',
   icons: {
-    icon: '/favicon.ico',
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
   },
 };
 

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="6" fill="#1a1a1a"/>
+  <g transform="translate(4, 6)">
+    <!-- Rail tracks -->
+    <rect x="2" y="18" width="20" height="2" rx="1" fill="#ff7a00"/>
+    <rect x="5" y="16" width="2" height="4" fill="#ff7a00"/>
+    <rect x="11" y="16" width="2" height="4" fill="#ff7a00"/>
+    <rect x="17" y="16" width="2" height="4" fill="#ff7a00"/>
+    <!-- Train body -->
+    <rect x="3" y="8" width="16" height="8" rx="2" fill="#ff7a00"/>
+    <!-- Windshield -->
+    <rect x="14" y="10" width="4" height="4" rx="1" fill="#1a1a1a"/>
+    <!-- Headlight -->
+    <circle cx="19.5" cy="14" r="1" fill="#ffcc00"/>
+    <!-- Smokestack -->
+    <rect x="6" y="4" width="3" height="4" rx="1" fill="#ff7a00"/>
+    <!-- Smoke puffs -->
+    <circle cx="7.5" cy="2.5" r="1.5" fill="#ff7a00" opacity="0.6"/>
+    <circle cx="10" cy="1.5" r="1" fill="#ff7a00" opacity="0.4"/>
+  </g>
+</svg>
