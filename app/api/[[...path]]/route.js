@@ -26,6 +26,21 @@ let studioSitesCache = { data: null, thumbnails: {}, fetchedAt: 0 };
 const thumbCache = new Map();
 const THUMB_CACHE_MAX = 500;
 
+// MongoDB connection pool (reuse across requests)
+let mongoClient = null;
+async function getMongoDb() {
+  if (!mongoClient) {
+    mongoClient = new MongoClient(MONGO_URL);
+    await mongoClient.connect();
+  }
+  return mongoClient.db();
+}
+
+// Railroad options for validation
+const RAILROADS = ['CSX', 'NS', 'UP', 'BNSF', 'CN', 'CP', 'KCS', 'Amtrak', 'NKP', 'SOO', 'IC', 'WC', 'Other'];
+const TRAIN_TYPES = ['Intermodal', 'Manifest', 'Coal', 'Grain', 'Auto', 'Passenger', 'Local', 'Work Train', 'Light Power', 'Other'];
+const DIRECTIONS = ['Eastbound', 'Westbound', 'Northbound', 'Southbound'];
+
 // Helper function to handle CORS
 function handleCORS(response) {
   response.headers.set('Access-Control-Allow-Origin', process.env.CORS_ORIGINS || '*');
@@ -822,6 +837,226 @@ async function handleRoute(request, { params }) {
             'Access-Control-Allow-Origin': '*',
           },
         });
+      }
+    }
+
+    // ════════════════════════════════════════════
+    // ── Train Sightings Log API ──
+    // ════════════════════════════════════════════
+
+    // GET /api/sightings — List sightings (public, filterable)
+    if (route === '/sightings' && method === 'GET') {
+      try {
+        const url = new URL(request.url);
+        const camera_id = url.searchParams.get('camera_id');
+        const date = url.searchParams.get('date'); // YYYY-MM-DD
+        const railroad = url.searchParams.get('railroad');
+        const page = parseInt(url.searchParams.get('page') || '1', 10);
+        const limit = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 100);
+
+        const db = await getMongoDb();
+        const col = db.collection('train_sightings');
+
+        const query = {};
+        if (camera_id) query.camera_id = camera_id;
+        if (railroad) query.railroad = railroad;
+        if (date) {
+          const dayStart = new Date(date + 'T00:00:00Z');
+          const dayEnd = new Date(date + 'T23:59:59Z');
+          query.sighting_time = { $gte: dayStart.toISOString(), $lte: dayEnd.toISOString() };
+        }
+
+        const total = await col.countDocuments(query);
+        const sightings = await col
+          .find(query)
+          .sort({ sighting_time: -1 })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .toArray();
+
+        return handleCORS(NextResponse.json({
+          ok: true,
+          sightings,
+          total,
+          page,
+          pages: Math.ceil(total / limit),
+        }));
+      } catch (error) {
+        console.error('Sightings list error:', error);
+        return handleCORS(NextResponse.json({ error: 'Failed to fetch sightings' }, { status: 500 }));
+      }
+    }
+
+    // GET /api/sightings/stats — Quick stats
+    if (route === '/sightings/stats' && method === 'GET') {
+      try {
+        const db = await getMongoDb();
+        const col = db.collection('train_sightings');
+        
+        const today = new Date().toISOString().slice(0, 10);
+        const todayStart = today + 'T00:00:00Z';
+        const todayEnd = today + 'T23:59:59Z';
+
+        const [totalAll, totalToday, topRailroads, topLocations] = await Promise.all([
+          col.countDocuments({}),
+          col.countDocuments({ sighting_time: { $gte: todayStart, $lte: todayEnd } }),
+          col.aggregate([
+            { $group: { _id: '$railroad', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 10 },
+          ]).toArray(),
+          col.aggregate([
+            { $group: { _id: '$camera_name', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 10 },
+          ]).toArray(),
+        ]);
+
+        return handleCORS(NextResponse.json({
+          ok: true,
+          total: totalAll,
+          today: totalToday,
+          top_railroads: topRailroads.map(r => ({ name: r._id, count: r.count })),
+          top_locations: topLocations.map(l => ({ name: l._id, count: l.count })),
+        }));
+      } catch (error) {
+        console.error('Sightings stats error:', error);
+        return handleCORS(NextResponse.json({ error: 'Failed to fetch stats' }, { status: 500 }));
+      }
+    }
+
+    // POST /api/sightings — Create a sighting (paid members only)
+    if (route === '/sightings' && method === 'POST') {
+      const token = getToken(request);
+      if (!token) {
+        return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }));
+      }
+
+      // Verify user with main API
+      try {
+        const userRes = await fetch(`${API_BASE}/api/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'X-API-Key': API_KEY },
+        });
+        if (!userRes.ok) {
+          return handleCORS(NextResponse.json({ error: 'Invalid token' }, { status: 401 }));
+        }
+        const userData = await userRes.json();
+        const tier = userData.tier || userData.membership_tier || 'free';
+        const paidTiers = ['conductor', 'engineer', 'fireman', 'development', 'admin'];
+        if (!paidTiers.includes(tier) && !userData.is_admin) {
+          return handleCORS(NextResponse.json({ error: 'Paid membership required to log sightings' }, { status: 403 }));
+        }
+
+        const body = await request.json();
+        const { camera_id, camera_name, location, sighting_time, railroad, train_id, direction, locomotives, train_type, notes } = body;
+
+        if (!camera_id || !sighting_time || !railroad) {
+          return handleCORS(NextResponse.json({ error: 'camera_id, sighting_time, and railroad are required' }, { status: 400 }));
+        }
+
+        const db = await getMongoDb();
+        const sighting = {
+          _id: crypto.randomUUID(),
+          camera_id,
+          camera_name: camera_name || '',
+          location: location || '',
+          sighting_time,
+          railroad,
+          train_id: train_id || '',
+          direction: direction || '',
+          locomotives: locomotives || '',
+          train_type: train_type || '',
+          notes: notes || '',
+          user: userData.username || userData.name || 'Unknown',
+          user_tier: tier,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        await db.collection('train_sightings').insertOne(sighting);
+        return handleCORS(NextResponse.json({ ok: true, sighting }, { status: 201 }));
+      } catch (error) {
+        console.error('Sightings create error:', error);
+        return handleCORS(NextResponse.json({ error: 'Failed to create sighting' }, { status: 500 }));
+      }
+    }
+
+    // PUT /api/sightings/:id — Edit a sighting (own entries only)
+    if (route.startsWith('/sightings/') && method === 'PUT') {
+      const sightingId = route.split('/')[2];
+      const token = getToken(request);
+      if (!token) {
+        return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }));
+      }
+
+      try {
+        const userRes = await fetch(`${API_BASE}/api/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'X-API-Key': API_KEY },
+        });
+        if (!userRes.ok) {
+          return handleCORS(NextResponse.json({ error: 'Invalid token' }, { status: 401 }));
+        }
+        const userData = await userRes.json();
+
+        const db = await getMongoDb();
+        const col = db.collection('train_sightings');
+        const existing = await col.findOne({ _id: sightingId });
+        if (!existing) {
+          return handleCORS(NextResponse.json({ error: 'Sighting not found' }, { status: 404 }));
+        }
+        if (existing.user !== (userData.username || userData.name) && !userData.is_admin) {
+          return handleCORS(NextResponse.json({ error: 'You can only edit your own sightings' }, { status: 403 }));
+        }
+
+        const body = await request.json();
+        const updates = {};
+        const allowed = ['railroad', 'train_id', 'direction', 'locomotives', 'train_type', 'notes', 'sighting_time'];
+        for (const key of allowed) {
+          if (body[key] !== undefined) updates[key] = body[key];
+        }
+        updates.updated_at = new Date().toISOString();
+
+        await col.updateOne({ _id: sightingId }, { $set: updates });
+        const updated = await col.findOne({ _id: sightingId });
+        return handleCORS(NextResponse.json({ ok: true, sighting: updated }));
+      } catch (error) {
+        console.error('Sightings update error:', error);
+        return handleCORS(NextResponse.json({ error: 'Failed to update sighting' }, { status: 500 }));
+      }
+    }
+
+    // DELETE /api/sightings/:id — Delete a sighting (own entries or admin)
+    if (route.startsWith('/sightings/') && method === 'DELETE') {
+      const sightingId = route.split('/')[2];
+      const token = getToken(request);
+      if (!token) {
+        return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }));
+      }
+
+      try {
+        const userRes = await fetch(`${API_BASE}/api/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'X-API-Key': API_KEY },
+        });
+        if (!userRes.ok) {
+          return handleCORS(NextResponse.json({ error: 'Invalid token' }, { status: 401 }));
+        }
+        const userData = await userRes.json();
+
+        const db = await getMongoDb();
+        const col = db.collection('train_sightings');
+        const existing = await col.findOne({ _id: sightingId });
+        if (!existing) {
+          return handleCORS(NextResponse.json({ error: 'Sighting not found' }, { status: 404 }));
+        }
+        if (existing.user !== (userData.username || userData.name) && !userData.is_admin) {
+          return handleCORS(NextResponse.json({ error: 'You can only delete your own sightings' }, { status: 403 }));
+        }
+
+        await col.deleteOne({ _id: sightingId });
+        return handleCORS(NextResponse.json({ ok: true, deleted: sightingId }));
+      } catch (error) {
+        console.error('Sightings delete error:', error);
+        return handleCORS(NextResponse.json({ error: 'Failed to delete sighting' }, { status: 500 }));
       }
     }
 

@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { id: '15years', label: '🎉 15 Years', href: '/15years', special: true },
   { id: 'watch', label: 'Watch', href: '/?page=watch' },
   { id: 'cameras', label: 'Cameras', href: '/cameras' },
+  { id: 'sightings', label: 'Train Log', href: '/sightings' },
   { id: 'status', label: 'Status', href: '/network-status' },
   { id: 'host', label: 'Host', href: '/host' },
   { id: 'about', label: 'About', href: '/?page=about' },
@@ -45,7 +46,8 @@ export default function SiteHeader({ currentPage = '', user = null, onLogin, onL
               (item.id === 'cameras' && activePage === 'cameras') ||
               (item.id === '15years' && activePage === '15years') ||
               (item.id === 'host' && activePage === 'host') ||
-              (item.id === 'status' && activePage === 'network-status');
+              (item.id === 'status' && activePage === 'network-status') ||
+              (item.id === 'sightings' && activePage === 'sightings');
 
             return (
               <Link
