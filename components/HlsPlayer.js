@@ -320,11 +320,13 @@ export default function HlsPlayer({
 
   const MAX_RETRIES = 3;
 
-  // External trigger to open Review Ops modal
+  // External trigger to open Review Ops modal — only on actual increments, not on mount
+  const prevReviewOpsRef = useRef(openReviewOps);
   useEffect(() => {
-    if (openReviewOps > 0) {
+    if (openReviewOps > 0 && openReviewOps !== prevReviewOpsRef.current) {
       setShowReviewOps(true);
     }
+    prevReviewOpsRef.current = openReviewOps;
   }, [openReviewOps]);
 
   // Get stream base URL (without timeshift params) for Review Ops
