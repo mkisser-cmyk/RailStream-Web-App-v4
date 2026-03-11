@@ -315,6 +315,9 @@ export default function HlsPlayer({
   const thumbDebounceRef = useRef(null);
   const [dvrUrlOffset, setDvrUrlOffset] = useState(0); // DVR offset from URL for thumbnail timestamp calc
   const [hlsLatency, setHlsLatency] = useState(0); // HLS live edge latency in seconds
+  
+  // Reference point for accurate timestamp calculation (calibrated when stream starts at live edge)
+  const streamRefPoint = useRef(null); // { wallClock: Date.now(), seekEnd: seekableEnd }
 
   // Review Ops — default to 1 hour ago
   const [showReviewOps, setShowReviewOps] = useState(false);

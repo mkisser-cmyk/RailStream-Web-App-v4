@@ -6,7 +6,7 @@ Test authentication requirement for sightings creation using separate session
 import requests
 import json
 
-BASE_URL = "https://video-stream-web.preview.emergentagent.com"
+BASE_URL = "https://sighting-log-debug.preview.emergentagent.com"
 API_URL = f"{BASE_URL}/api"
 
 def test_auth_requirement():
