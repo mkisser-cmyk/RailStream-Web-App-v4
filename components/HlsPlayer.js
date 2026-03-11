@@ -690,6 +690,8 @@ export default function HlsPlayer({
   }, []);
 
   // ── Calibrate actual stream latency using thumbnail server ──
+  // Calculate stream name from src URL for thumbnail lookups (must be before any useEffect that references it)
+  const streamName = useMemo(() => extractStreamName(src), [src]);
   // Strategy:
   // 1. Try the server-side calibrate endpoint (fast, probes thumbnail directory directly)
   // 2. If that returns 'default' (no thumbnails accessible on server), fall back to
@@ -848,8 +850,6 @@ export default function HlsPlayer({
     v.currentTime = targetTime;
   };
 
-  // Calculate stream name from src URL for thumbnail lookups
-  const streamName = useMemo(() => extractStreamName(src), [src]);
 
   // ── Thumbnail hover on seek bar ──
   const handleSeekHover = useCallback((e) => {
