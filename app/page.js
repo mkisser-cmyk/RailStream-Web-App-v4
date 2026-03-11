@@ -1211,6 +1211,65 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   const [targetSlot, setTargetSlot] = useState(null); // For pick-where-to-place
   const [reviewOpsCounter, setReviewOpsCounter] = useState(0); // Trigger Review Ops in player
 
+  // Train sighting log
+  const [sightingForm, setSightingForm] = useState(null); // { imageData, sightingTime, cameraId, cameraName, cameraLocation }
+  const [sightingSubmitting, setSightingSubmitting] = useState(false);
+  const [sightingData, setSightingData] = useState({ railroad: '', train_id: '', direction: '', locomotives: '', train_type: '', notes: '' });
+
+  const RAILROADS = ['CSX', 'NS', 'UP', 'BNSF', 'CN', 'CP', 'KCS', 'Amtrak', 'Other'];
+  const TRAIN_TYPES = ['Intermodal', 'Manifest', 'Coal', 'Grain', 'Auto', 'Passenger', 'Local', 'Work Train', 'Light Power', 'Other'];
+  const DIRECTIONS = ['Eastbound', 'Westbound', 'Northbound', 'Southbound'];
+
+  const handleLogSighting = (camera, slotData) => {
+    setSightingForm({
+      imageData: slotData.imageData,
+      sightingTime: slotData.sightingTime,
+      cameraId: camera?._id || '',
+      cameraName: slotData.cameraName || camera?.name || '',
+      cameraLocation: slotData.cameraLocation || camera?.location || '',
+    });
+    setSightingData({ railroad: '', train_id: '', direction: '', locomotives: '', train_type: '', notes: '' });
+  };
+
+  const submitSighting = async (e) => {
+    e.preventDefault();
+    if (!sightingForm) return;
+    setSightingSubmitting(true);
+    const token = localStorage.getItem('railstream_token');
+    try {
+      // Create sighting first
+      const res = await fetch('/api/sightings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          camera_id: sightingForm.cameraId,
+          camera_name: sightingForm.cameraName,
+          location: sightingForm.cameraLocation,
+          sighting_time: sightingForm.sightingTime,
+          ...sightingData,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok && data.sighting && sightingForm.imageData) {
+        // Upload the snapshot image
+        await fetch('/api/sightings/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ image_data: sightingForm.imageData, sighting_id: data.sighting._id }),
+        });
+      }
+      if (data.ok) {
+        toast.success('Train sighting logged!');
+        setSightingForm(null);
+      } else {
+        toast.error(data.error || 'Failed to log sighting');
+      }
+    } catch (err) {
+      toast.error('Network error');
+    }
+    setSightingSubmitting(false);
+  };
+
   const isHighTier = user && (user.membership_tier === 'conductor' || user.membership_tier === 'engineer');
   const canReviewOps = isHighTier && viewMode === 'single' && selectedCameras[0];
 

@@ -10,7 +10,7 @@ import sys
 from typing import Dict, Any, Optional
 
 # Base URL from environment
-BASE_URL = "https://rail-player-dev.preview.emergentagent.com"
+BASE_URL = "https://dvr-modal-preview.preview.emergentagent.com"
 API_URL = f"{BASE_URL}/api"
 
 # Test credentials

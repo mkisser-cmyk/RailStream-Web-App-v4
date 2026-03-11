@@ -222,6 +222,7 @@ export default function HlsPlayer({
   cameraLocation = '',
   onPlaying,
   onError,
+  onLogSighting,
   className = '',
   poster = null,
   openReviewOps = 0,
@@ -856,16 +857,25 @@ export default function HlsPlayer({
 
             <div className="w-px h-5 bg-white/20 mx-1" />
 
-            {/* Live / Back to Live */}
+            {/* Live / Return to Live */}
             {!isReviewMode && (
               <button
                 onClick={jumpToLive}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors ${
-                  isLive ? 'bg-red-600 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
+                  isLive ? 'bg-red-600 text-white cursor-default' : 'bg-[#ff7a00] text-white hover:bg-[#ff8c20] cursor-pointer'
                 }`}
               >
-                <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-white animate-pulse' : 'bg-white/40'}`} />
-                LIVE
+                {isLive ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                    LIVE
+                  </>
+                ) : (
+                  <>
+                    <span className="text-base leading-none">↩</span>
+                    Return to Live
+                  </>
+                )}
               </button>
             )}
 
@@ -988,6 +998,53 @@ export default function HlsPlayer({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
               </svg>
             </button>
+
+            {/* Log Train Sighting (captures snapshot + opens form) */}
+            {onLogSighting && (
+              <button
+                onClick={() => {
+                  if (!videoRef.current) return;
+                  try {
+                    const video = videoRef.current;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    ctx.font = 'bold 16px sans-serif';
+                    ctx.fillStyle = 'rgba(255, 122, 0, 0.7)';
+                    ctx.textAlign = 'right';
+                    ctx.fillText('RailStream.net', canvas.width - 12, canvas.height - 12);
+                    ctx.textAlign = 'left';
+                    ctx.fillText(cameraName || 'RailStream', 12, canvas.height - 12);
+                    const imageData = canvas.toDataURL('image/jpeg', 0.92);
+                    // Calculate the current time offset from live
+                    const v = videoRef.current;
+                    let sightingTime = new Date().toISOString();
+                    if (v.seekable && v.seekable.length > 0) {
+                      const seekEnd = v.seekable.end(v.seekable.length - 1);
+                      const offset = seekEnd - v.currentTime;
+                      if (offset > 2) {
+                        sightingTime = new Date(Date.now() - offset * 1000).toISOString();
+                      }
+                    }
+                    onLogSighting({ imageData, sightingTime, cameraName, cameraLocation });
+                  } catch (e) {
+                    console.error('Log sighting snapshot failed:', e);
+                    onLogSighting({ imageData: null, sightingTime: new Date().toISOString(), cameraName, cameraLocation });
+                  }
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-[#ff7a00] hover:text-[#ff8c20] transition-colors text-sm font-semibold"
+                aria-label="Log train sighting"
+                title="Log a train sighting with snapshot"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 7.125L17.877 5.5" />
+                </svg>
+                Log
+              </button>
+            )}
 
             {/* Fullscreen */}
             <button onClick={toggleFullscreen} className="p-2 rounded-lg hover:bg-white/10 text-white transition-colors" aria-label="Fullscreen" title="Fullscreen">

@@ -887,6 +887,80 @@ async function handleRoute(request, { params }) {
       }
     }
 
+    // POST /api/sightings/upload — Upload a snapshot image for a sighting
+    if (route === '/sightings/upload' && method === 'POST') {
+      const token = getToken(request);
+      if (!token) {
+        return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }));
+      }
+
+      try {
+        const body = await request.json();
+        const { image_data, sighting_id } = body; // image_data is base64 JPEG
+
+        if (!image_data) {
+          return handleCORS(NextResponse.json({ error: 'image_data (base64) is required' }, { status: 400 }));
+        }
+
+        // Strip data URL prefix if present
+        const base64 = image_data.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64, 'base64');
+
+        // Save to filesystem
+        const fs = await import('fs/promises');
+        const path_mod = await import('path');
+        const uploadsDir = process.env.UPLOADS_PATH || path_mod.join(process.cwd(), 'uploads', 'sightings');
+        await fs.mkdir(uploadsDir, { recursive: true });
+
+        const filename = `${sighting_id || crypto.randomUUID()}.jpg`;
+        const filePath = path_mod.join(uploadsDir, filename);
+        await fs.writeFile(filePath, buffer);
+
+        const imageUrl = `/api/sightings/image/${filename}`;
+
+        // If sighting_id provided, update the sighting with the image URL
+        if (sighting_id) {
+          const db = await getMongoDb();
+          await db.collection('train_sightings').updateOne(
+            { _id: sighting_id },
+            { $set: { image_url: imageUrl, updated_at: new Date().toISOString() } }
+          );
+        }
+
+        return handleCORS(NextResponse.json({ ok: true, image_url: imageUrl, filename }));
+      } catch (error) {
+        console.error('Sighting upload error:', error);
+        return handleCORS(NextResponse.json({ error: 'Failed to upload image' }, { status: 500 }));
+      }
+    }
+
+    // GET /api/sightings/image/:filename — Serve a sighting snapshot image
+    if (route.startsWith('/sightings/image/') && method === 'GET') {
+      const filename = route.split('/sightings/image/')[1];
+      if (!filename || filename.includes('..') || filename.includes('/')) {
+        return handleCORS(NextResponse.json({ error: 'Invalid filename' }, { status: 400 }));
+      }
+
+      try {
+        const fs = await import('fs/promises');
+        const path_mod = await import('path');
+        const uploadsDir = process.env.UPLOADS_PATH || path_mod.join(process.cwd(), 'uploads', 'sightings');
+        const filePath = path_mod.join(uploadsDir, filename);
+        const imageData = await fs.readFile(filePath);
+
+        return new Response(imageData, {
+          status: 200,
+          headers: {
+            'Content-Type': 'image/jpeg',
+            'Cache-Control': 'public, max-age=86400',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+      } catch {
+        return new Response(null, { status: 404 });
+      }
+    }
+
     // GET /api/sightings/stats — Quick stats
     if (route === '/sightings/stats' && method === 'GET') {
       try {
