@@ -318,6 +318,7 @@ export default function HlsPlayer({
 
   // Review Ops — default to 1 hour ago
   const [showReviewOps, setShowReviewOps] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [isReviewMode, setIsReviewMode] = useState(false);
   const [reviewDay, setReviewDay] = useState(0); // 0 = today
   const [reviewHour, setReviewHour] = useState(() => {
@@ -1285,6 +1286,76 @@ export default function HlsPlayer({
                 </svg>
               )}
             </button>
+
+            {/* Help Button */}
+            {viewMode === 'single' && (
+              <button onClick={() => setShowHelp(!showHelp)} className={`p-2 rounded-lg transition-colors ${showHelp ? 'bg-[#ff7a00] text-white' : 'hover:bg-white/10 text-white/50 hover:text-white'}`} aria-label="Player help" title="Player controls guide">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Player Help Overlay ── */}
+      {showHelp && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/85 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setShowHelp(false); }}>
+          <div className="bg-[#1a1a1a]/95 border border-white/10 rounded-xl p-5 max-w-lg w-full mx-4 shadow-2xl max-h-[80%] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white text-lg font-bold">Player Controls</h3>
+              <button onClick={() => setShowHelp(false)} className="p-1 rounded-lg hover:bg-white/10 text-white/50 hover:text-white transition-colors">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+              <div className="col-span-2 text-[#ff7a00] font-bold text-xs uppercase tracking-wider mt-1 mb-1">Playback</div>
+              {[
+                ['⏸', 'Play / Pause'],
+                ['⏪ 10', 'Rewind 10 seconds'],
+                ['10 ⏩', 'Forward 10 seconds'],
+                ['🔴 Return to Live', 'Jump to live edge'],
+                ['🔍 Review Ops', 'Browse archived footage'],
+              ].map(([icon, label], i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-white/30 text-xs w-20 flex-shrink-0 font-mono">{icon}</span>
+                  <span className="text-white/70">{label}</span>
+                </div>
+              ))}
+
+              <div className="col-span-2 text-[#ff7a00] font-bold text-xs uppercase tracking-wider mt-3 mb-1">Audio & Video</div>
+              {[
+                ['🔊', 'Volume control'],
+                ['🎵 Audio', 'Switch microphone tracks'],
+                ['⛶', 'Toggle fullscreen'],
+              ].map(([icon, label], i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-white/30 text-xs w-20 flex-shrink-0 font-mono">{icon}</span>
+                  <span className="text-white/70">{label}</span>
+                </div>
+              ))}
+
+              <div className="col-span-2 text-[#ff7a00] font-bold text-xs uppercase tracking-wider mt-3 mb-1">Tools</div>
+              {[
+                ['📸', 'Capture snapshot'],
+                ['✏️ Log', 'Log a train sighting'],
+                ['📐 Timeline', 'Hover to see thumbnails'],
+                ['⭐ Favorites', 'Bookmark cameras'],
+              ].map(([icon, label], i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-white/30 text-xs w-20 flex-shrink-0 font-mono">{icon}</span>
+                  <span className="text-white/70">{label}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-white/5 text-center">
+              <a href="/features" target="_blank" className="text-[#ff7a00] text-xs font-medium hover:underline">
+                See all features →
+              </a>
+            </div>
           </div>
         </div>
       )}
