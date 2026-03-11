@@ -302,10 +302,8 @@ function SiteCard({ site, thumbKey, expanded, onToggle }) {
 
         {/* Quick Stats */}
         {isOnline && (
-          <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="flex justify-center mb-3">
             <MiniStat label="Uptime" value={formatUptime(h.uptime_seconds)} />
-            <MiniStat label="Bitrate" value={formatBitrate(h.video_bitrate)} />
-            <MiniStat label="CPU" value={`${h.cpu_usage.toFixed(1)}%`} alert={h.cpu_usage > 80} />
           </div>
         )}
 
@@ -332,17 +330,10 @@ function SiteCard({ site, thumbKey, expanded, onToggle }) {
         {expanded && (
           <div className="mt-2 pt-3 border-t border-white/5 space-y-2">
             <DetailRow label="Stream Status" value={h.stream_status} />
-            <DetailRow label="Heartbeat" value={timeAgo(h.last_heartbeat)} />
-            <DetailRow label="Video Bitrate" value={formatBitrate(h.video_bitrate)} />
-            <DetailRow label="Source Bitrate" value={formatBitrate(h.source_bitrate)} />
-            <DetailRow label="Audio Bitrate" value={formatBitrate(h.audio_bitrate)} />
-            <DetailRow label="FPS" value={`${h.fps}`} />
+            <DetailRow label="Last Heartbeat" value={timeAgo(h.last_heartbeat)} />
             <DetailRow label="Resolution" value={site.output.resolution} />
+            <DetailRow label="FPS" value={`${h.fps}`} />
             <DetailRow label="Encoder" value={`${site.encoder.codec} (${site.encoder.hardware})`} />
-            <DetailRow label="CPU Usage" value={`${h.cpu_usage.toFixed(1)}%`} alert={h.cpu_usage > 80} />
-            {h.gpu_usage > 0 && <DetailRow label="GPU Usage" value={`${h.gpu_usage.toFixed(1)}%`} />}
-            {h.gpu_temp > 0 && <DetailRow label="GPU Temp" value={`${h.gpu_temp}°C`} />}
-            <DetailRow label="Dropped Frames" value={`${h.dropped_frames}`} alert={h.dropped_frames > 100} />
             <DetailRow label="Uptime" value={formatUptime(h.uptime_seconds)} />
           </div>
         )}
