@@ -97,8 +97,8 @@ function calcThumbTimestamp(hoverPct, seekableStart, seekableEnd) {
   return Math.round(ts / 2) * 2;
 }
 
-// ── Thumbnail Preview Component ──
-function ThumbnailPreview({ visible, hoverPct, timestamp, streamName, timeLabel, containerWidth }) {
+// ── Thumbnail Preview Component — uses fixed positioning with screen coords ──
+function ThumbnailPreview({ visible, screenX, screenY, timestamp, streamName, timeLabel }) {
   const [displaySrc, setDisplaySrc] = useState(null);
   const preloadRef = useRef(null);
   const lastTimestampRef = useRef(null);
@@ -113,7 +113,6 @@ function ThumbnailPreview({ visible, hoverPct, timestamp, streamName, timeLabel,
       lastTimestampRef.current = timestamp;
 
       const src = `/api/thumbnails/scrub?cam=${encodeURIComponent(streamName)}&ts=${timestamp}`;
-      console.log('[ThumbScrub] Fetching:', src);
 
       if (preloadRef.current) {
         preloadRef.current.onload = null;
@@ -122,8 +121,8 @@ function ThumbnailPreview({ visible, hoverPct, timestamp, streamName, timeLabel,
 
       const img = new Image();
       preloadRef.current = img;
-      img.onload = () => { console.log('[ThumbScrub] Loaded OK'); setDisplaySrc(src); };
-      img.onerror = () => { console.log('[ThumbScrub] Load error, keeping last'); };
+      img.onload = () => setDisplaySrc(src);
+      img.onerror = () => {};
       img.src = src;
     }, 150);
 
@@ -134,22 +133,17 @@ function ThumbnailPreview({ visible, hoverPct, timestamp, streamName, timeLabel,
 
   const thumbW = 240;
   const thumbH = 135;
-  const leftPx = hoverPct * (containerWidth || 600);
-  const clampedLeft = Math.max(thumbW / 2, Math.min((containerWidth || 600) - thumbW / 2, leftPx));
 
   return (
-    <div
-      style={{
-        position: 'absolute',
-        bottom: '100%',
-        left: clampedLeft,
-        transform: 'translateX(-50%)',
-        marginBottom: 8,
-        pointerEvents: 'none',
-        zIndex: 9999,
-        transition: 'left 0.08s ease-out',
-      }}
-    >
+    <div style={{
+      position: 'fixed',
+      left: screenX,
+      top: screenY - thumbH - 50,
+      transform: 'translateX(-50%)',
+      pointerEvents: 'none',
+      zIndex: 99999,
+      transition: 'left 0.08s ease-out',
+    }}>
       {/* Thumbnail image */}
       <div style={{
         width: thumbW,
@@ -169,7 +163,7 @@ function ThumbnailPreview({ visible, hoverPct, timestamp, streamName, timeLabel,
           </div>
         )}
       </div>
-      {/* Time label — white pill below thumbnail */}
+      {/* Time label — white pill */}
       {timeLabel && (
         <div style={{ textAlign: 'center', marginTop: 6 }}>
           <span style={{
@@ -239,6 +233,8 @@ export default function HlsPlayer({
   // Thumbnail scrubbing
   const [thumbHover, setThumbHover] = useState(false);
   const [thumbPct, setThumbPct] = useState(0);
+  const [thumbScreenX, setThumbScreenX] = useState(0);
+  const [thumbScreenY, setThumbScreenY] = useState(0);
   const thumbDebounceRef = useRef(null);
 
   // Review Ops
@@ -570,6 +566,8 @@ export default function HlsPlayer({
     const rect = seekBarRef.current.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     setThumbPct(pct);
+    setThumbScreenX(e.clientX);
+    setThumbScreenY(rect.top);
     if (!thumbHover) {
       setThumbHover(true);
       console.log('[ThumbScrub] Hover started. streamName:', streamName, 'src:', src, 'seekRange:', seekRange);
@@ -749,11 +747,11 @@ export default function HlsPlayer({
                 {thumbHover && (
                   <ThumbnailPreview
                     visible={true}
-                    hoverPct={thumbPct}
+                    screenX={thumbScreenX}
+                    screenY={thumbScreenY}
                     timestamp={thumbTimestamp}
                     streamName={streamName}
-                    timeLabel={thumbTimeLabel || (streamName ? 'Loading...' : 'No stream name')}
-                    containerWidth={seekBarRef.current?.offsetWidth || 600}
+                    timeLabel={thumbTimeLabel || 'Loading...'}
                   />
                 )}
                 {/* Hover position indicator line */}
