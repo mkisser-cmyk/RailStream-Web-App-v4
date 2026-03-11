@@ -667,17 +667,21 @@ export default function HlsPlayer({
             {/* Spacer */}
             <div className="flex-1" />
 
-            {/* Audio Track Selector */}
+            {/* Audio Track Selector — only shown when multiple tracks available */}
             {audioTracks.length > 1 && (
               <div className="relative">
                 <button
                   onClick={() => setShowAudioMenu(!showAudioMenu)}
-                  className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${showAudioMenu ? 'bg-white/10 text-[#ff7a00]' : 'text-white'}`}
-                  aria-label="Audio tracks"
-                  title="Audio tracks"
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-sm font-medium ${showAudioMenu ? 'bg-[#ff7a00] text-white' : 'bg-white/10 text-white hover:bg-white/15'}`}
+                  aria-label="Switch audio track"
+                  title="Switch audio track"
                 >
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+                  </svg>
+                  <span>Audio</span>
+                  <svg className={`w-3 h-3 transition-transform ${showAudioMenu ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
                   </svg>
                 </button>
                 {/* Audio menu dropdown */}
@@ -707,8 +711,8 @@ export default function HlsPlayer({
               </div>
             )}
 
-            {/* Volume with hover slider */}
-            <div className="flex items-center gap-1 group/vol">
+            {/* Volume — always visible */}
+            <div className="flex items-center gap-1.5">
               <button onClick={toggleMute} className="p-2 rounded-lg hover:bg-white/10 text-white transition-colors" aria-label={isMuted ? 'Unmute' : 'Mute'} title={isMuted ? 'Unmute' : 'Mute'}>
                 {isMuted || volume === 0 ? (
                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -725,7 +729,7 @@ export default function HlsPlayer({
                 type="range" min="0" max="1" step="0.05"
                 value={isMuted ? 0 : volume}
                 onChange={handleVolumeChange}
-                className="w-0 group-hover/vol:w-24 transition-all duration-200 h-1.5 appearance-none bg-white/30 rounded-full cursor-pointer
+                className="w-24 h-1.5 appearance-none bg-white/30 rounded-full cursor-pointer
                   [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#ff7a00]
                   [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#ff7a00] [&::-moz-range-thumb]:border-0"
                 aria-label="Volume"
