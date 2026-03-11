@@ -386,6 +386,7 @@ export default function HlsPlayer({
     const video = videoRef.current;
     if (!url || !video) return;
 
+    console.log(`[HlsPlayer] loadSource called: ${url.substring(url.lastIndexOf('/') + 1).substring(0, 60)}`);
     setIsLoading(true);
     setError(null);
     setRetryCount(0);
@@ -510,11 +511,30 @@ export default function HlsPlayer({
     }
   }, [autoPlay, destroyHls, onError, viewMode]);
 
-  // Load on src change
+  // Keep a stable ref to loadSource so the src-change effect doesn't
+  // re-fire every time loadSource's dependencies change
+  const loadSourceRef = useRef(loadSource);
+  loadSourceRef.current = loadSource;
+
+  // Track the currently active URL (may differ from src if replay/review loaded a timeshift URL)
+  const activeUrlRef = useRef(null);
+
+  // Load on src change — only when the src prop itself changes (not when loadSource deps change)
   useEffect(() => {
-    if (src) loadSource(src);
+    if (!src) return;
+    // If we already have an active custom URL (from replay/review), don't reload
+    // the original live URL unless src actually changed to a different stream
+    if (activeUrlRef.current && activeUrlRef.current !== src) {
+      // src changed to a different stream — reload
+      activeUrlRef.current = src;
+      loadSourceRef.current(src);
+    } else if (!activeUrlRef.current) {
+      // First load
+      activeUrlRef.current = src;
+      loadSourceRef.current(src);
+    }
     return () => destroyHls();
-  }, [src, loadSource, destroyHls]);
+  }, [src, destroyHls]);
 
   // Quality cap on viewMode change — find level by resolution, not index
   useEffect(() => {
@@ -617,6 +637,7 @@ export default function HlsPlayer({
       pendingSeekFromEndRef.current = seekFromEnd;
       setIsReviewMode(true);
       initialSeekAppliedRef.current = true;
+      activeUrlRef.current = url; // Track the custom replay URL so src-change effect doesn't override it
       loadSource(url);
       return;
     }
@@ -876,6 +897,7 @@ export default function HlsPlayer({
     const rect = seekBarRef.current.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const targetTime = seekableStart + pct * (seekableEnd - seekableStart);
+    console.log(`[HlsPlayer] Seek: pct=${(pct*100).toFixed(1)}%, target=${targetTime.toFixed(0)}s, seekable=[${seekableStart.toFixed(0)},${seekableEnd.toFixed(0)}], streamEndUnix=${streamEndUnixTime}`);
     v.currentTime = targetTime;
   };
 
@@ -964,12 +986,14 @@ export default function HlsPlayer({
 
     setIsReviewMode(true);
     setShowReviewOps(false);
+    activeUrlRef.current = url; // Track custom URL
     loadSource(url);
   };
 
   const backToLiveOps = () => {
     setIsReviewMode(false);
     setShowReviewOps(false);
+    activeUrlRef.current = src; // Reset to live URL
     if (src) loadSource(src);
   };
 
@@ -979,6 +1003,7 @@ export default function HlsPlayer({
     if (isReviewMode && streamBase) {
       startReviewOps();
     } else if (src) {
+      activeUrlRef.current = src;
       loadSource(src);
     }
   };
