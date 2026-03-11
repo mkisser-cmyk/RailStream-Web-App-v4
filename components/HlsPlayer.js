@@ -593,17 +593,28 @@ export default function HlsPlayer({
 
   // ── Initial seek from replay link ──
   const initialSeekAppliedRef = useRef(false);
+  const pendingSeekFromEndRef = useRef(0); // Seconds from end of loaded window to seek to
   useEffect(() => {
     if (initialSeekAppliedRef.current || !initialSeekOffset || initialSeekOffset <= 0) return;
     
     // For large offsets (> 5 minutes), load a timeshift DVR URL instead of seeking
     if (initialSeekOffset > 300 && streamBase) {
       const windowSec = 3600; // 1-hour review window
-      // Center the sighting in the middle of the window (offset puts sighting at window END,
-      // so subtract half the window to center it). Add 120s buffer for stream processing delay.
-      const centeredOffset = Math.max(0, initialSeekOffset - Math.floor(windowSec / 2) + 120);
+      // Center the sighting in the middle of the window.
+      // The DVR URL offset is where the window ENDS relative to live.
+      // To center: offset = initialSeekOffset - windowSec/2
+      // This puts the sighting at the midpoint of the window.
+      const centeredOffset = Math.max(0, initialSeekOffset - Math.floor(windowSec / 2));
       const url = buildStreamUrl(streamBase, centeredOffset, windowSec);
-      console.log(`[HlsPlayer] Replay: loading timeshift URL, offset: ${centeredOffset}s (centered from ${initialSeekOffset}s), window: ${windowSec}s`);
+      
+      // After the timeshift URL loads, we need to seek to the sighting position.
+      // The sighting is at (initialSeekOffset) seconds from now.
+      // The window END is at (centeredOffset) seconds from now.
+      // So the sighting is (initialSeekOffset - centeredOffset) seconds from the window's end.
+      const seekFromEnd = initialSeekOffset - centeredOffset;
+      console.log(`[HlsPlayer] Replay: loading timeshift URL, windowOffset=${centeredOffset}s, seekFromEnd=${seekFromEnd}s (from ${initialSeekOffset}s ago)`);
+      
+      pendingSeekFromEndRef.current = seekFromEnd;
       setIsReviewMode(true);
       initialSeekAppliedRef.current = true;
       loadSource(url);
@@ -623,6 +634,24 @@ export default function HlsPlayer({
       console.log(`[HlsPlayer] Applied initial seek: -${initialSeekOffset}s → time ${targetTime.toFixed(1)}`);
     }
   }, [initialSeekOffset, seekableStart, seekableEnd, streamBase]);
+  
+  // ── Apply pending seek after timeshift URL has loaded ──
+  // When a replay loads a new timeshift window, we need to seek to the sighting
+  // position once the new stream has established its seekable range.
+  useEffect(() => {
+    if (pendingSeekFromEndRef.current <= 0) return;
+    if (seekableEnd <= seekableStart || seekableEnd === 0) return;
+    const video = videoRef.current;
+    if (!video) return;
+    
+    const targetTime = seekableEnd - pendingSeekFromEndRef.current;
+    if (targetTime >= seekableStart && targetTime <= seekableEnd) {
+      video.currentTime = targetTime;
+      setIsLive(false);
+      console.log(`[HlsPlayer] Replay seek applied: seekableEnd=${seekableEnd.toFixed(0)}, seekFromEnd=${pendingSeekFromEndRef.current}s, targetTime=${targetTime.toFixed(0)}`);
+      pendingSeekFromEndRef.current = 0; // Clear after applying
+    }
+  }, [seekableEnd, seekableStart]);
 
   // ── Report player stats to parent for heartbeat QoE metrics ──
   const bufferCountRef = useRef(0);
@@ -884,30 +913,24 @@ export default function HlsPlayer({
     return calcThumbTimestamp(thumbPct, seekableStart, seekableEnd, streamEndUnixTime);
   }, [thumbHover, thumbPct, seekableStart, seekableEnd, streamEndUnixTime]);
 
-  // Calculate time label for thumbnail hover
+  // Calculate time label for thumbnail hover — always show wall-clock time
   const thumbTimeLabel = useMemo(() => {
     if (!thumbHover || seekableEnd <= seekableStart) return '';
     const seekRange = seekableEnd - seekableStart;
     const posInStream = seekableStart + thumbPct * seekRange;
     const offsetFromEnd = seekableEnd - posInStream;
     
-    // In review mode, show actual time; in live mode, show offset from live
-    if (dvrUrlOffset > 0) {
-      // Historical DVR window — show actual wall-clock time
-      const wallTime = new Date((streamEndUnixTime - Math.floor(offsetFromEnd)) * 1000);
-      const h = wallTime.getHours();
-      const m = String(wallTime.getMinutes()).padStart(2, '0');
-      const s = String(wallTime.getSeconds()).padStart(2, '0');
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      const h12 = h % 12 || 12;
-      return `${h12}:${m}:${s} ${ampm}`;
-    }
+    // Always show actual wall-clock time
+    const wallTime = new Date((streamEndUnixTime - Math.floor(offsetFromEnd)) * 1000);
+    const h = wallTime.getHours();
+    const m = String(wallTime.getMinutes()).padStart(2, '0');
+    const s = String(wallTime.getSeconds()).padStart(2, '0');
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
     
-    // Live mode — show offset from live edge
-    if (offsetFromEnd < 2) return 'LIVE';
-    const mins = Math.floor(offsetFromEnd / 60);
-    const secs = Math.floor(offsetFromEnd % 60);
-    return `-${String(mins).padStart(1, '0')}:${String(secs).padStart(2, '0')}`;
+    // If very close to live edge, also indicate LIVE
+    if (dvrUrlOffset === 0 && offsetFromEnd < 2) return `${h12}:${m}:${s} ${ampm} (LIVE)`;
+    return `${h12}:${m}:${s} ${ampm}`;
   }, [thumbHover, thumbPct, seekableStart, seekableEnd, dvrUrlOffset, streamEndUnixTime]);
 
   // ── Review Ops ──
