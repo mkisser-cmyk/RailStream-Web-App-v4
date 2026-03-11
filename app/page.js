@@ -65,6 +65,7 @@ import {
 import { clientApi } from '@/lib/api';
 import { auth } from '@/lib/auth';
 import YardChat from '@/components/YardChat';
+import GptAdSlot from '@/components/GptAdSlot';
 
 // ============================================
 // CONSTANTS & HELPERS
@@ -2729,6 +2730,18 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
           {/* Companion Ad Sidebar (free/non-signed-in users only, hidden during midroll) */}
           {showCompanionAds && !chatOpen && !midrollActive && (
             <CompanionAdPanel ads={ads} />
+          )}
+          
+          {/* Google Ad Manager sidebar ad (non-premium users) */}
+          {!user && !chatOpen && (
+            <div className="mt-2">
+              <GptAdSlot
+                adUnitPath="/8176806/1"
+                sizes={[[300, 250]]}
+                divId="div-gpt-ad-8176806-1"
+                className="rounded-lg overflow-hidden"
+              />
+            </div>
           )}
         </div>
       </div>
