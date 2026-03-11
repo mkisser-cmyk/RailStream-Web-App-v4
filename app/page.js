@@ -3014,27 +3014,40 @@ function LoginDialog({ open, onClose, onSuccess }) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="bg-zinc-900 border-zinc-800 sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl text-white">
-            <img src="https://railstream.net/images/Homepage/WebsiteLogo.png" alt="" className="h-8" />
-            Sign In
-          </DialogTitle>
-          <DialogDescription className="text-white/70">Access your RailStream account</DialogDescription>
-        </DialogHeader>
+      <DialogContent className="bg-zinc-900 border-zinc-800 sm:max-w-md p-0 overflow-hidden">
+        {/* Logo header */}
+        <div className="pt-10 pb-6 px-8 text-center bg-gradient-to-b from-[#ff7a00]/5 to-transparent">
+          <img 
+            src="https://railstream.net/images/Homepage/WebsiteLogo.png" 
+            alt="RailStream" 
+            className="h-14 mx-auto mb-4 drop-shadow-[0_0_15px_rgba(255,122,0,0.3)]" 
+          />
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-2xl font-bold text-white text-center">Welcome Back</DialogTitle>
+            <DialogDescription className="text-white/50 text-center">Sign in to your RailStream account</DialogDescription>
+          </DialogHeader>
+        </div>
         
-        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-          {error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">{error}</div>}
-          <Input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} className="h-12 bg-zinc-800 border-zinc-700 text-white placeholder:text-white/60" required aria-label="Username" />
-          <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 bg-zinc-800 border-zinc-700 text-white placeholder:text-white/60" required aria-label="Password" />
-          <Button type="submit" className="w-full h-12 bg-[#ff7a00] hover:bg-[#ff8c20] text-white font-semibold" disabled={loading}>
+        <form onSubmit={handleSubmit} className="px-8 pb-8 space-y-4">
+          {error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center">{error}</div>}
+          <div>
+            <label htmlFor="login-username" className="text-white/60 text-xs font-medium mb-1.5 block">Username</label>
+            <Input id="login-username" placeholder="Enter your username" value={username} onChange={(e) => setUsername(e.target.value)} className="h-12 bg-zinc-800/80 border-zinc-700 text-white placeholder:text-white/40 focus:border-[#ff7a00] focus:ring-[#ff7a00]" required />
+          </div>
+          <div>
+            <label htmlFor="login-password" className="text-white/60 text-xs font-medium mb-1.5 block">Password</label>
+            <Input id="login-password" type="password" placeholder="Enter your password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 bg-zinc-800/80 border-zinc-700 text-white placeholder:text-white/40 focus:border-[#ff7a00] focus:ring-[#ff7a00]" required />
+          </div>
+          <Button type="submit" className="w-full h-12 bg-[#ff7a00] hover:bg-[#ff8c20] text-white font-bold text-base rounded-xl transition-all hover:shadow-lg hover:shadow-orange-500/20" disabled={loading}>
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Sign In'}
           </Button>
         </form>
         
-        <p className="text-center text-white/70 text-sm mt-4">
-          New to RailStream? <a href="https://railstream.net/member/signup" target="_blank" className="text-[#ff7a00] hover:underline font-medium">Join Today</a>
-        </p>
+        <div className="border-t border-white/5 px-8 py-4 bg-zinc-900/50">
+          <p className="text-center text-white/50 text-sm">
+            New to RailStream? <a href="https://railstream.net/member/signup" target="_blank" className="text-[#ff7a00] hover:underline font-semibold">Join Today</a>
+          </p>
+        </div>
       </DialogContent>
     </Dialog>
   );

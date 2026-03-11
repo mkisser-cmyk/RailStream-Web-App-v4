@@ -1,4 +1,5 @@
 import './globals.css';
+import CookieConsent from '@/components/CookieConsent';
 
 export const metadata = {
   title: 'RailStream - Live Train Cameras',
@@ -16,6 +17,7 @@ export default function RootLayout({ children }) {
       </head>
       <body className="min-h-screen bg-background antialiased">
         {children}
+        <CookieConsent />
       </body>
     </html>
   );
