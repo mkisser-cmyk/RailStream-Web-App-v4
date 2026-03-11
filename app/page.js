@@ -187,10 +187,11 @@ function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
           {user ? (
             <div className="flex items-center gap-3">
               <span className={`hidden sm:flex px-3 py-1.5 rounded-full bg-gradient-to-r ${TIERS[user.membership_tier]?.color} text-white text-xs font-bold items-center gap-1.5`}>
-                {user.membership_tier === 'engineer' && <Crown className="w-3 h-3" />}
-                {user.membership_tier === 'conductor' && <Shield className="w-3 h-3" />}
-                {user.membership_tier === 'fireman' && <Zap className="w-3 h-3" />}
-                {TIERS[user.membership_tier]?.label}
+                {user.is_admin && <Crown className="w-3 h-3" />}
+                {!user.is_admin && user.membership_tier === 'engineer' && <Crown className="w-3 h-3" />}
+                {!user.is_admin && user.membership_tier === 'conductor' && <Shield className="w-3 h-3" />}
+                {!user.is_admin && user.membership_tier === 'fireman' && <Zap className="w-3 h-3" />}
+                {user.is_admin ? 'Admin' : TIERS[user.membership_tier]?.label}
               </span>
               <span className="text-white text-sm hidden sm:block">{user.username}</span>
               <button 
