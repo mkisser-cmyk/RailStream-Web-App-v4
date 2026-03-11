@@ -565,6 +565,9 @@ export default function HlsPlayer({
     v.currentTime = targetTime;
   };
 
+  // Calculate stream name from src URL for thumbnail lookups
+  const streamName = useMemo(() => extractStreamName(src), [src]);
+
   // ── Thumbnail hover on seek bar ──
   const handleSeekHover = useCallback((e) => {
     if (!seekBarRef.current) return;
@@ -575,16 +578,12 @@ export default function HlsPlayer({
     setThumbScreenY(rect.top);
     if (!thumbHover) {
       setThumbHover(true);
-      console.log('[ThumbScrub] Hover started. streamName:', streamName, 'src:', src);
     }
-  }, [thumbHover, streamName, src]);
+  }, [thumbHover]);
 
   const handleSeekHoverEnd = useCallback(() => {
     setThumbHover(false);
   }, []);
-
-  // Calculate stream name from src URL for thumbnail lookups
-  const streamName = useMemo(() => extractStreamName(src), [src]);
 
   // Calculate thumbnail timestamp for current hover position
   const thumbTimestamp = useMemo(() => {
