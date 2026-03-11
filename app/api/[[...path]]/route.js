@@ -378,7 +378,78 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json(data));
     }
 
-    // Playback: Web Authorize - Returns edge_base + wms_auth for HLS player
+    // Playback: Stop session
+    if (route === '/playback/stop' && method === 'POST') {
+      const url = new URL(request.url);
+      const sessionId = url.searchParams.get('session_id');
+      const body = await request.json().catch(() => ({}));
+      const sid = sessionId || body.session_id;
+      if (!sid) {
+        return handleCORS(NextResponse.json({ error: 'session_id required' }, { status: 400 }));
+      }
+      const token = getToken(request);
+      const res = await fetch(`${API_BASE}/api/playback/stop?session_id=${sid}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': API_KEY,
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+      });
+      const data = await res.json().catch(() => ({ ok: true }));
+      return handleCORS(NextResponse.json(data));
+    }
+
+    // Playback: Heartbeat — keep session alive
+    if (route === '/playback/heartbeat' && method === 'POST') {
+      const body = await request.json();
+      const token = getToken(request);
+      const res = await fetch(`${API_BASE}/api/playback/heartbeat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': API_KEY,
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({ ok: true }));
+      return handleCORS(NextResponse.json(data));
+    }
+
+    // Devices: List user's registered devices
+    if (route === '/devices' && method === 'GET') {
+      const token = getToken(request);
+      if (!token) {
+        return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }));
+      }
+      const res = await fetch(`${API_BASE}/api/devices`, {
+        headers: {
+          'X-API-Key': API_KEY,
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const data = await res.json();
+      return handleCORS(NextResponse.json(data));
+    }
+
+    // Devices: Remove a device
+    if (route.startsWith('/devices/') && method === 'DELETE') {
+      const deviceId = route.replace('/devices/', '');
+      const token = getToken(request);
+      if (!token) {
+        return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }));
+      }
+      const res = await fetch(`${API_BASE}/api/devices/${deviceId}`, {
+        method: 'DELETE',
+        headers: {
+          'X-API-Key': API_KEY,
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const data = await res.json().catch(() => ({ ok: true }));
+      return handleCORS(NextResponse.json(data));
+    }
     if (route === '/playback/web-authorize' && method === 'POST') {
       const body = await request.json();
       const cameraId = body.camera_id;

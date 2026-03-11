@@ -1178,7 +1178,7 @@ function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCame
 
 // WATCH PAGE
 // ============================================
-function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp }) {
+function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera, removeCamera, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
@@ -1498,6 +1498,32 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                             )}
                           </div>
                         </div>
+                      ) : state.streamLimit ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/95">
+                          <div className="text-center p-4 max-w-xs">
+                            <Monitor className={`${isCompact ? 'w-6 h-6' : 'w-12 h-12'} text-red-400 mx-auto mb-2`} aria-hidden="true" />
+                            {!isCompact && (
+                              <>
+                                <p className="text-white text-lg font-bold mb-1">Stream Limit Reached</p>
+                                <p className="text-white/60 text-sm mb-3">
+                                  {state.streamLimit.message || `You've reached your limit of ${state.streamLimit.stream_limit} concurrent streams.`}
+                                </p>
+                                <p className="text-white/50 text-xs mb-3">
+                                  Active streams: {state.streamLimit.active_streams} / {state.streamLimit.stream_limit}
+                                </p>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); loadCamera(camera, i); }}
+                                  className="inline-block px-5 py-2 bg-[#ff7a00] hover:bg-[#ff8c1a] text-white font-semibold rounded-lg text-sm transition"
+                                >
+                                  Retry
+                                </button>
+                              </>
+                            )}
+                            {isCompact && (
+                              <p className="text-red-400 text-[10px]">Limit reached</p>
+                            )}
+                          </div>
+                        </div>
                       ) : state.error ? (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/90">
                           <div className="text-center p-2">
@@ -1563,9 +1589,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          const newCameras = [...selectedCameras];
-                          newCameras[i] = null;
-                          setSelectedCameras(newCameras);
+                          removeCamera(i);
                         }}
                         className={`absolute top-1 right-1 rounded bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity ${isCompact ? 'p-0.5' : 'p-1.5'}`}
                         aria-label={`Remove ${camera.name}`}
@@ -2065,6 +2089,53 @@ export default function App() {
   const [thumbnailMap, setThumbnailMap] = useState({}); // catalogCameraId -> studioSiteId
   const [thumbTimestamp, setThumbTimestamp] = useState(Date.now());
 
+  // Active session tracking for heartbeat and cleanup
+  const activeSessionsRef = useRef({}); // { slotIndex: session_id }
+
+  // Heartbeat — keep active sessions alive every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const sessions = activeSessionsRef.current;
+      const sessionIds = Object.values(sessions).filter(Boolean);
+      if (sessionIds.length === 0) return;
+      const token = auth.getToken();
+      sessionIds.forEach(sessionId => {
+        fetch('/api/playback/heartbeat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ session_id: sessionId, device_id: getDeviceId() }),
+        }).catch(() => {});
+      });
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Cleanup sessions on tab close / navigate away
+  useEffect(() => {
+    const cleanup = () => {
+      const sessions = activeSessionsRef.current;
+      const token = auth.getToken();
+      Object.values(sessions).filter(Boolean).forEach(sessionId => {
+        // Use sendBeacon for reliable delivery on tab close
+        const url = `/api/playback/stop?session_id=${sessionId}`;
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon(url);
+        } else {
+          fetch(url, {
+            method: 'POST',
+            keepalive: true,
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+          }).catch(() => {});
+        }
+      });
+    };
+    window.addEventListener('beforeunload', cleanup);
+    return () => window.removeEventListener('beforeunload', cleanup);
+  }, []);
+
   // Sync preferences to server (debounced)
   const syncPrefsToServer = useCallback(async (newFavs, newPresets) => {
     const token = auth.getToken();
@@ -2196,9 +2267,20 @@ export default function App() {
     newCameras[slotIndex] = camera;
     setSelectedCameras(newCameras);
     setPlaybackStates(prev => ({ ...prev, [slotIndex]: { loading: true, data: null, error: null } }));
+    
+    // Stop any existing session in this slot
+    const oldSessionId = activeSessionsRef.current[slotIndex];
+    if (oldSessionId) {
+      const token = auth.getToken();
+      fetch(`/api/playback/stop?session_id=${oldSessionId}`, {
+        method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      }).catch(() => {});
+      delete activeSessionsRef.current[slotIndex];
+    }
+    
     try {
       const token = auth.getToken();
-      // Use playback/authorize with user's token — returns full, signed HLS URL
       const res = await fetch('/api/playback/authorize', {
         method: 'POST',
         headers: {
@@ -2213,6 +2295,10 @@ export default function App() {
       });
       const data = await res.json();
       if (data.ok && data.hls_url) {
+        // Store session_id for heartbeat and cleanup
+        if (data.session_id) {
+          activeSessionsRef.current[slotIndex] = data.session_id;
+        }
         setPlaybackStates(prev => ({
           ...prev,
           [slotIndex]: {
@@ -2235,10 +2321,25 @@ export default function App() {
             },
           },
         }));
+      } else if (data.reason === 'concurrent_stream_limit') {
+        setPlaybackStates(prev => ({
+          ...prev,
+          [slotIndex]: {
+            loading: false,
+            data: null,
+            error: null,
+            streamLimit: {
+              stream_limit: data.stream_limit,
+              active_streams: data.active_streams,
+              user_tier: data.user_tier,
+              message: data.message || `Stream limit (${data.stream_limit}) reached.`,
+            },
+          },
+        }));
       } else {
         setPlaybackStates(prev => ({
           ...prev,
-          [slotIndex]: { loading: false, data: null, error: data.detail || data.error || 'Unable to authorize stream' },
+          [slotIndex]: { loading: false, data: null, error: data.detail || data.error || data.message || 'Unable to authorize stream' },
         }));
       }
     } catch (err) {
@@ -2247,12 +2348,51 @@ export default function App() {
     }
   };
 
+  // Remove a camera from a slot and stop its session
+  const removeCamera = (slotIndex) => {
+    // Stop the session for this slot
+    const sessionId = activeSessionsRef.current[slotIndex];
+    if (sessionId) {
+      const token = auth.getToken();
+      fetch(`/api/playback/stop?session_id=${sessionId}`, {
+        method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      }).catch(() => {});
+      delete activeSessionsRef.current[slotIndex];
+    }
+    // Clear the camera and playback state
+    const newCameras = [...selectedCameras];
+    newCameras[slotIndex] = null;
+    setSelectedCameras(newCameras);
+    setPlaybackStates(prev => {
+      const next = { ...prev };
+      delete next[slotIndex];
+      return next;
+    });
+  };
+
+  // Stop all active sessions (used for logout / cleanup)
+  const stopAllSessions = () => {
+    const sessions = activeSessionsRef.current;
+    const token = auth.getToken();
+    Object.entries(sessions).forEach(([slot, sessionId]) => {
+      if (sessionId) {
+        fetch(`/api/playback/stop?session_id=${sessionId}`, {
+          method: 'POST',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        }).catch(() => {});
+      }
+    });
+    activeSessionsRef.current = {};
+  };
+
   const handleSelectCameraFromPage = (camera) => {
     setCurrentPage('watch');
     setTimeout(() => loadCamera(camera, 0), 100);
   };
 
   const handleLogout = () => {
+    stopAllSessions();
     auth.clear();
     setUser(null);
     clientApi.logout();
@@ -2300,6 +2440,7 @@ export default function App() {
             setSelectedCameras={setSelectedCameras}
             playbackStates={playbackStates}
             loadCamera={loadCamera}
+            removeCamera={removeCamera}
             favorites={favorites}
             setFavorites={updateFavorites}
             presets={presets}

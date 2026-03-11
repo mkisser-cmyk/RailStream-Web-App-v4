@@ -10,7 +10,7 @@ import sys
 from typing import Dict, Any
 
 # Load environment variables
-NEXT_PUBLIC_BASE_URL = "https://rail-stage.preview.emergentagent.com"  # From .env
+NEXT_PUBLIC_BASE_URL = "https://rail-player-dev.preview.emergentagent.com"  # From .env
 BASE_URL = f"{NEXT_PUBLIC_BASE_URL}/api"
 
 class StudioAPITester:

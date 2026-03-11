@@ -1,4 +1,5 @@
 <analysis>
+
 <original_problem_statement>
 The user wants to build a Next.js web application, RailStream, to replace an existing Joomla/WordPress site. This application will serve as a modern, premium presentation layer for an existing infrastructure, which includes an API at  and a video player at .
 
@@ -27,161 +28,169 @@ The user wants to build a Next.js web application, RailStream, to replace an exi
 **User's preferred language**: English
 
 **what currently exists?**
-The application has been significantly overhauled. The original broken player was completely replaced with a new, custom -based player that is now functional. The application is feature-rich and most of the user's recent requests have been implemented.
-- **Working Player:** The core video player on the  page is working. It supports DVR rewind, multiple audio tracks, and dynamic quality capping.
-- **Multi-view:** 1, 2, 4, 9, and 16-camera view modes are implemented. It includes a click-to-fullscreen feature for any camera in a grid.
-- **Server-Side Preferences:** User favorites and custom layouts are now saved to their account via new API endpoints and a  collection in MongoDB.
-- **Consistent UI:** All pages now share a single, branded header component. The home page features a live video background.
-- **New Status Page:** A new page at  has been created to display the online/offline status of all cameras, fetched from the public catalog API.
-- **Bug Fixes:** Several UI/UX bugs reported by the user, such as how new cameras are selected in single-view and placeholders for empty slots, have been fixed.
+The application is a feature-rich video streaming platform.
+- **Advanced Player:** A custom  player with DVR, 10s skip, snapshot, per-camera mute, and multi-audio support. The player controls have been redesigned for clarity.
+- **Multi-View System:** Supports 1, 2, 4, 9, and 16-camera layouts with a click-to-place feature for populating empty slots.
+- **Studio API Integration:** A new  page shows detailed health data (uptime, bitrate, CPU) for 19 cameras by pulling from the  API.
+- **Live Thumbnails:** The watch page camera list now displays live thumbnails that refresh every 5 seconds, sourced from the Studio API.
+- **Improved UI/UX:** The main toolbar has been redesigned with clear text labels for all actions. Major accessibility improvements were made by increasing text contrast across the application to meet WCAG AA standards.
+- **Tier-Aware Auth:** The UI correctly handles different user membership tiers (, , , ), showing lock icons or upgrade prompts for restricted content.
+- **Persistent Device ID:** The application now generates and stores a persistent  in  to send with all API calls, enabling the backend to enforce device and stream limits.
+- **Session Management (Partial):** The backend API proxy has been updated with endpoints for stream heartbeats and session cleanup. The frontend implementation has begun but is not complete.
 
 **Last working item**:
-- Last item agent was working: Building a new public status page at  to show the uptime for all cameras. The agent created the page component (), which fetches data from the  endpoint and displays a grid of cameras with their online/offline status. The Status link was also added to the main site header.
-- Status: USER VERIFICATION PENDING
-- Agent Testing Done: Y (Agent verified the page content was being generated correctly using , but was having issues getting a clean screenshot.)
-- Which testing method agent to use? screenshot tool
+- Last item agent was working: Implementing a comprehensive session and device management system as specified by the user. This includes sending heartbeats for active streams, cleaning up sessions on browser close, and correctly handling  errors from the API.
+- Status: IN PROGRESS
+- Agent Testing Done: N
+- Which testing method agent to use? both
 - User Testing Done: N
 
 **All Pending/In progress Issue list**:
-- Issue 1: Verify the new /status page (P0)
+- Issue 1: Complete Session and Device Management Implementation (P0)
 
 Issues Detail:
--   **Issue 1: Verify the new /status page (P0)**
-    -   **Attempted fixes:** The agent created the page and confirmed via  that the HTML was being generated with the correct camera data. However, the  returned an OK text or a premature render. The user has not seen or tested this page yet.
+-   **Issue 1: Complete Session and Device Management Implementation (P0)**
+    -   **Attempted fixes:** The agent successfully added the required proxy endpoints to . In , the agent added state () and  hooks for heartbeats and  cleanup. The  function was being modified to store  and handle  errors, but the work is incomplete.
     -   **Next debug checklist:**
-        1.  Instruct the user to pull the latest code and deploy it.
-        2.  Ask the user to navigate to the new  page and confirm it displays the grid of cameras with their statuses.
-        3.  If it doesn't work, use the  with a longer delay or check browser console logs for client-side hydration errors.
-    -   **Why fix this issue and what will be achieved with the fix?** This is the last feature the agent implemented. Verifying it completes the user's latest request.
-    -   **Status:** USER VERIFICATION PENDING
+        1.  Resume work in .
+        2.  Ensure the  function correctly extracts and stores the  from the  response into .
+        3.  When  detects a  error in the response, ensure it sets a state that displays a user-friendly error message in the corresponding video slot (e.g., Stream limit reached).
+        4.  Verify the  for heartbeating correctly iterates through  and sends POST requests to .
+        5.  Verify the   correctly sends POST requests to  for all active sessions.
+        6.  Test the complete flow: log in, start a stream, verify heartbeat network calls, open a new tab to exceed the stream limit, and verify the error message appears.
+    -   **Why fix this issue and what will be achieved with the fix?** This is a critical requirement from the user to prevent account sharing and manage backend resources. It will make the application compliant with the API's usage policy.
+    -   **Status:** IN PROGRESS
     -   **Is recurring issue?** N
-    -   **Should Test frontend/backend/both after fix?** Frontend
+    -   **Should Test frontend/backend/both after fix?** Both
     -   **Blocked on other issue:** None
 
 **In progress Task List**:
-- None.
+-   **Task 1: Session Management Frontend Logic (P0)**
+    -   **Where to resume:** , inside the  function (around line 1250) and the session management  hooks (around line 340).
+    -   **What will be achieved with this?** A fully functional session management system that respects the API's device and stream limits, provides a good user experience on limit errors, and cleans up resources correctly.
+    -   **Status:** IN PROGRESS
+    -   **Should Test frontend/backend/both after fix?** Both
+    -   **Blocked on something:** None
 
 **Upcoming and Future Tasks**
 - **Upcoming Tasks:**
-  - **(P0) Live Thumbnails:** The user requested using a studio feed to provide live thumbnails for the camera list, updated every 5 seconds. This has not been implemented. (Reference: Message 11)
-  - **(P1) User Setup for 360p Streams:** The agent implemented support for a 360p stream for the 16-way view, but the user needs to configure these low-quality stream URLs on their API backend.
+  - **(P1) Device Management UI:** Create a new page (e.g., in the Account section) where users can view their active devices () and remotely log out a device (). This was requested by the user (Msg 642) but not yet built.
 - **Future Tasks:**
-  - **(P2) Community Features:** The user has expressed strong interest in building out community features like:
-      - Forums
-      - A photo archive for members
-      - A Sightings map where users can post photos of trains at specific locations.
-      - A UI where these community sections slide over the video player. (Reference: Message 162)
-  - **(P3) Recording/Download:** Ability for admins/users to record streams and download the files for YouTube. (Reference: Message 7)
-  - **(P4) Mobile Apps:** The user has discussed creating companion iOS/Android apps in the future.
+  - **(P2) Ad-Management Backend:** Build a backend tool for admins ( users) to manage pre-roll and mid-roll video ads for free-tier users. This has been added to the backlog per user request (Msg 542).
+  - **(P3) Community Features:** Build out community sections like Forums, a photo archive, and a Sightings map, as mentioned in the original PRD.
+  - **(P4) Mobile Apps:** Future development of companion iOS/Android apps.
 
 **Completed work in this session**
-- **Complete Player Rebuild:**
-  - Discarded the old  and built a new, custom  component from scratch using .
-- **API and Auth Fixes:**
-  - Debugged and fixed a complex series of authentication issues, involving expired credentials and a newly-required .
-  - Correctly implemented the final, simplified stream authorization flow ().
-- **Advanced Player Features:**
-  - DVR/rewind functionality with a timeline scrubber.
-  - Multi-audio track selection.
-  - Dynamic quality capping for multi-view modes.
-- **Enhanced Multi-View:**
-  - Expanded from 9-way to 16-way view.
-  - Implemented click-to-fullscreen functionality on grid tiles.
-- **Server-Side User Preferences:**
-  - Created  and  API endpoints () to store user favorites and layouts in MongoDB.
-  - Integrated frontend to sync with the new server-side storage.
-- **Major UI/UX Improvements:**
-  - Created a shared  and applied it to all pages for a consistent look.
-  - Implemented a live video background on the home page.
-  - Added a prominent My Layouts dropdown menu to the main toolbar.
-  - Added branded placeholders for empty video slots.
-  - Fixed multiple UI bugs reported by the user.
-- **New Feature Page:**
-  - Built a public camera status page at .
+- **Studio API Integration**: Created new API routes (, ) to proxy requests to , using credentials from .
+- **New  Page**: Built a public status page at  displaying live health data and preview images for 19 cameras from the Studio API.
+- **Live Thumbnails**: Integrated live, polling thumbnails into the  on the watch page.
+- **Toolbar Redesign**: Replaced all icons in the main toolbar () with clear Icon+Text buttons for improved usability and accessibility.
+- **Player Controls Redesign**: Reworked the  controls to be larger, clearer, and include new Snapshot and 10s Skip Forward/Rewind buttons. The volume slider is now always visible.
+- **Click-to-Place in Multi-View**: Implemented a system where users can click an empty video slot to select it as a target, then click a camera from the list to place it there.
+- **Per-Camera Mute**: Added individual mute/unmute buttons to each video player tile in multi-view modes.
+- **Accessibility Overhaul**: Audited and fixed low-contrast text across the entire application (, ) to meet WCAG AA standards.
+- **Tier-Gating and Auth Flow**:
+  - Implemented persistent  using  to uniquely identify browsers for the API.
+  - Refined the tier-gating logic to let the API deny access and then display a graceful Upgrade Required or Stream Limit Reached message in the UI, rather than pre-emptively blocking on the client.
+  - Added a visible Admin badge for users with the  flag.
 
 **Earlier issues found/mentioned but not fixed**
-- None. All issues raised during the session were addressed.
+- None. All issues raised by the user during this session were either resolved or are part of the current in-progress task.
 
 **Known issue recurrence from previous fork**
-- The original core issue ( due to incorrect HLS URL) was a recurring problem that was definitively solved in this session by completely rebuilding the player and its data flow.
+- The core challenge of this session revolved around stream authorization and tier-gating. The agent initially implemented a solution that used an admin token as a fallback, which caused confusion. This was corrected by reverting that change and instead handling the API's explicit  and  denial messages gracefully on the frontend. This new pattern is more robust and should be the standard going forward.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
 -   **Frontend:** Next.js 14 (App Router), React, Tailwind CSS, shadcn/ui.
--   **Video Streaming:**  for robust HLS playback, handling manifests, multi-audio, and quality levels.
--   **Backend (BFF):** Next.js API Routes. Proxies requests to the main , handling API key injection and user auth tokens. Includes new endpoints for user data persistence.
--   **Database:** MongoDB. Used for the existing Yard Chat and the new server-side User Preferences feature.
--   **State Management:** React state (, ) and  for client-side persistence, now synced with the backend.
+-   **Video Streaming:**  for HLS playback.
+-   **Backend (BFF):** Next.js API Routes. Proxies requests to two main upstream APIs:  (for catalog/auth) and  (for camera health/thumbnails).
+-   **Database:** MongoDB (via main API) for user preferences.
+-   **State Management:** A combination of React state (, , ) and  for the persistent .
+-   **Session Management:** A new system (in progress) using , API heartbeats, and  events for cleanup.
 
 **key DB schema**
 -   **messages**: 
 -   **user_preferences**: 
 
 **All files of reference**
--   : **The most important file.** Contains the logic for the Home page, the main Watch page, multi-view, presets, favorites, and all player orchestration.
--   : The new custom  player component. Contains all video playback logic, including DVR and audio track selection.
--   : The single handler for all backend-for-frontend API logic. Contains the stream authorization proxy and the new user preferences endpoints.
--   : The new, self-contained camera status page.
--   : The new shared header component used across all pages.
+-   : The monolithic core of the application. Manages state and renders the entire watch experience, including the toolbar, camera picker, multi-view grid, and player instances. Contains the new in-progress session management logic.
+-   : The single API proxy handler. Contains logic to route requests to either  or , injects API keys, and forwards auth tokens.
+-   : The custom video player component. Contains the redesigned controls, including snapshot and seeking functionality.
+-   : The component for the new public camera status page.
+
+**Areas that need refactoring**:
+-   ** is critically oversized and complex.** It manages global state, authentication, data fetching, and renders multiple complex sub-components. This file desperately needs to be broken down into smaller, more manageable components and custom hooks (e.g., , , ) to improve maintainability and reduce the risk of regressions.
+
+**key api endpoints**
+-   : Proxies user login.
+-   : Gets stream URL for a camera.
+-   : GET/PUT user favorites and layouts.
+-   : **(New)** Gets health data for all cameras from Studio.
+-   : **(New)** Gets a live thumbnail for a specific camera.
+-   : **(New)** Sends a heartbeat to keep a stream session alive.
+-   : **(New)** Explicitly stops a stream session.
+-   : **(New)** GET or DELETE user's registered devices.
 
 **Critical Info for New Agent**
--   **The user is your deployment engine.** The development cycle is: you push code, then instruct the user to run  on their server. They are technical and comfortable with this.
--   **The Player is Custom and Working.** Do not try to replace it. All new player features should be added to  and orchestrated from .
--   **API Endpoints are Proxied.** All interactions with  go through the BFF in . This is where the  is injected.
--   **The user is very engaged and provides a constant stream of new ideas.** Your primary task is to implement their requests. Prioritize the most recent requests first (verifying the status page).
--   **The environment lacks H.264 codecs.** Do not be alarmed if the player shows a codec not supported error in the preview environment. This is expected. The code is correct and works in real browsers, as confirmed by the user.
+-   **The user is your deployment engine.** You push code, then instruct the user to , yarn run v1.22.22
+$ next build
+  ▲ Next.js 14.2.3
+  - Environments: .env
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this command., and .
+-   **Two Upstream APIs:** The app now proxies to both  and . The Studio API requires  credentials in the  file, which the user may need to add to their server manually.
+-   ** is a monolith.** Be extremely careful when editing this file. It controls almost everything. Refactoring it should be a high-priority consideration for any major new feature.
+-   **Session Management is Critical and Incomplete.** Your first task is to complete the session management implementation in . This involves handling , heartbeats, and graceful error handling for .
 
 **documents created in this job**
-- /app/components/HlsPlayer.js
-- /app/components/SiteHeader.js
-- /app/models/UserPreferences.js
-- /app/status/page.js
+- /app/app/network-status/page.js
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User (Msg 549):** Provides the URL for the studio . (Context for Status Page)
-2.  **User (Msg 528):** Provides credentials for the studio login and confirms the status page should be public. (DONE)
-3.  **User (Msg 525):** Requests a public status page showing camera uptime, suggesting the agent use studio to get the data. (IN PROGRESS)
-4.  **User (Msg 500):** Requests a more prominent button/menu for accessing saved multi-view layouts. (DONE)
-5.  **User (Msg 486):** Reports that empty video slots are blank and that Review Ops mode doesn't reset to live when switching views. (DONE)
-6.  **User (Msg 480):** Reports a bug where clicking a new camera in single-view mode adds it instead of replacing it. (DONE)
-7.  **User (Msg 477):** Confirms they have found the correct directory on their server and successfully pulled the latest code. (DONE)
-8.  **User (Msg 474):** Provides details about their server specs. (Context)
-9.  **User (Msg 471):** Provides the GitHub repository link and asks for help deploying. (DONE)
-10. **User (Msg 402):** Confirms that favorites/presets should be saved to the user's account so they are available on any device. (DONE)
+1.  **User (Msg 642):** Provided detailed API specifications for session management, including endpoints for heartbeat, session stop, device listing/deletion, and the JSON response for stream limit errors. (IN PROGRESS)
+2.  **User (Msg 639):** Confirmed the purpose of the persistent device ID is for the backend to enforce stream and device limits. (DONE)
+3.  **User (Msg 604):** Requested that the application register a persistent device ID to prevent account sharing. (DONE, implementation started)
+4.  **User (Msg 583):** Requested the player's volume slider be always visible and the audio track selector be more distinct. (DONE)
+5.  **User (Msg 570):** Stated they were ready to test and asked if the membership role changes were saved. (DONE)
+6.  **User (Msg 566):** your unblocked. - Unblocked the agent after a temporary block. (Context)
+7.  **User (Msg 555):** Asked the agent to log in as them to verify their admin status. (DONE)
+8.  **User (Msg 548):** Clarified how the API identifies user tiers (by name, not ID). (DONE)
+9.  **User (Msg 545):** Confirmed that the 'development' tier is equivalent to 'engineer' but with access to admin tools. (DONE, noted for backlog)
+10. **User (Msg 542):** Requested that an ad-management backend tool be added to the future backlog. (DONE)
 
 **Project Health Check:**
 -   **Broken:**
-    -   None.
+    -   Session Management: Heartbeats, session cleanup, and stream limit error handling are not fully implemented.
 -   **Mocked:**
     -   None.
 -   **Working:**
-    -   Core Video Playback (HLS, DVR, Multi-audio, Quality-capping)
-    -   Multi-view (1, 2, 4, 9, 16) with Click-to-Fullscreen
-    -   Server-Side User Favorites and Layouts
-    -   User Authentication
-    -   Real-time Chat
-    -   Consistent Site-wide UI/Header
-    -   Live Video Background on Home Page
-    -   Camera Directory
-    -   All Static Pages
+    -   Video Playback, Multi-View, Live Thumbnails, Network Status Page, User Authentication & Tiering, UI/UX, Accessibility.
 
 **3rd Party Integrations**
--   **RailStream API ():** Primary backend for camera catalog, user authentication, and stream authorization. Requires .
--   **Nimble Streamer:** The video streaming server providing the HLS feeds.
--   ** library:** Used for client-side HLS video playback.
+-   **RailStream API ():** Primary backend for camera catalog, user authentication, and stream authorization.
+-   **RailStream Studio API ():** New integration for camera health data and live thumbnails. Requires username/password credentials.
+-   **Nimble Streamer:** The underlying video streaming server.
+-   ** library:** Client-side HLS video playback engine.
 
 **Testing status**
-- Testing agent used after significant changes: NO
-- Troubleshoot agent used after agent stuck in loop: NO
-- Test files created: [] (Used for isolating HLS issues, can likely be removed)
-- Known regressions: None.
+-   Testing agent used after significant changes: YES (For the new Studio API endpoints).
+-   Troubleshoot agent used after agent stuck in loop: NO
+-   Test files created: None new.  was updated.
+-   Known regressions: None.
 
 **Credentials to test flow:**
-- Credentials for the user's main API are in  (, , ). The API Key is critical. The admin credentials are less so now that the auth flow has been simplified.
-- User test credentials  /  can be used to log in via the UI.
+-   Main API credentials are in  (, etc.).
+-   **New Studio API credentials** are in  (, , ). The agent informed the user to add these to their production  file.
+-   User test credentials:  / .
 
 **What agent forgot to execute**
-- The agent has not yet implemented the live thumbnails from studio feature requested in Message 11. This was a wow feature the user seemed excited about early on, but it was deferred in favor of fixing the core player and implementing other features. This should be considered a high-priority upcoming task.
+- The agent was in the middle of implementing the session management feature; it is the highest priority to complete.
+- The agent has not yet created a UI for the user to manage their own devices (, ), for which the user provided the API specification. This is a clear upcoming task.
+
 </analysis>

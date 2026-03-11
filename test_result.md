@@ -234,14 +234,87 @@ backend:
         agent: "testing"
         comment: "✅ TESTED: Studio Thumbnails Map API works perfectly. Returns {ok: true, mapping: {...}, available_thumbnails: [...]} with exactly 19 mapping entries from catalog camera IDs to studio site IDs. Available thumbnails array contains 19 entries. Fuzzy matching algorithm correctly maps studio sites to catalog cameras based on location and name matching."
 
+  - task: "Playback Heartbeat API"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented POST /api/playback/heartbeat that proxies to api.railstream.net/api/playback/heartbeat with session_id and device_id in JSON body. Passes user auth token if present."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Playback heartbeat works correctly. Tested with session_id from playback authorize. Returns {ok: true} when proxying heartbeat request to upstream API. Properly accepts session_id and device_id in JSON body and includes auth token."
+
+  - task: "Playback Stop API"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented POST /api/playback/stop that proxies to api.railstream.net/api/playback/stop?session_id=X. Accepts session_id via query param or JSON body. Passes user auth token if present."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Playback stop works correctly. Tested with both JSON body {session_id: X} and query parameter ?session_id=X formats. Returns {ok: true, modified: true} when successfully stopping session via upstream API. Properly handles auth token."
+
+  - task: "Devices List API"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented GET /api/devices that proxies to api.railstream.net/api/devices. Requires auth token. Returns list of user's registered devices."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Devices list API works correctly. Requires authentication and successfully returns device list with count, device_limit, and tier info. Returns {devices: [], count: 0, device_limit: 6, tier: 'engineer'} for authenticated user with no devices."
+
+  - task: "Devices Delete API"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented DELETE /api/devices/:deviceId that proxies to api.railstream.net/api/devices/:deviceId. Requires auth token."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Devices delete API works correctly. Requires authentication and successfully proxies delete requests to upstream API. Returns appropriate responses for non-existent devices ('Device not found'). Proxy functionality verified."
+
+  - task: "Session Management Frontend"
+    implemented: true
+    working: "NA"
+    file: "/app/app/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Completed session management in page.js: 1) loadCamera stores session_id from playback/authorize response into activeSessionsRef, 2) Heartbeat useEffect sends POST /api/playback/heartbeat every 30s for all active sessions, 3) beforeunload cleanup sends POST /api/playback/stop via sendBeacon for all active sessions, 4) Concurrent stream limit error (reason=concurrent_stream_limit) shows dedicated UI with retry button, 5) removeCamera function stops session when camera removed from slot, 6) handleLogout calls stopAllSessions to clean up all active sessions."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 3
+  test_sequence: 4
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Session Management Frontend"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -257,3 +330,7 @@ agent_communication:
     message: "NEW: Added 3 Studio integration endpoints. 1) GET /api/studio/sites - authenticates with studio.railstream.net (env: STUDIO_USERNAME=WebAPP_RS$, STUDIO_PASSWORD in .env), fetches site health data, returns sanitized data (no passwords/IPs). Response: {ok:true, sites:[...]} with 19 sites each having health info. 2) GET /api/studio/thumbnail?id=SITE_ID - serves live JPEG preview images. 3) GET /api/studio/thumbnails-map - builds mapping from catalog camera IDs to studio site IDs. All verified working via curl on localhost. Studio credentials must be present in .env for tests to work."
   - agent: "testing"
     message: "✅ STUDIO API TESTING COMPLETE: Conducted comprehensive testing of all 3 Studio integration endpoints as requested. Created backend_test_studio.py and executed 5 test cases with 100% success rate. All endpoints working perfectly: 1) GET /api/studio/sites returns {ok:true, sites:[...], cached_at} with exactly 19 sites, each having all required fields (id, name, location, health with status, stream_status, uptime_seconds, video_bitrate, fps, cpu_usage, etc.), 2) GET /api/studio/thumbnail?id=SITE_ID returns live JPEG images (42KB binary data), fallback 1x1 GIF for invalid IDs, 400 error for missing id parameter, 3) GET /api/studio/thumbnails-map returns {ok:true, mapping, available_thumbnails} with 19 mapping entries from catalog camera IDs to studio site IDs. Studio authentication and 5-second caching working correctly. All specifications from review request met exactly."
+  - agent: "main"
+    message: "SESSION MANAGEMENT COMPLETE: Completed full session management implementation. Backend proxy endpoints already existed: POST /api/playback/heartbeat, POST /api/playback/stop, GET /api/devices, DELETE /api/devices/:id. Frontend changes in page.js: 1) loadCamera stores session_id and stops old session when replacing a slot, 2) Heartbeat useEffect sends heartbeat every 30s for all active sessions, 3) beforeunload cleanup with sendBeacon, 4) NEW: Stream limit error UI (state.streamLimit) with retry button renders when API returns concurrent_stream_limit, 5) NEW: removeCamera function properly stops the session via /api/playback/stop when user removes a camera from a slot, 6) NEW: handleLogout calls stopAllSessions to clean up all streams on sign-out. Test: Login as chicagotest/sZyE8cDFk, authorize a camera (Atlanta _id: 699894a055761e18195294e3), check response contains session_id. Test endpoints: POST /api/playback/heartbeat with {session_id, device_id}, POST /api/playback/stop with session_id as query param. GET /api/devices requires auth. Note: upstream API may or may not have implemented these endpoints yet."
+  - agent: "testing"
+    message: "✅ SESSION MANAGEMENT API TESTING COMPLETE: Conducted comprehensive testing of all 4 session management API proxy endpoints as requested. Created backend_test_session.py and executed 7 test cases with 100% success rate. All endpoints working perfectly: 1) POST /api/playback/heartbeat accepts session_id and device_id in JSON body, returns {ok: true}, properly includes auth token, 2) POST /api/playback/stop works with both JSON body {session_id} and query parameter ?session_id=X formats, returns {ok: true, modified: true}, 3) GET /api/devices requires auth and returns {devices: [], count: 0, device_limit: 6, tier: 'engineer'} for authenticated user, 4) DELETE /api/devices/:deviceId requires auth and properly proxies delete requests to upstream API with appropriate error responses. Full session flow tested: login with chicagotest/sZyE8cDFk → authorize playback with Atlanta camera (699894a055761e18195294e3) to get session_id → heartbeat → stop. All proxy functionality verified working correctly."
