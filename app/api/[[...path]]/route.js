@@ -440,6 +440,26 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json(data));
     }
 
+    // Devices: Register a device
+    if (route === '/devices/register' && method === 'POST') {
+      const body = await request.json();
+      const token = getToken(request);
+      if (!token) {
+        return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }));
+      }
+      const res = await fetch(`${API_BASE}/api/devices/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': API_KEY,
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      return handleCORS(NextResponse.json(data));
+    }
+
     // Devices: List user's registered devices
     if (route === '/devices' && method === 'GET') {
       const token = getToken(request);
