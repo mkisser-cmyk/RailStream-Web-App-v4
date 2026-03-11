@@ -477,7 +477,7 @@ async function handleRoute(request, { params }) {
     }
 
     // Devices: Remove a device
-    if (route.startsWith('/devices/') && method === 'DELETE') {
+    if (route.startsWith('/devices/') && !route.includes('/register') && method === 'DELETE') {
       const deviceId = route.replace('/devices/', '');
       const token = getToken(request);
       if (!token) {
@@ -489,6 +489,27 @@ async function handleRoute(request, { params }) {
           'X-API-Key': API_KEY,
           'Authorization': `Bearer ${token}`,
         },
+      });
+      const data = await res.json().catch(() => ({ ok: true }));
+      return handleCORS(NextResponse.json(data));
+    }
+
+    // Devices: Rename a device
+    if (route.startsWith('/devices/') && !route.includes('/register') && method === 'PATCH') {
+      const deviceId = route.replace('/devices/', '');
+      const token = getToken(request);
+      if (!token) {
+        return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }));
+      }
+      const body = await request.json();
+      const res = await fetch(`${API_BASE}/api/devices/${deviceId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': API_KEY,
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ device_name: body.device_name }),
       });
       const data = await res.json().catch(() => ({ ok: true }));
       return handleCORS(NextResponse.json(data));

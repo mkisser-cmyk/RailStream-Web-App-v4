@@ -2390,7 +2390,18 @@ export default function App() {
             ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({ session_id: sessionId, device_id: getDeviceId() }),
-        }).catch(() => {});
+        })
+        .then(r => r.json())
+        .then(data => {
+          // Kick detection: device was removed remotely
+          if (data.code === 'device_removed' || data.code === 'device_not_registered') {
+            alert('This device has been signed out remotely. Please sign in again.');
+            auth.removeToken();
+            setUser(null);
+            setCurrentPage('home');
+          }
+        })
+        .catch(() => {});
       });
     }, 30000);
     return () => clearInterval(interval);
@@ -2639,6 +2650,12 @@ export default function App() {
             },
           },
         }));
+      } else if (data.code === 'device_removed' || data.code === 'device_not_registered') {
+        // Device was kicked remotely — force logout
+        alert('This device has been signed out remotely. Please sign in again.');
+        auth.removeToken();
+        setUser(null);
+        setCurrentPage('home');
       } else {
         setPlaybackStates(prev => ({
           ...prev,
