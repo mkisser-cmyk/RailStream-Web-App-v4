@@ -22,9 +22,9 @@ let studioTokenCache = { token: null, expiresAt: 0 };
 // Cache for studio sites data (refresh every 5 seconds)
 let studioSitesCache = { data: null, thumbnails: {}, fetchedAt: 0 };
 
-// LRU cache for thumbnail scrub images (max 200 entries)
+// LRU cache for thumbnail scrub images (max 500 entries)
 const thumbCache = new Map();
-const THUMB_CACHE_MAX = 200;
+const THUMB_CACHE_MAX = 500;
 
 // Helper function to handle CORS
 function handleCORS(response) {
@@ -756,32 +756,15 @@ async function handleRoute(request, { params }) {
         const fs = await import('fs/promises');
         const path_mod = await import('path');
 
-        // Try exact timestamp first, then nearby timestamps (±2s, ±4s, ±6s, ±8s, ±10s)
-        const offsets = [0, -2, 2, -4, 4, -6, 6, -8, 8, -10, 10];
-        let foundPath = null;
-
-        for (const offset of offsets) {
-          const tryTs = timestamp + offset;
-          const filePath = path_mod.join(THUMB_BASE, safeCam, `${tryTs}.jpg`);
-          try {
-            await fs.access(filePath);
-            foundPath = filePath;
-            break;
-          } catch {
-            // File doesn't exist, try next offset
-          }
-        }
-
-        if (foundPath) {
-          const imageData = await fs.readFile(foundPath);
-          
-          // Cache the result (evict oldest if full)
+        // Try exact timestamp first (fast path)
+        const exactPath = path_mod.join(THUMB_BASE, safeCam, `${timestamp}.jpg`);
+        try {
+          const imageData = await fs.readFile(exactPath);
           if (thumbCache.size >= THUMB_CACHE_MAX) {
             const oldest = thumbCache.keys().next().value;
             thumbCache.delete(oldest);
           }
           thumbCache.set(cacheKey, imageData);
-
           return new Response(imageData, {
             status: 200,
             headers: {
@@ -790,6 +773,35 @@ async function handleRoute(request, { params }) {
               'Access-Control-Allow-Origin': '*',
             },
           });
+        } catch {
+          // Exact file not found, try nearby (parallel)
+        }
+
+        // Parallel check for nearby timestamps (±2s, ±4s, ±6s)
+        const offsets = [-2, 2, -4, 4, -6, 6];
+        const checks = offsets.map(async (offset) => {
+          const tryPath = path_mod.join(THUMB_BASE, safeCam, `${timestamp + offset}.jpg`);
+          const data = await fs.readFile(tryPath);
+          return data;
+        });
+
+        try {
+          const imageData = await Promise.any(checks);
+          if (thumbCache.size >= THUMB_CACHE_MAX) {
+            const oldest = thumbCache.keys().next().value;
+            thumbCache.delete(oldest);
+          }
+          thumbCache.set(cacheKey, imageData);
+          return new Response(imageData, {
+            status: 200,
+            headers: {
+              'Content-Type': 'image/jpeg',
+              'Cache-Control': 'public, max-age=86400, immutable',
+              'Access-Control-Allow-Origin': '*',
+            },
+          });
+        } catch {
+          // None found
         }
 
         // No thumbnail found — return 204

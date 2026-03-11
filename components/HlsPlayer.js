@@ -102,36 +102,51 @@ function calcThumbTimestamp(hoverPct, seekableStart, seekableEnd) {
   return Math.round(ts / 2) * 2;
 }
 
-// ── Thumbnail Preview Component — uses fixed positioning with screen coords ──
+// ── Thumbnail Preview Component — with aggressive caching for fast scrubbing ──
+const thumbCacheMap = new Map(); // Persistent cache across renders: timestamp -> src URL
+
 function ThumbnailPreview({ visible, screenX, screenY, timestamp, streamName, timeLabel }) {
   const [displaySrc, setDisplaySrc] = useState(null);
-  const preloadRef = useRef(null);
-  const lastTimestampRef = useRef(null);
-  const debounceRef = useRef(null);
+  const loadingRef = useRef(null);
+  const lastDirRef = useRef(0); // -1 = left, 1 = right
+  const lastTsRef = useRef(null);
 
   useEffect(() => {
     if (!visible || !streamName || !timestamp) return;
+    if (timestamp === lastTsRef.current) return;
+
+    // Track scrub direction for prefetching
+    if (lastTsRef.current) {
+      lastDirRef.current = timestamp > lastTsRef.current ? 1 : -1;
+    }
+    lastTsRef.current = timestamp;
+
+    // Check client cache first — instant display
+    const cacheKey = `${streamName}/${timestamp}`;
+    if (thumbCacheMap.has(cacheKey)) {
+      setDisplaySrc(thumbCacheMap.get(cacheKey));
+      prefetchNearby(streamName, timestamp, lastDirRef.current);
+      return;
+    }
+
+    // Load the thumbnail
+    const src = `/api/thumbnails/scrub?cam=${encodeURIComponent(streamName)}&ts=${timestamp}`;
     
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      if (timestamp === lastTimestampRef.current) return;
-      lastTimestampRef.current = timestamp;
+    if (loadingRef.current) {
+      loadingRef.current.onload = null;
+      loadingRef.current.onerror = null;
+    }
 
-      const src = `/api/thumbnails/scrub?cam=${encodeURIComponent(streamName)}&ts=${timestamp}`;
-
-      if (preloadRef.current) {
-        preloadRef.current.onload = null;
-        preloadRef.current.onerror = null;
-      }
-
-      const img = new Image();
-      preloadRef.current = img;
-      img.onload = () => setDisplaySrc(src);
-      img.onerror = () => {};
-      img.src = src;
-    }, 150);
-
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    const img = new Image();
+    loadingRef.current = img;
+    img.onload = () => {
+      thumbCacheMap.set(cacheKey, src);
+      setDisplaySrc(src);
+      // Prefetch nearby thumbnails in scrub direction
+      prefetchNearby(streamName, timestamp, lastDirRef.current);
+    };
+    img.onerror = () => {};
+    img.src = src;
   }, [visible, streamName, timestamp]);
 
   if (!visible) return null;
@@ -147,14 +162,10 @@ function ThumbnailPreview({ visible, screenX, screenY, timestamp, streamName, ti
       transform: 'translateX(-50%)',
       pointerEvents: 'none',
       zIndex: 99999,
-      transition: 'left 0.08s ease-out',
+      transition: 'left 0.06s linear',
     }}>
-      {/* Thumbnail image */}
       <div style={{
-        width: thumbW,
-        height: thumbH,
-        borderRadius: 6,
-        overflow: 'hidden',
+        width: thumbW, height: thumbH, borderRadius: 6, overflow: 'hidden',
         border: '3px solid #ff7a00',
         boxShadow: '0 4px 24px rgba(0,0,0,0.7), 0 0 12px rgba(255,122,0,0.3)',
         background: '#000',
@@ -162,32 +173,41 @@ function ThumbnailPreview({ visible, screenX, screenY, timestamp, streamName, ti
         {displaySrc ? (
           <img src={displaySrc} alt="Preview" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} draggable={false} />
         ) : (
-          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', flexDirection: 'column', gap: 6 }}>
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111' }}>
             <div style={{ width: 24, height: 24, border: '3px solid rgba(255,122,0,0.4)', borderTopColor: '#ff7a00', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-            <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>{streamName ? 'Loading...' : 'No stream'}</span>
           </div>
         )}
       </div>
-      {/* Time label — white pill */}
       {timeLabel && (
         <div style={{ textAlign: 'center', marginTop: 6 }}>
           <span style={{
-            display: 'inline-block',
-            background: 'rgba(255,255,255,0.9)',
-            color: '#111',
-            fontSize: 13,
-            fontWeight: 700,
-            fontFamily: 'monospace',
-            padding: '3px 10px',
-            borderRadius: 4,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-          }}>
-            {timeLabel}
-          </span>
+            display: 'inline-block', background: 'rgba(255,255,255,0.9)', color: '#111',
+            fontSize: 13, fontWeight: 700, fontFamily: 'monospace', padding: '3px 10px',
+            borderRadius: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+          }}>{timeLabel}</span>
         </div>
       )}
     </div>
   );
+}
+
+// Prefetch thumbnails ahead of and behind the cursor
+function prefetchNearby(streamName, centerTs, direction) {
+  const step = 2; // 2 seconds between thumbnails
+  const ahead = direction >= 0 ? [2, 4, 6, 8, 10, 12, 14, 16] : [-2, -4, -6, -8, -10, -12, -14, -16];
+  const behind = direction >= 0 ? [-2, -4] : [2, 4];
+  const offsets = [...ahead, ...behind];
+
+  for (const offset of offsets) {
+    const ts = centerTs + offset;
+    const key = `${streamName}/${ts}`;
+    if (thumbCacheMap.has(key)) continue; // Already cached
+    
+    const src = `/api/thumbnails/scrub?cam=${encodeURIComponent(streamName)}&ts=${ts}`;
+    const img = new Image();
+    img.onload = () => { thumbCacheMap.set(key, src); };
+    img.src = src;
+  }
 }
 
 export default function HlsPlayer({
