@@ -1033,7 +1033,7 @@ export default function HlsPlayer({
           )}
 
           {/* Controls Row */}
-          <div className="relative px-4 py-2.5 flex items-center gap-2 overflow-hidden">
+          <div className="relative px-4 py-2.5 flex items-center gap-2">
             {/* Play/Pause */}
             <button onClick={togglePlay} className="p-2 rounded-lg hover:bg-white/10 text-white transition-colors" aria-label={isPlaying ? 'Pause' : 'Play'}>
               {isPlaying ? (
