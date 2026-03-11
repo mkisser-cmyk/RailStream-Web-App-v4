@@ -142,6 +142,15 @@ export default function SightingsPage() {
       location: camera?.location || camera?.name || '',
     };
 
+    // Convert datetime-local value (local time) back to full UTC ISO string
+    // datetime-local format is "YYYY-MM-DDTHH:mm" without timezone info
+    if (body.sighting_time && !body.sighting_time.includes('Z') && !body.sighting_time.includes('+')) {
+      const localDate = new Date(body.sighting_time); // Parsed as local time
+      if (!isNaN(localDate.getTime())) {
+        body.sighting_time = localDate.toISOString(); // Convert to UTC ISO
+      }
+    }
+
     try {
       const url = editingId ? `/api/sightings/${editingId}` : '/api/sightings';
       const method = editingId ? 'PUT' : 'POST';
@@ -198,8 +207,21 @@ export default function SightingsPage() {
 
   // Edit sighting
   const startEdit = (s) => {
+    // Convert UTC ISO sighting_time to local datetime-local format for the input
+    // (datetime-local inputs have no timezone concept, so we display local time)
+    let localTimeStr = '';
+    if (s.sighting_time) {
+      const utcDate = new Date(s.sighting_time);
+      if (!isNaN(utcDate.getTime())) {
+        // Shift UTC to local time for display in datetime-local input
+        const localDate = new Date(utcDate.getTime() - utcDate.getTimezoneOffset() * 60000);
+        localTimeStr = localDate.toISOString().slice(0, 16);
+      } else {
+        localTimeStr = s.sighting_time.slice(0, 16);
+      }
+    }
     setFormData({
-      camera_id: s.camera_id, sighting_time: s.sighting_time?.slice(0, 16) || '',
+      camera_id: s.camera_id, sighting_time: localTimeStr,
       railroad: s.railroad, train_id: s.train_id, direction: s.direction,
       locomotives: s.locomotives, train_type: s.train_type, notes: s.notes,
     });
@@ -248,7 +270,10 @@ export default function SightingsPage() {
                   onClick={() => {
                     setShowForm(true);
                     setEditingId(null);
-                    setFormData({ camera_id: '', sighting_time: new Date().toISOString().slice(0, 16), railroad: '', train_id: '', direction: '', locomotives: '', train_type: '', notes: '' });
+                    // Use local datetime-local format (datetime-local input expects local time)
+                    const now = new Date();
+                    const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                    setFormData({ camera_id: '', sighting_time: localNow, railroad: '', train_id: '', direction: '', locomotives: '', train_type: '', notes: '' });
                     setImageFile(null);
                     setImagePreview(null);
                   }}
@@ -422,7 +447,9 @@ export default function SightingsPage() {
                 onClick={() => {
                   setShowForm(true);
                   setEditingId(null);
-                  setFormData({ camera_id: '', sighting_time: new Date().toISOString().slice(0, 16), railroad: '', train_id: '', direction: '', locomotives: '', train_type: '', notes: '' });
+                  const now = new Date();
+                  const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                  setFormData({ camera_id: '', sighting_time: localNow, railroad: '', train_id: '', direction: '', locomotives: '', train_type: '', notes: '' });
                 }}
                 className="mt-6 inline-flex items-center gap-2 bg-[#ff7a00] hover:bg-[#ff8c20] text-white px-5 py-2.5 rounded-xl font-bold text-sm transition"
               >

@@ -802,10 +802,11 @@ export default function HlsPlayer({
   }, []);
 
   // Compute the wall-clock unix time that corresponds to seekableEnd
-  // For live: seekableEnd ≈ now - hlsLatency → streamEndUnixTime = Date.now()/1000 - hlsLatency
+  // For live (dvrUrlOffset=0): seekableEnd ≈ now → streamEndUnixTime = Date.now()/1000
   // For historical DVR: URL has playlist_dvr_timeshift-{offset}-{window}
-  //   seekableEnd ≈ now - offset - hlsLatency (the newest point in the window)
-  // We include seekableEnd as a dependency so Date.now() stays fresh as the timeline advances
+  //   seekableEnd ≈ now - offset (the newest point in the window)
+  // Note: hlsLatency is typically 0 because these streams lack EXT-X-PROGRAM-DATE-TIME tags.
+  // We include seekableEnd as a dependency so Date.now() stays fresh as the timeline advances.
   const streamEndUnixTime = useMemo(() => {
     return Math.floor(Date.now() / 1000) - dvrUrlOffset - hlsLatency;
   }, [dvrUrlOffset, hlsLatency, seekableEnd]);
@@ -1247,17 +1248,22 @@ export default function HlsPlayer({
                     ctx.textAlign = 'left';
                     ctx.fillText(cameraName || 'RailStream', 12, canvas.height - 12);
                     const imageData = canvas.toDataURL('image/jpeg', 0.92);
-                    // Calculate the current time offset from live, compensating for HLS latency
-                    // hls.latency tells us how far behind real-time the live edge is
+                    // Calculate accurate sighting timestamp using the same method as thumbnail scrubbing.
+                    // The wall-clock time at seekableEnd ≈ Date.now()/1000 - dvrUrlOffset
+                    // (dvrUrlOffset is 0 for live, >0 for Review Ops archived footage)
+                    // The wall-clock time at currentTime = streamEnd - (seekableEnd - currentTime)
                     const v = videoRef.current;
-                    const latencyCompensation = hlsRef.current?.latency || hlsLatency || 0;
-                    let sightingTime = new Date(Date.now() - latencyCompensation * 1000).toISOString();
+                    const nowSec = Math.floor(Date.now() / 1000);
+                    const streamEndWallClock = nowSec - dvrUrlOffset; // Wall-clock time at live edge of this stream
+                    let sightingTime;
                     if (v.seekable && v.seekable.length > 0) {
                       const seekEnd = v.seekable.end(v.seekable.length - 1);
-                      const offset = seekEnd - v.currentTime;
-                      if (offset > 2) {
-                        sightingTime = new Date(Date.now() - latencyCompensation * 1000 - offset * 1000).toISOString();
-                      }
+                      const offsetFromEnd = Math.max(0, seekEnd - v.currentTime);
+                      const sightingUnix = streamEndWallClock - Math.floor(offsetFromEnd);
+                      sightingTime = new Date(sightingUnix * 1000).toISOString();
+                    } else {
+                      // Fallback: use streamEndWallClock directly (at live edge)
+                      sightingTime = new Date(streamEndWallClock * 1000).toISOString();
                     }
                     onLogSighting({ imageData, sightingTime, cameraName, cameraLocation });
                   } catch (e) {
