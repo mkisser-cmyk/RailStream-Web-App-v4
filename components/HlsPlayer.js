@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import Hls from 'hls.js';
 
 /**
@@ -86,26 +85,23 @@ function calcThumbTimestamp(hoverPct, seekableStart, seekableEnd) {
   return Math.round(ts / 2) * 2;
 }
 
-// ── Thumbnail Preview Component (renders via portal to escape overflow:hidden) ──
-function ThumbnailPreview({ visible, seekBarRef, hoverPct, timestamp, streamName, timeLabel }) {
+// ── Thumbnail Preview Component ──
+function ThumbnailPreview({ visible, hoverPct, timestamp, streamName, timeLabel, containerWidth }) {
   const [displaySrc, setDisplaySrc] = useState(null);
   const preloadRef = useRef(null);
   const lastTimestampRef = useRef(null);
   const debounceRef = useRef(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     if (!visible || !streamName || !timestamp) return;
     
-    // Debounce: only fetch every 150ms
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       if (timestamp === lastTimestampRef.current) return;
       lastTimestampRef.current = timestamp;
 
       const src = `/api/thumbnails/scrub?cam=${encodeURIComponent(streamName)}&ts=${timestamp}`;
+      console.log('[ThumbScrub] Fetching:', src);
 
       if (preloadRef.current) {
         preloadRef.current.onload = null;
@@ -114,45 +110,38 @@ function ThumbnailPreview({ visible, seekBarRef, hoverPct, timestamp, streamName
 
       const img = new Image();
       preloadRef.current = img;
-      img.onload = () => setDisplaySrc(src);
-      img.onerror = () => {}; // Keep last good image
+      img.onload = () => { console.log('[ThumbScrub] Loaded OK'); setDisplaySrc(src); };
+      img.onerror = () => { console.log('[ThumbScrub] Load error, keeping last'); };
       img.src = src;
     }, 150);
 
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [visible, streamName, timestamp]);
 
-  if (!visible || !mounted || !seekBarRef?.current) return null;
+  if (!visible) return null;
 
-  // Calculate screen position from the seek bar's bounding rect
-  const rect = seekBarRef.current.getBoundingClientRect();
   const thumbW = 192;
   const thumbH = 108;
-  const xOnBar = rect.left + hoverPct * rect.width;
-  const clampedX = Math.max(rect.left + thumbW / 2, Math.min(rect.right - thumbW / 2, xOnBar));
-  const topY = rect.top - thumbH - 30; // 30px gap above seek bar
+  const leftPx = hoverPct * (containerWidth || 600);
+  const clampedLeft = Math.max(thumbW / 2, Math.min((containerWidth || 600) - thumbW / 2, leftPx));
 
-  const content = (
+  return (
     <div
       style={{
-        position: 'fixed',
-        left: `${clampedX}px`,
-        top: `${topY}px`,
+        position: 'absolute',
+        bottom: '100%',
+        left: `${clampedLeft}px`,
         transform: 'translateX(-50%)',
-        zIndex: 99999,
+        marginBottom: 12,
         pointerEvents: 'none',
+        zIndex: 9999,
         transition: 'left 0.1s ease-out, opacity 0.2s ease',
         opacity: displaySrc ? 1 : 0.6,
       }}
     >
       <div style={{ borderRadius: 8, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.8)', border: '2px solid rgba(255,122,0,0.6)', background: '#000' }}>
         {displaySrc ? (
-          <img
-            src={displaySrc}
-            alt="Preview"
-            style={{ display: 'block', width: thumbW, height: thumbH, objectFit: 'cover' }}
-            draggable={false}
-          />
+          <img src={displaySrc} alt="Preview" style={{ display: 'block', width: thumbW, height: thumbH, objectFit: 'cover' }} draggable={false} />
         ) : (
           <div style={{ width: thumbW, height: thumbH, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111' }}>
             <div style={{ width: 20, height: 20, border: '2px solid rgba(255,122,0,0.5)', borderTopColor: '#ff7a00', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
@@ -164,15 +153,12 @@ function ThumbnailPreview({ visible, seekBarRef, hoverPct, timestamp, streamName
           </div>
         )}
       </div>
-      {/* Arrow pointing down */}
       <div style={{
         position: 'absolute', left: '50%', bottom: -6, transform: 'translateX(-50%) rotate(45deg)',
         width: 12, height: 12, background: '#000', borderRight: '2px solid rgba(255,122,0,0.6)', borderBottom: '2px solid rgba(255,122,0,0.6)',
       }} />
     </div>
   );
-
-  return createPortal(content, document.body);
 }
 
 export default function HlsPlayer({
@@ -562,7 +548,11 @@ export default function HlsPlayer({
   }, []);
 
   // Calculate stream name from src URL for thumbnail lookups
-  const streamName = useMemo(() => extractStreamName(src), [src]);
+  const streamName = useMemo(() => {
+    const name = extractStreamName(src);
+    if (src) console.log('[ThumbScrub] src:', src, '-> streamName:', name);
+    return name;
+  }, [src]);
 
   // Calculate thumbnail timestamp for current hover position
   const thumbTimestamp = useMemo(() => {
@@ -631,7 +621,7 @@ export default function HlsPlayer({
   return (
     <div
       ref={containerRef}
-      className={`rs-player relative w-full h-full bg-black overflow-hidden group ${className}`}
+      className={`rs-player relative w-full h-full bg-black group ${className}`}
       onMouseMove={resetControlsTimer}
       onTouchStart={resetControlsTimer}
       onClick={(e) => {
@@ -639,15 +629,17 @@ export default function HlsPlayer({
       }}
     >
       {/* Video Element */}
-      <video
-        ref={videoRef}
-        className="w-full h-full object-contain"
-        playsInline
-        crossOrigin="anonymous"
-        muted={isMuted}
-        poster={poster || undefined}
-        style={{ backgroundColor: '#000' }}
-      />
+      <div className="absolute inset-0 overflow-hidden">
+        <video
+          ref={videoRef}
+          className="w-full h-full object-contain"
+          playsInline
+          crossOrigin="anonymous"
+          muted={isMuted}
+          poster={poster || undefined}
+          style={{ backgroundColor: '#000' }}
+        />
+      </div>
 
       {/* Loading Spinner */}
       {isLoading && !error && (
@@ -704,16 +696,6 @@ export default function HlsPlayer({
         </div>
       )}
 
-      {/* ── Thumbnail Scrub Preview — uses portal to escape overflow:hidden ── */}
-      <ThumbnailPreview
-        visible={controls && !error && thumbHover && !!streamName && seekRange > 10}
-        seekBarRef={seekBarRef}
-        hoverPct={thumbPct}
-        timestamp={thumbTimestamp}
-        streamName={streamName}
-        timeLabel={thumbTimeLabel}
-      />
-
       {/* ── Controls Bar ── */}
       {controls && !error && (
         <div className={`absolute bottom-0 left-0 right-0 z-30 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
@@ -721,14 +703,24 @@ export default function HlsPlayer({
 
           {/* DVR Timeline Scrubber */}
           {seekRange > 10 && (
-            <div className="relative px-4 pt-2 pb-0">
+            <div className="relative px-4 pt-2 pb-0" style={{ overflow: 'visible' }}>
               <div
                 ref={seekBarRef}
                 className="relative h-8 flex items-center cursor-pointer group/seek"
+                style={{ overflow: 'visible' }}
                 onClick={handleSeek}
                 onMouseMove={handleSeekHover}
                 onMouseLeave={handleSeekHoverEnd}
               >
+                {/* ── Thumbnail Scrub Preview ── */}
+                <ThumbnailPreview
+                  visible={thumbHover && !!streamName}
+                  hoverPct={thumbPct}
+                  timestamp={thumbTimestamp}
+                  streamName={streamName}
+                  timeLabel={thumbTimeLabel}
+                  containerWidth={seekBarRef.current?.offsetWidth || 600}
+                />
                 {/* Hover position indicator line */}
                 {thumbHover && seekBarRef.current && (
                   <div
