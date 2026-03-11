@@ -392,7 +392,8 @@ frontend:
         comment: "Added onLogSighting prop to HlsPlayer instances and full modal JSX in WatchPage. Cannot fully test in this environment because media server streams are not accessible from test container."
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "HLS Latency Compensation for Timestamps"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"

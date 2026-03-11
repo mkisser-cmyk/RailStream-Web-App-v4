@@ -299,6 +299,7 @@ export default function HlsPlayer({
   const [thumbScreenY, setThumbScreenY] = useState(0);
   const thumbDebounceRef = useRef(null);
   const [dvrUrlOffset, setDvrUrlOffset] = useState(0); // DVR offset from URL for thumbnail timestamp calc
+  const [hlsLatency, setHlsLatency] = useState(0); // HLS live edge latency in seconds
 
   // Review Ops — default to 1 hour ago
   const [showReviewOps, setShowReviewOps] = useState(false);
@@ -629,6 +630,26 @@ export default function HlsPlayer({
     return () => clearInterval(statsInterval);
   }, [onStatsUpdate, isLoading]);
 
+  // ── Track HLS live latency for accurate timestamp calculations ──
+  // hls.latency gives the delay between real-time and the content at the live edge
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (hlsRef.current && typeof hlsRef.current.latency === 'number') {
+        const latency = Math.round(hlsRef.current.latency);
+        if (latency > 0 && isFinite(latency)) {
+          // Only update state if the latency changed by > 2s to avoid jitter
+          setHlsLatency(prev => {
+            if (Math.abs(prev - latency) >= 2) {
+              console.log(`[HlsPlayer] HLS latency updated: ${latency}s (was ${prev}s)`);
+              return latency;
+            }
+            return prev;
+          });
+        }
+      }
+    }, 3000); // Check every 3 seconds; latency stabilizes quickly
+    return () => clearInterval(interval);
+  }, []);
 
   // ── Auto-hide controls ──
   const resetControlsTimer = useCallback(() => {
@@ -744,12 +765,13 @@ export default function HlsPlayer({
   }, []);
 
   // Compute the wall-clock unix time that corresponds to seekableEnd
-  // For live: seekableEnd ≈ now → streamEndUnixTime = Date.now()/1000
+  // For live: seekableEnd ≈ now - hlsLatency → streamEndUnixTime = Date.now()/1000 - hlsLatency
   // For historical DVR: URL has playlist_dvr_timeshift-{offset}-{window}
-  //   seekableEnd ≈ now - offset (the newest point in the window)
+  //   seekableEnd ≈ now - offset - hlsLatency (the newest point in the window)
+  // We include seekableEnd as a dependency so Date.now() stays fresh as the timeline advances
   const streamEndUnixTime = useMemo(() => {
-    return Math.floor(Date.now() / 1000) - dvrUrlOffset;
-  }, [dvrUrlOffset]);
+    return Math.floor(Date.now() / 1000) - dvrUrlOffset - hlsLatency;
+  }, [dvrUrlOffset, hlsLatency, seekableEnd]);
 
   // Calculate thumbnail timestamp for current hover position
   const thumbTimestamp = useMemo(() => {
@@ -1186,14 +1208,16 @@ export default function HlsPlayer({
                     ctx.textAlign = 'left';
                     ctx.fillText(cameraName || 'RailStream', 12, canvas.height - 12);
                     const imageData = canvas.toDataURL('image/jpeg', 0.92);
-                    // Calculate the current time offset from live
+                    // Calculate the current time offset from live, compensating for HLS latency
+                    // hls.latency tells us how far behind real-time the live edge is
                     const v = videoRef.current;
-                    let sightingTime = new Date().toISOString();
+                    const latencyCompensation = hlsRef.current?.latency || hlsLatency || 0;
+                    let sightingTime = new Date(Date.now() - latencyCompensation * 1000).toISOString();
                     if (v.seekable && v.seekable.length > 0) {
                       const seekEnd = v.seekable.end(v.seekable.length - 1);
                       const offset = seekEnd - v.currentTime;
                       if (offset > 2) {
-                        sightingTime = new Date(Date.now() - offset * 1000).toISOString();
+                        sightingTime = new Date(Date.now() - latencyCompensation * 1000 - offset * 1000).toISOString();
                       }
                     }
                     onLogSighting({ imageData, sightingTime, cameraName, cameraLocation });
