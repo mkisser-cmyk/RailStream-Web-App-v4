@@ -67,9 +67,21 @@ function formatTimeAgo(seconds) {
 // ── Extract stream name from HLS URL ──
 function extractStreamName(hlsUrl) {
   if (!hlsUrl) return null;
-  // Match /Live_Mobile/CAM_NAME/ or /Live/CAM_NAME/ patterns
-  const match = hlsUrl.match(/\/Live(?:_Mobile)?\/([^/]+)\//);
-  return match ? match[1] : null;
+  try {
+    // Parse the URL and get path segments
+    // For: /Live_Mobile/FOS_CAM01/playlist_dvr.m3u8 -> FOS_CAM01
+    const urlObj = new URL(hlsUrl);
+    const parts = urlObj.pathname.split('/').filter(Boolean);
+    // Camera name is the segment before the playlist file
+    if (parts.length >= 2) {
+      return parts[parts.length - 2];
+    }
+  } catch {
+    // Fallback: regex match for common patterns
+    const match = hlsUrl.match(/\/([A-Z]{2,4}_CAM\d{1,2})\//i);
+    if (match) return match[1];
+  }
+  return null;
 }
 
 // ── Thumbnail scrub timestamp calculator ──
@@ -135,16 +147,16 @@ function ThumbnailPreview({ visible, hoverPct, timestamp, streamName, timeLabel,
         marginBottom: 12,
         pointerEvents: 'none',
         zIndex: 9999,
-        transition: 'left 0.1s ease-out, opacity 0.2s ease',
-        opacity: displaySrc ? 1 : 0.6,
+        transition: 'left 0.1s ease-out',
       }}
     >
       <div style={{ borderRadius: 8, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.8)', border: '2px solid rgba(255,122,0,0.6)', background: '#000' }}>
         {displaySrc ? (
           <img src={displaySrc} alt="Preview" style={{ display: 'block', width: thumbW, height: thumbH, objectFit: 'cover' }} draggable={false} />
         ) : (
-          <div style={{ width: thumbW, height: thumbH, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111' }}>
+          <div style={{ width: thumbW, height: thumbH, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', flexDirection: 'column', gap: 6 }}>
             <div style={{ width: 20, height: 20, border: '2px solid rgba(255,122,0,0.5)', borderTopColor: '#ff7a00', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+            <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10 }}>{streamName ? 'Loading...' : 'No cam ID'}</span>
           </div>
         )}
         {timeLabel && (
@@ -540,8 +552,11 @@ export default function HlsPlayer({
     const rect = seekBarRef.current.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     setThumbPct(pct);
-    if (!thumbHover) setThumbHover(true);
-  }, [thumbHover]);
+    if (!thumbHover) {
+      setThumbHover(true);
+      console.log('[ThumbScrub] Hover started. streamName:', streamName, 'src:', src, 'seekRange:', seekRange);
+    }
+  }, [thumbHover, streamName, src, seekRange]);
 
   const handleSeekHoverEnd = useCallback(() => {
     setThumbHover(false);
@@ -713,14 +728,16 @@ export default function HlsPlayer({
                 onMouseLeave={handleSeekHoverEnd}
               >
                 {/* ── Thumbnail Scrub Preview ── */}
-                <ThumbnailPreview
-                  visible={thumbHover && !!streamName}
-                  hoverPct={thumbPct}
-                  timestamp={thumbTimestamp}
-                  streamName={streamName}
-                  timeLabel={thumbTimeLabel}
-                  containerWidth={seekBarRef.current?.offsetWidth || 600}
-                />
+                {thumbHover && (
+                  <ThumbnailPreview
+                    visible={true}
+                    hoverPct={thumbPct}
+                    timestamp={thumbTimestamp}
+                    streamName={streamName}
+                    timeLabel={thumbTimeLabel || (streamName ? 'Loading...' : 'No stream name')}
+                    containerWidth={seekBarRef.current?.offsetWidth || 600}
+                  />
+                )}
                 {/* Hover position indicator line */}
                 {thumbHover && seekBarRef.current && (
                   <div
