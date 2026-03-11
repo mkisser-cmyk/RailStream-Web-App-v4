@@ -3153,6 +3153,17 @@ export default function App() {
     init();
   }, []);
 
+  // Handle ?page=X URL param (from SiteHeader navigation)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pageParam = params.get('page');
+    if (pageParam && ['watch', 'about', 'login'].includes(pageParam)) {
+      setCurrentPage(pageParam);
+      // Clean URL params without reload
+      window.history.replaceState({}, '', '/');
+    }
+  }, []);
+
   // Handle ?watch=CAMERA_ID&seek=SECONDS URL params (from Replay links)
   useEffect(() => {
     if (cameras.length === 0 || loading) return;

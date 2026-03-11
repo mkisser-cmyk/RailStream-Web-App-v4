@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { Menu, X, Crown, Shield, Zap, LogOut, ChevronDown } from 'lucide-react';
 
 const TIERS = {
-  fireman: { label: 'Fireman', color: 'from-blue-500 to-blue-600', icon: Zap },
-  conductor: { label: 'Conductor', color: 'from-purple-500 to-purple-600', icon: Shield },
-  engineer: { label: 'Engineer', color: 'from-orange-500 to-orange-600', icon: Crown },
+  fireman: { label: 'Fireman', color: 'from-orange-600 to-orange-500', icon: Zap },
+  conductor: { label: 'Conductor', color: 'from-blue-600 to-blue-500', icon: Shield },
+  engineer: { label: 'Engineer', color: 'from-purple-600 to-purple-500', icon: Crown },
 };
 
 const NAV_ITEMS = [
@@ -36,6 +36,13 @@ export default function SiteHeader({ currentPage = '', user: userProp = null, on
   useEffect(() => {
     if (userProp) return;
     try {
+      // Try localStorage first (instant)
+      const savedUser = localStorage.getItem('railstream_user');
+      if (savedUser) {
+        const parsed = JSON.parse(savedUser);
+        if (parsed && parsed.username) setAutoUser(parsed);
+      }
+      // Then verify/refresh from API
       const token = localStorage.getItem('railstream_token');
       if (token) {
         fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } })
@@ -193,10 +200,11 @@ export default function SiteHeader({ currentPage = '', user: userProp = null, on
           {user ? (
             <div className="flex items-center gap-3">
               <span className={`hidden sm:flex px-3 py-1.5 rounded-full bg-gradient-to-r ${TIERS[user.membership_tier]?.color || 'from-gray-500 to-gray-600'} text-white text-xs font-bold items-center gap-1.5`}>
-                {user.membership_tier === 'engineer' && <Crown className="w-3 h-3" />}
-                {user.membership_tier === 'conductor' && <Shield className="w-3 h-3" />}
-                {user.membership_tier === 'fireman' && <Zap className="w-3 h-3" />}
-                {TIERS[user.membership_tier]?.label || user.membership_tier}
+                {user.is_admin && <Crown className="w-3 h-3" />}
+                {!user.is_admin && user.membership_tier === 'engineer' && <Crown className="w-3 h-3" />}
+                {!user.is_admin && user.membership_tier === 'conductor' && <Shield className="w-3 h-3" />}
+                {!user.is_admin && user.membership_tier === 'fireman' && <Zap className="w-3 h-3" />}
+                {user.is_admin ? 'Admin' : (TIERS[user.membership_tier]?.label || user.membership_tier)}
               </span>
               <span className="text-white text-sm hidden sm:block">{user.username}</span>
               {onLogout && (
