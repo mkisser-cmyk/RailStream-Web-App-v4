@@ -87,67 +87,75 @@ function calcThumbTimestamp(hoverPct, seekableStart, seekableEnd) {
 
 // ── Thumbnail Preview Component ──
 function ThumbnailPreview({ visible, x, containerWidth, timestamp, streamName, timeLabel }) {
-  const [currentSrc, setCurrentSrc] = useState(null);
-  const [loadedSrc, setLoadedSrc] = useState(null);
+  const [displaySrc, setDisplaySrc] = useState(null);
   const preloadRef = useRef(null);
-  const lastGoodSrcRef = useRef(null);
+  const lastTimestampRef = useRef(null);
+  const debounceRef = useRef(null);
 
-  // Preload the thumbnail image before showing
   useEffect(() => {
     if (!visible || !streamName || !timestamp) return;
-    const src = `/api/thumbnails/scrub?cam=${encodeURIComponent(streamName)}&ts=${timestamp}`;
-    if (src === currentSrc) return;
-    setCurrentSrc(src);
+    
+    // Debounce: only fetch a new thumbnail every 300ms
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      if (timestamp === lastTimestampRef.current) return;
+      lastTimestampRef.current = timestamp;
 
-    // Cancel previous preload
-    if (preloadRef.current) {
-      preloadRef.current.onload = null;
-      preloadRef.current.onerror = null;
-    }
+      const src = `/api/thumbnails/scrub?cam=${encodeURIComponent(streamName)}&ts=${timestamp}`;
 
-    const img = new Image();
-    preloadRef.current = img;
-    img.onload = () => {
-      setLoadedSrc(src);
-      lastGoodSrcRef.current = src;
-    };
-    img.onerror = () => {
-      // Keep showing last good image (don't flutter)
-    };
-    img.src = src;
+      // Cancel previous preload
+      if (preloadRef.current) {
+        preloadRef.current.onload = null;
+        preloadRef.current.onerror = null;
+      }
+
+      const img = new Image();
+      preloadRef.current = img;
+      img.onload = () => {
+        setDisplaySrc(src);
+      };
+      img.onerror = () => {
+        // Keep showing last good image — no flutter
+      };
+      img.src = src;
+    }, 150);
 
     return () => {
-      img.onload = null;
-      img.onerror = null;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [visible, streamName, timestamp, currentSrc]);
+  }, [visible, streamName, timestamp]);
 
+  // Don't clear displaySrc when hiding — keep it warm for next hover
   if (!visible) return null;
 
   const thumbW = 160;
   const thumbH = 90;
-  // Clamp position so tooltip doesn't go off-screen
   const halfW = thumbW / 2;
   const clampedX = Math.max(halfW + 4, Math.min(containerWidth - halfW - 4, x));
-  const displaySrc = loadedSrc || lastGoodSrcRef.current;
 
   return (
     <div
-      className="pointer-events-none z-50 transition-opacity duration-150"
+      className="pointer-events-none z-50"
       style={{
         position: 'absolute',
         left: `${clampedX}px`,
         transform: 'translateX(-50%)',
-        opacity: displaySrc ? 1 : 0.5,
+        transition: 'left 0.1s ease-out, opacity 0.2s ease',
+        opacity: displaySrc ? 1 : 0.6,
       }}
     >
-      <div className="rounded-lg overflow-hidden shadow-2xl border border-white/20 bg-black">
+      <div className="rounded-lg overflow-hidden shadow-2xl border border-white/25 bg-black">
         {displaySrc ? (
           <img
             src={displaySrc}
             alt="Thumbnail preview"
             className="block"
-            style={{ width: thumbW, height: thumbH, objectFit: 'cover' }}
+            style={{
+              width: thumbW,
+              height: thumbH,
+              objectFit: 'cover',
+              transition: 'opacity 0.15s ease',
+            }}
             draggable={false}
           />
         ) : (
@@ -288,9 +296,9 @@ export default function HlsPlayer({
       const hls = new Hls({
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
-        backBufferLength: 30,
+        backBufferLength: 300,
         liveSyncDurationCount: 3,
-        liveMaxLatencyDurationCount: 8,
+        liveMaxLatencyDurationCount: 100,
         enableWorker: true,
         lowLatencyMode: false,
         startLevel: -1,

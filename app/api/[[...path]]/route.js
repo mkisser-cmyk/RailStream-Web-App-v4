@@ -22,6 +22,10 @@ let studioTokenCache = { token: null, expiresAt: 0 };
 // Cache for studio sites data (refresh every 5 seconds)
 let studioSitesCache = { data: null, thumbnails: {}, fetchedAt: 0 };
 
+// LRU cache for thumbnail scrub images (max 200 entries)
+const thumbCache = new Map();
+const THUMB_CACHE_MAX = 200;
+
 // Helper function to handle CORS
 function handleCORS(response) {
   response.headers.set('Access-Control-Allow-Origin', process.env.CORS_ORIGINS || '*');
@@ -729,6 +733,23 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ error: 'Invalid timestamp' }, { status: 400 }));
       }
 
+      // Check in-memory cache first
+      const cacheKey = `${safeCam}/${timestamp}`;
+      if (thumbCache.has(cacheKey)) {
+        const cached = thumbCache.get(cacheKey);
+        // Move to end (most recently used)
+        thumbCache.delete(cacheKey);
+        thumbCache.set(cacheKey, cached);
+        return new Response(cached, {
+          status: 200,
+          headers: {
+            'Content-Type': 'image/jpeg',
+            'Cache-Control': 'public, max-age=86400, immutable',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+      }
+
       const THUMB_BASE = process.env.THUMBNAIL_PATH || '/mnt/railstream-thumbs';
 
       try {
@@ -753,6 +774,14 @@ async function handleRoute(request, { params }) {
 
         if (foundPath) {
           const imageData = await fs.readFile(foundPath);
+          
+          // Cache the result (evict oldest if full)
+          if (thumbCache.size >= THUMB_CACHE_MAX) {
+            const oldest = thumbCache.keys().next().value;
+            thumbCache.delete(oldest);
+          }
+          thumbCache.set(cacheKey, imageData);
+
           return new Response(imageData, {
             status: 200,
             headers: {
@@ -763,8 +792,7 @@ async function handleRoute(request, { params }) {
           });
         }
 
-        // No thumbnail found — return a 1x1 transparent pixel with 204
-        // This prevents the UI from showing broken images
+        // No thumbnail found — return 204
         return new Response(null, {
           status: 204,
           headers: {
@@ -775,7 +803,6 @@ async function handleRoute(request, { params }) {
 
       } catch (error) {
         console.error('Thumbnail scrub error:', error);
-        // NFS not mounted or other filesystem error — return 204 silently
         return new Response(null, {
           status: 204,
           headers: {
