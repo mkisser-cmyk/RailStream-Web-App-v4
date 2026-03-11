@@ -359,39 +359,22 @@ async function handleRoute(request, { params }) {
     // Playback: Authorize (legacy mobile endpoint)
     if (route === '/playback/authorize' && method === 'POST') {
       const body = await request.json();
-      const userToken = getToken(request);
+      const token = getToken(request);
       
-      // Try with user token first, fall back to admin token if upgrade_required
-      const tryAuthorize = async (token) => {
-        const res = await fetch(`${API_BASE}/api/playback/authorize`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': API_KEY,
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            camera_id: body.camera_id,
-            device_id: body.device_id || `web-${Date.now()}`,
-            platform: 'web',
-          }),
-        });
-        return res.json();
-      };
-
-      let data = await tryAuthorize(userToken);
-      
-      // If user token fails with upgrade_required or no hls_url, retry with admin token
-      if (!data.ok || data.reason === 'upgrade_required' || !data.hls_url) {
-        try {
-          const adminToken = await getAdminToken();
-          data = await tryAuthorize(adminToken);
-        } catch (e) {
-          // If admin fallback also fails, return original response
-          console.error('Admin token fallback failed:', e);
-        }
-      }
-      
+      const res = await fetch(`${API_BASE}/api/playback/authorize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': API_KEY,
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          camera_id: body.camera_id,
+          device_id: body.device_id || `web-${Date.now()}`,
+          platform: 'web',
+        }),
+      });
+      const data = await res.json();
       return handleCORS(NextResponse.json(data));
     }
 

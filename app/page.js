@@ -1462,6 +1462,29 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                         <div className="absolute inset-0 flex items-center justify-center bg-black">
                           <Loader2 className={`${isCompact ? 'w-6 h-6' : 'w-10 h-10'} text-[#ff7a00] animate-spin`} />
                         </div>
+                      ) : state.upgrade ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/95">
+                          <div className="text-center p-4 max-w-xs">
+                            <Lock className={`${isCompact ? 'w-6 h-6' : 'w-12 h-12'} text-[#ff7a00] mx-auto mb-2`} aria-hidden="true" />
+                            {!isCompact && (
+                              <>
+                                <p className="text-white text-lg font-bold mb-1">{camera.name}</p>
+                                <p className="text-white/60 text-sm mb-3">
+                                  This camera requires <span className="text-[#ff7a00] font-semibold capitalize">{state.upgrade.required_tier}</span> access
+                                </p>
+                                <a
+                                  href={state.upgrade.upgrade_url || '/join'}
+                                  className="inline-block px-5 py-2 bg-[#ff7a00] hover:bg-[#ff8c1a] text-white font-semibold rounded-lg text-sm transition"
+                                >
+                                  Upgrade Now
+                                </a>
+                              </>
+                            )}
+                            {isCompact && (
+                              <p className="text-white/60 text-[10px]">Upgrade to watch</p>
+                            )}
+                          </div>
+                        </div>
                       ) : state.error ? (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/90">
                           <div className="text-center p-2">
@@ -2156,10 +2179,6 @@ export default function App() {
   }, []);
 
   const loadCamera = async (camera, slotIndex) => {
-    if (!canAccess(user?.membership_tier, camera.min_tier)) {
-      toast.error(`Upgrade to ${TIERS[camera.min_tier]?.label} to watch this camera`);
-      return;
-    }
     const newCameras = [...selectedCameras];
     newCameras[slotIndex] = camera;
     setSelectedCameras(newCameras);
@@ -2187,6 +2206,20 @@ export default function App() {
             loading: false,
             data: { ...data },
             error: null,
+          },
+        }));
+      } else if (data.reason === 'upgrade_required') {
+        setPlaybackStates(prev => ({
+          ...prev,
+          [slotIndex]: {
+            loading: false,
+            data: null,
+            error: null,
+            upgrade: {
+              required_tier: data.required_tier || 'conductor',
+              user_tier: data.user_tier || 'fireman',
+              upgrade_url: data.upgrade_url || '/join',
+            },
           },
         }));
       } else {
