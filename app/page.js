@@ -821,21 +821,34 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
 
   const favoritesCameras = cameras.filter(c => favorites.includes(c._id));
 
-  const regions = {
-    'California': ['California'],
-    'Midwest': ['Indiana', 'Illinois', 'Ohio', 'Kentucky', 'Michigan', 'Nebraska', 'Minnesota'],
-    'East Coast': ['Pennsylvania', 'Virginia', 'West Virginia', 'New Jersey', 'North Carolina', 'Georgia', 'Florida'],
-    'Texas': ['Texas'],
-    'Canada': ['Ontario'],
+  // State abbreviations for compact display
+  const STATE_ABBREV = {
+    'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
+    'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE', 'Florida': 'FL', 'Georgia': 'GA',
+    'Hawaii': 'HI', 'Idaho': 'ID', 'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA',
+    'Kansas': 'KS', 'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
+    'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS', 'Missouri': 'MO',
+    'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ',
+    'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH',
+    'Oklahoma': 'OK', 'Ontario': 'ON', 'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI',
+    'South Carolina': 'SC', 'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT',
+    'Vermont': 'VT', 'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI',
+    'Wyoming': 'WY',
   };
 
-  const getRegion = (camera) => {
-    for (const [region, states] of Object.entries(regions)) {
-      if (states.some(s => camera.name?.includes(s))) return region;
+  // Extract state from camera name (e.g. "Atlanta, Georgia" → "Georgia")
+  const getState = (camera) => {
+    const name = camera.name || '';
+    const parts = name.split(',');
+    if (parts.length >= 2) {
+      const state = parts[parts.length - 1].trim();
+      // Handle names like "Shen Junction, West Virginia (3)" — strip parenthetical
+      return state.replace(/\s*\(.*\)$/, '');
     }
     return 'Other';
   };
 
+  // Group cameras by state, sorted alphabetically
   const groupedCameras = {};
   if (filter !== 'favorites' && favoritesCameras.length > 0) {
     const favFiltered = favoritesCameras.filter(c => 
@@ -845,9 +858,21 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
   }
   
   filtered.filter(c => filter === 'favorites' || !favorites.includes(c._id)).forEach(cam => {
-    const region = filter === 'favorites' ? '★ Favorites' : getRegion(cam);
-    if (!groupedCameras[region]) groupedCameras[region] = [];
-    groupedCameras[region].push(cam);
+    const state = filter === 'favorites' ? '★ Favorites' : getState(cam);
+    if (!groupedCameras[state]) groupedCameras[state] = [];
+    groupedCameras[state].push(cam);
+  });
+
+  // Sort cameras within each state by city name
+  Object.values(groupedCameras).forEach(cams => {
+    cams.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  });
+
+  // Sort state keys alphabetically (favorites always first)
+  const sortedGroups = Object.entries(groupedCameras).sort(([a], [b]) => {
+    if (a === '★ Favorites') return -1;
+    if (b === '★ Favorites') return 1;
+    return a.localeCompare(b);
   });
 
   const handleSavePreset = () => {
@@ -991,12 +1016,22 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
 
           <ScrollArea className="flex-1">
             <div className="p-2">
-              {Object.entries(groupedCameras).map(([region, cams]) => (
-                <div key={region} className="mb-4">
-                  <h4 className={`text-xs font-semibold uppercase tracking-wider px-2 mb-2 ${region === '★ Favorites' ? 'text-yellow-500' : 'text-white/50'}`}>
-                    {region}
-                  </h4>
-                  <ul className="space-y-1" role="list">
+              {sortedGroups.map(([state, cams]) => (
+                <div key={state} className="mb-3">
+                  <div className={`flex items-center gap-2 px-2 mb-1.5 ${state === '★ Favorites' ? '' : ''}`}>
+                    {state === '★ Favorites' ? (
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-yellow-500">{state}</h4>
+                    ) : (
+                      <>
+                        <span className="text-[10px] font-black tracking-wider text-[#ff7a00]/70 bg-[#ff7a00]/10 px-1.5 py-0.5 rounded">
+                          {STATE_ABBREV[state] || state.slice(0, 2).toUpperCase()}
+                        </span>
+                        <h4 className="text-xs font-semibold text-white/40">{state}</h4>
+                        <span className="text-[10px] text-white/20 ml-auto">{cams.length}</span>
+                      </>
+                    )}
+                  </div>
+                  <ul className="space-y-0.5" role="list">
                     {cams.map(camera => {
                       const isSelected = selectedCameras.some(c => c?._id === camera._id);
                       const hasAccess = canAccess(userTier, camera.min_tier);
@@ -1057,7 +1092,7 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
                 </div>
               ))}
               
-              {Object.keys(groupedCameras).length === 0 && (
+              {sortedGroups.length === 0 && (
                 <div className="text-center py-8 text-white/50">
                   <Search className="w-8 h-8 mx-auto mb-2 opacity-50" aria-hidden="true" />
                   <p className="text-sm">No cameras found</p>
