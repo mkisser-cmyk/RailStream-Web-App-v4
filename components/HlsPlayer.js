@@ -68,18 +68,23 @@ function formatTimeAgo(seconds) {
 function extractStreamName(hlsUrl) {
   if (!hlsUrl) return null;
   try {
-    // Parse the URL and get path segments
-    // For: /Live_Mobile/FOS_CAM01/playlist_dvr.m3u8 -> FOS_CAM01
-    const urlObj = new URL(hlsUrl);
-    const parts = urlObj.pathname.split('/').filter(Boolean);
-    // Camera name is the segment before the playlist file
+    // Try parsing as URL - handle both absolute and relative URLs
+    let pathname = hlsUrl;
+    try {
+      pathname = new URL(hlsUrl).pathname;
+    } catch {
+      // hlsUrl might be relative, use it directly
+    }
+    const parts = pathname.split('/').filter(Boolean);
+    // Camera name is the segment before the playlist file (e.g., FOS_CAM01)
     if (parts.length >= 2) {
       return parts[parts.length - 2];
     }
-  } catch {
-    // Fallback: regex match for common patterns
+    // Fallback: regex match
     const match = hlsUrl.match(/\/([A-Z]{2,4}_CAM\d{1,2})\//i);
     if (match) return match[1];
+  } catch (e) {
+    console.warn('[ThumbScrub] extractStreamName error:', e);
   }
   return null;
 }
@@ -570,20 +575,16 @@ export default function HlsPlayer({
     setThumbScreenY(rect.top);
     if (!thumbHover) {
       setThumbHover(true);
-      console.log('[ThumbScrub] Hover started. streamName:', streamName, 'src:', src, 'seekRange:', seekRange);
+      console.log('[ThumbScrub] Hover started. streamName:', streamName, 'src:', src);
     }
-  }, [thumbHover, streamName, src, seekRange]);
+  }, [thumbHover, streamName, src]);
 
   const handleSeekHoverEnd = useCallback(() => {
     setThumbHover(false);
   }, []);
 
   // Calculate stream name from src URL for thumbnail lookups
-  const streamName = useMemo(() => {
-    const name = extractStreamName(src);
-    if (src) console.log('[ThumbScrub] src:', src, '-> streamName:', name);
-    return name;
-  }, [src]);
+  const streamName = useMemo(() => extractStreamName(src), [src]);
 
   // Calculate thumbnail timestamp for current hover position
   const thumbTimestamp = useMemo(() => {
