@@ -103,6 +103,7 @@ function calcThumbTimestamp(hoverPct, seekableStart, seekableEnd, streamEndUnixT
 
 // ── Thumbnail Preview Component — with aggressive caching for fast scrubbing ──
 const thumbCacheMap = new Map(); // Persistent cache across renders: timestamp -> src URL
+const thumbFailSet = new Set(); // Track timestamps that failed to load
 
 function ThumbnailPreview({ visible, screenX, screenY, timestamp, streamName, timeLabel, viewMode }) {
   const [displaySrc, setDisplaySrc] = useState(null);
@@ -120,8 +121,14 @@ function ThumbnailPreview({ visible, screenX, screenY, timestamp, streamName, ti
     }
     lastTsRef.current = timestamp;
 
-    // Check client cache first — instant display
+    // Check if this timestamp already failed
     const cacheKey = `${streamName}/${timestamp}`;
+    if (thumbFailSet.has(cacheKey)) {
+      // Don't retry — keep showing previous good thumbnail or nothing
+      return;
+    }
+
+    // Check client cache first — instant display
     if (thumbCacheMap.has(cacheKey)) {
       setDisplaySrc(thumbCacheMap.get(cacheKey));
       prefetchNearby(streamName, timestamp, lastDirRef.current);
@@ -139,12 +146,18 @@ function ThumbnailPreview({ visible, screenX, screenY, timestamp, streamName, ti
     const img = new Image();
     loadingRef.current = img;
     img.onload = () => {
-      thumbCacheMap.set(cacheKey, src);
-      setDisplaySrc(src);
-      // Prefetch nearby thumbnails in scrub direction
-      prefetchNearby(streamName, timestamp, lastDirRef.current);
+      // Verify it's actually an image (not an HTML error page)
+      if (img.naturalWidth > 1 && img.naturalHeight > 1) {
+        thumbCacheMap.set(cacheKey, src);
+        setDisplaySrc(src);
+        prefetchNearby(streamName, timestamp, lastDirRef.current);
+      } else {
+        thumbFailSet.add(cacheKey);
+      }
     };
-    img.onerror = () => {};
+    img.onerror = () => {
+      thumbFailSet.add(cacheKey);
+    };
     img.src = src;
   }, [visible, streamName, timestamp]);
 
@@ -186,7 +199,13 @@ function ThumbnailPreview({ visible, screenX, screenY, timestamp, streamName, ti
         background: '#000',
       }}>
         {displaySrc ? (
-          <img src={displaySrc} alt="Preview" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} draggable={false} />
+          <img
+            src={displaySrc}
+            alt="Preview"
+            style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }}
+            draggable={false}
+            onError={() => setDisplaySrc(null)}
+          />
         ) : (
           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111' }}>
             <div style={{ width: isCompact ? 18 : 24, height: isCompact ? 18 : 24, border: '3px solid rgba(255,122,0,0.4)', borderTopColor: '#ff7a00', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
