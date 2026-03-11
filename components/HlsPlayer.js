@@ -133,8 +133,9 @@ function ThumbnailPreview({ visible, x, containerWidth, timestamp, streamName, t
 
   return (
     <div
-      className="absolute bottom-full mb-3 pointer-events-none z-50 transition-opacity duration-150"
+      className="pointer-events-none z-50 transition-opacity duration-150"
       style={{
+        position: 'absolute',
         left: `${clampedX}px`,
         transform: 'translateX(-50%)',
         opacity: displaySrc ? 1 : 0.5,
@@ -702,6 +703,23 @@ export default function HlsPlayer({
         </div>
       )}
 
+      {/* ── Thumbnail Scrub Preview — rendered inside player container, above controls ── */}
+      {controls && !error && thumbHover && streamName && seekRange > 10 && (
+        <div
+          className="absolute left-4 right-4 z-40 pointer-events-none"
+          style={{ bottom: '90px' }}
+        >
+          <ThumbnailPreview
+            visible={true}
+            x={thumbX}
+            containerWidth={thumbContainerW}
+            timestamp={thumbTimestamp}
+            streamName={streamName}
+            timeLabel={thumbTimeLabel}
+          />
+        </div>
+      )}
+
       {/* ── Controls Bar ── */}
       {controls && !error && (
         <div className={`absolute bottom-0 left-0 right-0 z-30 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
@@ -717,15 +735,6 @@ export default function HlsPlayer({
                 onMouseMove={handleSeekHover}
                 onMouseLeave={handleSeekHoverEnd}
               >
-                {/* Thumbnail Preview Tooltip */}
-                <ThumbnailPreview
-                  visible={thumbHover && !!streamName}
-                  x={thumbX}
-                  containerWidth={thumbContainerW}
-                  timestamp={thumbTimestamp}
-                  streamName={streamName}
-                  timeLabel={thumbTimeLabel}
-                />
                 {/* Hover position indicator line */}
                 {thumbHover && (
                   <div
