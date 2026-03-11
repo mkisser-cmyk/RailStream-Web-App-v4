@@ -239,6 +239,7 @@ export default function HlsPlayer({
   onPlaying,
   onError,
   onLogSighting,
+  initialSeekOffset = 0,
   className = '',
   poster = null,
   openReviewOps = 0,
@@ -509,6 +510,23 @@ export default function HlsPlayer({
     timeUpdateRef.current = setInterval(updateTime, 500);
     return () => clearInterval(timeUpdateRef.current);
   }, []);
+
+  // ── Initial seek from replay link ──
+  const initialSeekAppliedRef = useRef(false);
+  useEffect(() => {
+    if (initialSeekAppliedRef.current || !initialSeekOffset || initialSeekOffset <= 0) return;
+    if (seekableEnd <= seekableStart || seekableEnd === 0) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const targetTime = seekableEnd - initialSeekOffset;
+    if (targetTime >= seekableStart) {
+      video.currentTime = targetTime;
+      setIsLive(false);
+      initialSeekAppliedRef.current = true;
+      console.log(`[HlsPlayer] Applied initial seek: -${initialSeekOffset}s → time ${targetTime.toFixed(1)}`);
+    }
+  }, [initialSeekOffset, seekableStart, seekableEnd]);
 
   // ── Auto-hide controls ──
   const resetControlsTimer = useCallback(() => {

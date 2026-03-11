@@ -214,7 +214,8 @@ export default function SightingsPage() {
     const sightingTs = new Date(s.sighting_time).getTime() / 1000;
     const now = Date.now() / 1000;
     const secsAgo = Math.floor(now - sightingTs);
-    if (secsAgo > 7200) return null;
+    // DVR supports 7 days (604800 seconds)
+    if (secsAgo > 604800 || secsAgo < 0) return null;
     return `/?watch=${s.camera_id}&seek=${secsAgo}`;
   };
 

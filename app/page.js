@@ -1203,7 +1203,7 @@ function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCame
 
 // WATCH PAGE
 // ============================================
-function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera, removeCamera, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp }) {
+function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera, removeCamera, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp, replaySeekOffset = 0, clearReplaySeek }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
@@ -1521,6 +1521,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                         openReviewOps={reviewOpsCounter}
                         hideReviewButton={true}
                         onLogSighting={user ? (data) => handleLogSighting(selectedCameras[focusedSlot], data) : undefined}
+                        initialSeekOffset={focusedSlot === 0 ? replaySeekOffset : 0}
                       />
                     ) : state.loading ? (
                       <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="w-10 h-10 text-[#ff7a00] animate-spin" /></div>
@@ -1631,6 +1632,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                           openReviewOps={viewMode === 'single' && i === 0 ? reviewOpsCounter : 0}
                           hideReviewButton={true}
                           onLogSighting={user && !isCompact ? (data) => handleLogSighting(selectedCameras[i], data) : undefined}
+                          initialSeekOffset={i === 0 ? replaySeekOffset : 0}
                         />
                       ) : null}
                       
@@ -2320,6 +2322,9 @@ export default function App() {
   const [favorites, setFavorites] = useState([]);
   const [presets, setPresets] = useState([]);
   
+  // Replay seek offset from URL params (seconds back from live)
+  const [replaySeekOffset, setReplaySeekOffset] = useState(0);
+  
   // Live thumbnail mapping from studio (studioSiteId -> catalogCameraId)
   const [thumbnailMap, setThumbnailMap] = useState({}); // catalogCameraId -> studioSiteId
   const [thumbTimestamp, setThumbTimestamp] = useState(Date.now());
@@ -2470,6 +2475,26 @@ export default function App() {
     };
     init();
   }, []);
+
+  // Handle ?watch=CAMERA_ID&seek=SECONDS URL params (from Replay links)
+  useEffect(() => {
+    if (cameras.length === 0 || loading) return;
+    const params = new URLSearchParams(window.location.search);
+    const watchId = params.get('watch');
+    const seekSecs = parseInt(params.get('seek') || '0', 10);
+    
+    if (watchId) {
+      const camera = cameras.find(c => c._id === watchId);
+      if (camera) {
+        console.log(`[Replay] Loading camera ${camera.name}, seek offset: ${seekSecs}s`);
+        setCurrentPage('watch');
+        if (seekSecs > 0) setReplaySeekOffset(seekSecs);
+        setTimeout(() => loadCamera(camera, 0), 300);
+      }
+      // Clean URL params without reload
+      window.history.replaceState({}, '', '/');
+    }
+  }, [cameras, loading]);
 
   // Fetch studio thumbnail mapping and poll every 5 seconds
   useEffect(() => {
@@ -2682,6 +2707,8 @@ export default function App() {
             setPresets={updatePresets}
             thumbnailMap={thumbnailMap}
             thumbTimestamp={thumbTimestamp}
+            replaySeekOffset={replaySeekOffset}
+            clearReplaySeek={() => setReplaySeekOffset(0)}
           />
         )}
 
