@@ -505,7 +505,7 @@ export default function SightingsPage() {
                                 <Clock className="w-3 h-3" />
                                 <span>{sightDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                                 <span className="text-white/60">at</span>
-                                <span>{sightDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+                                <span>{sightDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</span>
                               </span>
                             </div>
 

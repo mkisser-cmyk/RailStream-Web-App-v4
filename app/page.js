@@ -2260,7 +2260,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                       
                       {/* Camera label + expand button (multi-view only) */}
                       {viewMode !== 'single' && camera && (
-                        <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity ${isCompact ? 'p-1.5' : 'p-2.5'}`}>
+                        <div className={`absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity ${isCompact ? 'p-1.5' : 'p-2.5'}`}>
                           <div className="flex items-center justify-between">
                             <div className="min-w-0">
                               <p className={`text-white font-medium truncate ${isCompact ? 'text-xs' : 'text-sm'}`}>{camera.name}</p>
@@ -2407,7 +2407,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                 <div className="ml-auto text-right">
                   <p className="text-white/70 text-xs flex items-center gap-1">
                     <Clock className="w-3 h-3" />
-                    {new Date(sightingForm.sightingTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                    {new Date(sightingForm.sightingTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
                   </p>
                 </div>
               </div>
