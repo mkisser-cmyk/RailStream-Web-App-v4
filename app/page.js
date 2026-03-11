@@ -2058,19 +2058,31 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
               })}
             </div>
             
-            {/* Save & Load Layouts */}
-            <LayoutsMenu 
-              presets={presets} 
-              onSave={handleSavePreset} 
-              onLoad={handleLoadPreset}
-              onDelete={(i) => {
-                const newPresets = presets.filter((_, idx) => idx !== i);
-                updatePresets(newPresets);
-              }}
-              viewMode={viewMode}
-              selectedCameras={selectedCameras}
-              slots={slots}
-            />
+            {/* Save & Load Layouts — members only */}
+            {user ? (
+              <LayoutsMenu 
+                presets={presets} 
+                onSave={handleSavePreset} 
+                onLoad={handleLoadPreset}
+                onDelete={(i) => {
+                  const newPresets = presets.filter((_, idx) => idx !== i);
+                  updatePresets(newPresets);
+                }}
+                viewMode={viewMode}
+                selectedCameras={selectedCameras}
+                slots={slots}
+              />
+            ) : (
+              <button
+                onClick={() => toast('Sign in to save layouts', { icon: '🔒' })}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-white/5 text-white/40 cursor-not-allowed"
+                aria-label="My Layouts (sign in required)"
+              >
+                <Bookmark className="w-4 h-4" />
+                <span className="hidden sm:inline">My Layouts</span>
+                <Lock className="w-3 h-3" />
+              </button>
+            )}
 
             {/* Review Ops - Conductor & Engineer only, single view only */}
             {viewMode === 'single' && (
