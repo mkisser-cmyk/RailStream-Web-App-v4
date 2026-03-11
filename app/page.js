@@ -71,6 +71,30 @@ function getDeviceId() {
   return id;
 }
 
+// Get browser/device info for API device registration
+function getDeviceInfo() {
+  if (typeof window === 'undefined') return { platform: 'web', device_name: 'Web Browser' };
+  const ua = navigator.userAgent;
+  let browser = 'Web Browser';
+  let os = 'Unknown';
+  if (ua.includes('Firefox/')) browser = 'Firefox';
+  else if (ua.includes('Edg/')) browser = 'Edge';
+  else if (ua.includes('Chrome/') && !ua.includes('Edg/')) browser = 'Chrome';
+  else if (ua.includes('Safari/') && !ua.includes('Chrome/')) browser = 'Safari';
+  if (ua.includes('Mac OS X')) os = 'macOS';
+  else if (ua.includes('Windows')) os = 'Windows';
+  else if (ua.includes('Linux')) os = 'Linux';
+  else if (ua.includes('Android')) os = 'Android';
+  else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
+  return {
+    platform: 'web',
+    device_name: `${browser} on ${os}`,
+    device_model: browser,
+    os_version: os,
+    app_version: 'Web 1.0',
+  };
+}
+
 const TIERS = {
   fireman: { label: 'Fireman', icon: Zap, color: 'from-orange-600 to-orange-500', price: 'FREE', level: 1 },
   conductor: { label: 'Conductor', icon: Shield, color: 'from-blue-600 to-blue-500', price: '$8.95/mo', level: 2 },
@@ -2290,7 +2314,7 @@ export default function App() {
         body: JSON.stringify({
           camera_id: camera._id,
           device_id: getDeviceId(),
-          platform: 'web',
+          ...getDeviceInfo(),
         }),
       });
       const data = await res.json();
