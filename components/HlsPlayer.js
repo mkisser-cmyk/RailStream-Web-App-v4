@@ -132,8 +132,8 @@ function ThumbnailPreview({ visible, hoverPct, timestamp, streamName, timeLabel,
 
   if (!visible) return null;
 
-  const thumbW = 192;
-  const thumbH = 108;
+  const thumbW = 240;
+  const thumbH = 135;
   const leftPx = hoverPct * (containerWidth || 600);
   const clampedLeft = Math.max(thumbW / 2, Math.min((containerWidth || 600) - thumbW / 2, leftPx));
 
@@ -142,33 +142,51 @@ function ThumbnailPreview({ visible, hoverPct, timestamp, streamName, timeLabel,
       style={{
         position: 'absolute',
         bottom: '100%',
-        left: `${clampedLeft}px`,
+        left: clampedLeft,
         transform: 'translateX(-50%)',
-        marginBottom: 12,
+        marginBottom: 8,
         pointerEvents: 'none',
         zIndex: 9999,
-        transition: 'left 0.1s ease-out',
+        transition: 'left 0.08s ease-out',
       }}
     >
-      <div style={{ borderRadius: 8, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.8)', border: '2px solid rgba(255,122,0,0.6)', background: '#000' }}>
+      {/* Thumbnail image */}
+      <div style={{
+        width: thumbW,
+        height: thumbH,
+        borderRadius: 6,
+        overflow: 'hidden',
+        border: '3px solid #ff7a00',
+        boxShadow: '0 4px 24px rgba(0,0,0,0.7), 0 0 12px rgba(255,122,0,0.3)',
+        background: '#000',
+      }}>
         {displaySrc ? (
-          <img src={displaySrc} alt="Preview" style={{ display: 'block', width: thumbW, height: thumbH, objectFit: 'cover' }} draggable={false} />
+          <img src={displaySrc} alt="Preview" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} draggable={false} />
         ) : (
-          <div style={{ width: thumbW, height: thumbH, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', flexDirection: 'column', gap: 6 }}>
-            <div style={{ width: 20, height: 20, border: '2px solid rgba(255,122,0,0.5)', borderTopColor: '#ff7a00', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-            <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10 }}>{streamName ? 'Loading...' : 'No cam ID'}</span>
-          </div>
-        )}
-        {timeLabel && (
-          <div style={{ background: 'rgba(0,0,0,0.95)', textAlign: 'center', padding: '4px 8px' }}>
-            <span style={{ color: '#fff', fontSize: 12, fontFamily: 'monospace', fontWeight: 600 }}>{timeLabel}</span>
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', flexDirection: 'column', gap: 6 }}>
+            <div style={{ width: 24, height: 24, border: '3px solid rgba(255,122,0,0.4)', borderTopColor: '#ff7a00', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+            <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>{streamName ? 'Loading...' : 'No stream'}</span>
           </div>
         )}
       </div>
-      <div style={{
-        position: 'absolute', left: '50%', bottom: -6, transform: 'translateX(-50%) rotate(45deg)',
-        width: 12, height: 12, background: '#000', borderRight: '2px solid rgba(255,122,0,0.6)', borderBottom: '2px solid rgba(255,122,0,0.6)',
-      }} />
+      {/* Time label — white pill below thumbnail */}
+      {timeLabel && (
+        <div style={{ textAlign: 'center', marginTop: 6 }}>
+          <span style={{
+            display: 'inline-block',
+            background: 'rgba(255,255,255,0.9)',
+            color: '#111',
+            fontSize: 13,
+            fontWeight: 700,
+            fontFamily: 'monospace',
+            padding: '3px 10px',
+            borderRadius: 4,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+          }}>
+            {timeLabel}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -575,16 +593,16 @@ export default function HlsPlayer({
     return calcThumbTimestamp(thumbPct, seekableStart, seekableEnd);
   }, [thumbHover, thumbPct, seekableStart, seekableEnd]);
 
-  // Calculate time label for thumbnail hover
+  // Calculate time label for thumbnail hover — format as -MM:SS offset from live
   const thumbTimeLabel = useMemo(() => {
     if (!thumbHover || seekableEnd <= seekableStart) return '';
     const seekRange = seekableEnd - seekableStart;
     const posInStream = seekableStart + thumbPct * seekRange;
     const offsetFromLive = seekableEnd - posInStream;
-    if (offsetFromLive < 5) return 'LIVE';
-    // Show as HH:MM:SS timestamp
-    const ts = new Date((Date.now() / 1000 - offsetFromLive) * 1000);
-    return ts.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+    if (offsetFromLive < 2) return 'LIVE';
+    const mins = Math.floor(offsetFromLive / 60);
+    const secs = Math.floor(offsetFromLive % 60);
+    return `-${String(mins).padStart(1, '0')}:${String(secs).padStart(2, '0')}`;
   }, [thumbHover, thumbPct, seekableStart, seekableEnd]);
 
   // ── Review Ops ──
