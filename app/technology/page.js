@@ -355,12 +355,12 @@ export default function TechnologyPage() {
       <section className="py-24 md:py-32 bg-[#050505]">
         <div className="max-w-4xl mx-auto px-6 text-center">
           <h2 className="text-4xl md:text-5xl font-black mb-6">
-            Everyone Else Is a
-            <span className="text-[#ff7a00]"> Distant Second.</span>
+            What Sets Us
+            <span className="text-[#ff7a00]"> Apart.</span>
           </h2>
           <p className="text-lg text-white/50 max-w-2xl mx-auto mb-12">
-            We're not a hobby project with a webcam taped to a window.
-            This is a professional broadcast network that happens to point at train tracks.
+            We built a professional broadcast network from the ground up.
+            Here's how our infrastructure compares.
           </p>
 
           <div className="rounded-2xl border border-white/10 overflow-hidden">
@@ -371,18 +371,18 @@ export default function TechnologyPage() {
                   <th className="p-4 md:p-5 text-center">
                     <span className="text-[#ff7a00] font-bold">RailStream</span>
                   </th>
-                  <th className="p-4 md:p-5 text-center text-white/30 font-medium">Others</th>
+                  <th className="p-4 md:p-5 text-center text-white/30 font-medium">Typical</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {[
-                  ['Video Quality', 'Up to 4K HDR', '720p webcam'],
-                  ['Audio', 'Multi-mic positional DSP', 'Built-in mic (if any)'],
-                  ['DVR / Rewind', '7-day full archive', 'Live only'],
-                  ['Infrastructure', 'Self-hosted data center', 'YouTube embed'],
-                  ['Daily Traffic', '15-20 TB', 'N/A'],
+                  ['Video Quality', 'Up to 4K HDR', 'Varies (720p–4K)'],
+                  ['Audio', 'Multi-mic positional DSP', 'Single mic or none'],
+                  ['DVR / Rewind', '7-day full archive', 'Live only or limited'],
+                  ['Infrastructure', 'Self-hosted data center', 'YouTube / cloud hosted'],
+                  ['Daily Traffic', '15-20 TB', 'Varies'],
                   ['Multi-view', 'Up to 16 simultaneous', 'Single camera'],
-                  ['Transcoding', '7x NVIDIA Tesla GPUs', 'None'],
+                  ['Transcoding', '7x NVIDIA Tesla GPUs', 'Varies'],
                   ['Uptime SLA', '24/7 MC-LAG redundancy', 'Best effort'],
                 ].map(([feature, rs, others], i) => (
                   <tr key={i} className="hover:bg-white/[0.02] transition-colors">
