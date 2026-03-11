@@ -251,7 +251,7 @@ export default function TechnologyPage() {
                 {[
                   'Multi-mic arrays with DSP processing',
                   'True positional audio — hear the train move',
-                  'Broadcast-grade 4K video at every site',
+                  'Up to broadcast-grade 4K video at select sites',
                   '7-day DVR — rewind and replay any moment',
                   'Multi-view: watch up to 16 cameras at once',
                 ].map((item, i) => (
