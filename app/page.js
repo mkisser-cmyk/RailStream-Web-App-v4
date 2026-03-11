@@ -184,11 +184,14 @@ function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
   ];
 
   const aboutItems = [
+    { id: 'features', label: 'Features', href: '/features', description: 'Everything our player can do', badge: 'NEW' },
+    { id: 'pricing', label: 'Pricing', href: '/pricing', description: 'Plans & subscription options' },
     { id: 'about', label: 'Our Story', href: null, description: 'The RailStream journey' },
-    { id: 'technology', label: 'Our Technology', href: '/technology', description: 'Self-hosted infrastructure', badge: 'NEW' },
+    { id: 'technology', label: 'Our Technology', href: '/technology', description: 'Self-hosted infrastructure' },
     { id: 'host', label: 'Host a Camera', href: '/host', description: 'Partner with us' },
     { id: '15years', label: '15 Year Anniversary', href: '/15years', description: 'Celebrating since 2011', emoji: '\ud83c\udf89' },
     { id: 'status', label: 'Network Status', href: '/network-status', description: 'Live system health' },
+    { id: 'contact', label: 'Contact Us', href: '/contact', description: 'Get in touch' },
   ];
 
   const handleNavClick = (item) => {
@@ -278,7 +281,7 @@ function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
 
             {aboutOpen && (
               <div
-                className="absolute top-full right-0 mt-2 w-72 bg-[#111]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl shadow-black/50 overflow-hidden"
+                className="absolute top-full right-0 mt-2 w-72 bg-[#111]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl shadow-black/50 overflow-y-auto max-h-[calc(100vh-80px)]"
                 onMouseEnter={handleAboutEnter}
                 onMouseLeave={handleAboutLeave}
               >
