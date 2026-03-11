@@ -105,7 +105,7 @@ export default function TechnologyPage() {
           </h1>
 
           <p className="text-xl md:text-2xl text-white/70 max-w-3xl mx-auto mb-10 leading-relaxed font-light">
-            We don't rent servers. We don't rely on YouTube. We built a broadcast-grade streaming network from the ground up — and we move
+            We don't rent servers. We don't rely on YouTube. Mike & Andrea built a broadcast-grade streaming network from the ground up — and we move
             <span className="text-white font-semibold"> 15–20 terabytes of video every single day</span> from our own data center.
           </p>
 
@@ -174,7 +174,7 @@ export default function TechnologyPage() {
                 <p className="text-white/80 text-lg italic">
                   "I love that we don't need YouTube or a CDN. We move 15–20 terabytes of video traffic every single day — out of the house."
                 </p>
-                <cite className="text-[#ff7a00] text-sm font-semibold mt-2 block not-italic">— Michael Kisser, Founder</cite>
+                <cite className="text-[#ff7a00] text-sm font-semibold mt-2 block not-italic">— Michael Kisser, Co-Founder</cite>
               </blockquote>
             </div>
             <div className="relative rounded-2xl overflow-hidden aspect-[4/3] group">
@@ -399,22 +399,34 @@ export default function TechnologyPage() {
         </div>
       </section>
 
-      {/* ── Big Quote ── */}
+      {/* ── The Founders ── */}
       <section className="py-24 md:py-32">
-        <div className="max-w-4xl mx-auto px-6 text-center">
-          <svg className="w-12 h-12 text-[#ff7a00]/30 mx-auto mb-8" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
-          </svg>
-          <p className="text-2xl md:text-3xl lg:text-4xl font-bold text-white/90 leading-snug mb-8">
-            We move more data than many small broadcasters, and UniFi just does the job. It's the resilient, single-pane-of-glass backbone we needed to keep growing.
-          </p>
-          <div className="flex items-center justify-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-[#ff7a00]/20 flex items-center justify-center">
-              <span className="text-[#ff7a00] font-bold text-lg">MK</span>
+        <div className="max-w-5xl mx-auto px-6">
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            <div className="relative rounded-2xl overflow-hidden">
+              <img
+                src="https://railstream.net/images/us2.png"
+                alt="Mike and Andrea Kisser, Co-Founders of RailStream"
+                className="w-full rounded-2xl shadow-2xl"
+              />
             </div>
-            <div className="text-left">
-              <div className="text-white font-semibold">Michael Kisser</div>
-              <div className="text-white/40 text-sm">Founder, RailStream</div>
+            <div>
+              <h2 className="text-4xl md:text-5xl font-black mb-6 leading-tight">
+                Meet the
+                <span className="text-[#ff7a00]"> Co-Founders</span>
+              </h2>
+              <p className="text-lg text-white/60 mb-6 leading-relaxed">
+                RailStream was built by <span className="text-white font-semibold">Mike & Andrea Kisser</span> — a husband-and-wife team who turned a passion for railfanning into a broadcast-grade streaming network. Since 2011, they've grown RailStream from a single camera at the Fostoria Iron Triangle into a 40+ site network serving viewers in 175 countries.
+              </p>
+              <p className="text-lg text-white/60 mb-8 leading-relaxed">
+                Mike architects the technology — the GPU farm, the network, the streaming pipeline. Andrea is the heart and creative force behind the brand, the community, and the experience that keeps viewers coming back.
+              </p>
+              <blockquote className="border-l-4 border-[#ff7a00] pl-5 py-2">
+                <p className="text-white/80 text-lg italic">
+                  "We move more data than many small broadcasters, and UniFi just does the job. It's the resilient, single-pane-of-glass backbone we needed to keep growing."
+                </p>
+                <cite className="text-[#ff7a00] text-sm font-semibold mt-2 block not-italic">— Mike Kisser, Co-Founder</cite>
+              </blockquote>
             </div>
           </div>
         </div>
