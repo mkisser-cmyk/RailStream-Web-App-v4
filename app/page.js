@@ -298,7 +298,7 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
         const res = await fetch('/api/playback/authorize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ camera_id: cam._id, device_id: getDeviceId(), platform: 'web' }),
+          body: JSON.stringify({ camera_id: cam._id, device_id: getDeviceId(), ...getDeviceInfo() }),
         });
         const data = await res.json();
         if (data.ok && data.hls_url) {
@@ -319,7 +319,7 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
       fetch('/api/playback/authorize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ camera_id: cam._id, device_id: `hero-${Date.now()}`, platform: 'web' }),
+        body: JSON.stringify({ camera_id: cam._id, device_id: getDeviceId(), ...getDeviceInfo() }),
       }).then(r => r.json()).then(data => {
         if (data.ok && data.hls_url) setHeroStreamUrl(data.hls_url);
       }).catch(() => {});

@@ -390,7 +390,11 @@ async function handleRoute(request, { params }) {
         body: JSON.stringify({
           camera_id: body.camera_id,
           device_id: body.device_id || `web-${Date.now()}`,
-          platform: 'web',
+          platform: body.platform || 'web',
+          device_name: body.device_name || 'Web Browser',
+          device_model: body.device_model || 'Browser',
+          os_version: body.os_version || 'Unknown',
+          app_version: body.app_version || 'Web 1.0',
         }),
       });
       const data = await res.json();
