@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import Hls from 'hls.js';
 
 /**
@@ -85,17 +86,20 @@ function calcThumbTimestamp(hoverPct, seekableStart, seekableEnd) {
   return Math.round(ts / 2) * 2;
 }
 
-// ── Thumbnail Preview Component ──
-function ThumbnailPreview({ visible, x, containerWidth, timestamp, streamName, timeLabel }) {
+// ── Thumbnail Preview Component (renders via portal to escape overflow:hidden) ──
+function ThumbnailPreview({ visible, seekBarRef, hoverPct, timestamp, streamName, timeLabel }) {
   const [displaySrc, setDisplaySrc] = useState(null);
   const preloadRef = useRef(null);
   const lastTimestampRef = useRef(null);
   const debounceRef = useRef(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     if (!visible || !streamName || !timestamp) return;
     
-    // Debounce: only fetch a new thumbnail every 300ms
+    // Debounce: only fetch every 150ms
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       if (timestamp === lastTimestampRef.current) return;
@@ -103,7 +107,6 @@ function ThumbnailPreview({ visible, x, containerWidth, timestamp, streamName, t
 
       const src = `/api/thumbnails/scrub?cam=${encodeURIComponent(streamName)}&ts=${timestamp}`;
 
-      // Cancel previous preload
       if (preloadRef.current) {
         preloadRef.current.onload = null;
         preloadRef.current.onerror = null;
@@ -111,71 +114,65 @@ function ThumbnailPreview({ visible, x, containerWidth, timestamp, streamName, t
 
       const img = new Image();
       preloadRef.current = img;
-      img.onload = () => {
-        setDisplaySrc(src);
-      };
-      img.onerror = () => {
-        // Keep showing last good image — no flutter
-      };
+      img.onload = () => setDisplaySrc(src);
+      img.onerror = () => {}; // Keep last good image
       img.src = src;
     }, 150);
 
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [visible, streamName, timestamp]);
 
-  // Don't clear displaySrc when hiding — keep it warm for next hover
-  if (!visible) return null;
+  if (!visible || !mounted || !seekBarRef?.current) return null;
 
-  const thumbW = 160;
-  const thumbH = 90;
-  const halfW = thumbW / 2;
-  const clampedX = Math.max(halfW + 4, Math.min(containerWidth - halfW - 4, x));
+  // Calculate screen position from the seek bar's bounding rect
+  const rect = seekBarRef.current.getBoundingClientRect();
+  const thumbW = 192;
+  const thumbH = 108;
+  const xOnBar = rect.left + hoverPct * rect.width;
+  const clampedX = Math.max(rect.left + thumbW / 2, Math.min(rect.right - thumbW / 2, xOnBar));
+  const topY = rect.top - thumbH - 30; // 30px gap above seek bar
 
-  return (
+  const content = (
     <div
-      className="pointer-events-none z-50"
       style={{
-        position: 'absolute',
+        position: 'fixed',
         left: `${clampedX}px`,
+        top: `${topY}px`,
         transform: 'translateX(-50%)',
+        zIndex: 99999,
+        pointerEvents: 'none',
         transition: 'left 0.1s ease-out, opacity 0.2s ease',
         opacity: displaySrc ? 1 : 0.6,
       }}
     >
-      <div className="rounded-lg overflow-hidden shadow-2xl border border-white/25 bg-black">
+      <div style={{ borderRadius: 8, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.8)', border: '2px solid rgba(255,122,0,0.6)', background: '#000' }}>
         {displaySrc ? (
           <img
             src={displaySrc}
-            alt="Thumbnail preview"
-            className="block"
-            style={{
-              width: thumbW,
-              height: thumbH,
-              objectFit: 'cover',
-              transition: 'opacity 0.15s ease',
-            }}
+            alt="Preview"
+            style={{ display: 'block', width: thumbW, height: thumbH, objectFit: 'cover' }}
             draggable={false}
           />
         ) : (
-          <div
-            className="flex items-center justify-center bg-[#111]"
-            style={{ width: thumbW, height: thumbH }}
-          >
-            <div className="w-5 h-5 border-2 border-[#ff7a00]/50 border-t-[#ff7a00] rounded-full animate-spin" />
+          <div style={{ width: thumbW, height: thumbH, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111' }}>
+            <div style={{ width: 20, height: 20, border: '2px solid rgba(255,122,0,0.5)', borderTopColor: '#ff7a00', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
           </div>
         )}
         {timeLabel && (
-          <div className="bg-black/90 text-center py-1 px-2">
-            <span className="text-white text-[11px] font-mono font-medium">{timeLabel}</span>
+          <div style={{ background: 'rgba(0,0,0,0.95)', textAlign: 'center', padding: '4px 8px' }}>
+            <span style={{ color: '#fff', fontSize: 12, fontFamily: 'monospace', fontWeight: 600 }}>{timeLabel}</span>
           </div>
         )}
       </div>
-      {/* Arrow */}
-      <div className="absolute left-1/2 -translate-x-1/2 -bottom-1.5 w-3 h-3 bg-black border-r border-b border-white/20 rotate-45" />
+      {/* Arrow pointing down */}
+      <div style={{
+        position: 'absolute', left: '50%', bottom: -6, transform: 'translateX(-50%) rotate(45deg)',
+        width: 12, height: 12, background: '#000', borderRight: '2px solid rgba(255,122,0,0.6)', borderBottom: '2px solid rgba(255,122,0,0.6)',
+      }} />
     </div>
   );
+
+  return createPortal(content, document.body);
 }
 
 export default function HlsPlayer({
@@ -225,9 +222,7 @@ export default function HlsPlayer({
 
   // Thumbnail scrubbing
   const [thumbHover, setThumbHover] = useState(false);
-  const [thumbX, setThumbX] = useState(0);
   const [thumbPct, setThumbPct] = useState(0);
-  const [thumbContainerW, setThumbContainerW] = useState(0);
   const thumbDebounceRef = useRef(null);
 
   // Review Ops
@@ -558,9 +553,7 @@ export default function HlsPlayer({
     if (!seekBarRef.current) return;
     const rect = seekBarRef.current.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    setThumbX(e.clientX - rect.left);
     setThumbPct(pct);
-    setThumbContainerW(rect.width);
     if (!thumbHover) setThumbHover(true);
   }, [thumbHover]);
 
@@ -711,22 +704,15 @@ export default function HlsPlayer({
         </div>
       )}
 
-      {/* ── Thumbnail Scrub Preview — rendered inside player container, above controls ── */}
-      {controls && !error && thumbHover && streamName && seekRange > 10 && (
-        <div
-          className="absolute left-4 right-4 z-40 pointer-events-none"
-          style={{ bottom: '90px' }}
-        >
-          <ThumbnailPreview
-            visible={true}
-            x={thumbX}
-            containerWidth={thumbContainerW}
-            timestamp={thumbTimestamp}
-            streamName={streamName}
-            timeLabel={thumbTimeLabel}
-          />
-        </div>
-      )}
+      {/* ── Thumbnail Scrub Preview — uses portal to escape overflow:hidden ── */}
+      <ThumbnailPreview
+        visible={controls && !error && thumbHover && !!streamName && seekRange > 10}
+        seekBarRef={seekBarRef}
+        hoverPct={thumbPct}
+        timestamp={thumbTimestamp}
+        streamName={streamName}
+        timeLabel={thumbTimeLabel}
+      />
 
       {/* ── Controls Bar ── */}
       {controls && !error && (
@@ -738,16 +724,16 @@ export default function HlsPlayer({
             <div className="relative px-4 pt-2 pb-0">
               <div
                 ref={seekBarRef}
-                className="relative h-6 flex items-center cursor-pointer group/seek"
+                className="relative h-8 flex items-center cursor-pointer group/seek"
                 onClick={handleSeek}
                 onMouseMove={handleSeekHover}
                 onMouseLeave={handleSeekHoverEnd}
               >
                 {/* Hover position indicator line */}
-                {thumbHover && (
+                {thumbHover && seekBarRef.current && (
                   <div
-                    className="absolute top-0 bottom-0 w-px bg-white/40 pointer-events-none z-10"
-                    style={{ left: `${thumbX}px` }}
+                    className="absolute top-0 bottom-0 w-px bg-white/50 pointer-events-none z-10"
+                    style={{ left: `${thumbPct * 100}%` }}
                   />
                 )}
                 {/* Track background */}
@@ -769,7 +755,7 @@ export default function HlsPlayer({
                 />
               </div>
               {/* Time labels */}
-              <div className="flex justify-between text-[10px] text-white/50 -mt-1 mb-0.5">
+              <div className="flex justify-between text-xs text-white/80 -mt-0.5 mb-0.5 font-medium">
                 <span>{isReviewMode ? formatTime(currentTime - seekableStart) : formatTimeAgo(seekRange)}</span>
                 <span>{isLive ? '' : formatTimeAgo(timeFromLive) + ' from live'}</span>
               </div>
