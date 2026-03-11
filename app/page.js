@@ -47,6 +47,7 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Globe,
   Download,
   Camera,
@@ -162,16 +163,23 @@ import HlsPlayer, { BackgroundHlsPlayer } from '@/components/HlsPlayer';
 // ============================================
 function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const aboutRef = useRef(null);
+  const aboutTimeoutRef = useRef(null);
 
   const navItems = [
     { id: 'home', label: 'Home', href: null },
-    { id: '15years', label: '🎉 15 Years', href: '/15years' },
     { id: 'watch', label: 'Watch', href: null },
     { id: 'cameras', label: 'Cameras', href: '/cameras' },
     { id: 'sightings', label: 'Train Log', href: '/sightings' },
-    { id: 'status', label: 'Status', href: '/network-status' },
-    { id: 'host', label: 'Host', href: '/host' },
-    { id: 'about', label: 'About', href: null },
+  ];
+
+  const aboutItems = [
+    { id: 'about', label: 'Our Story', href: null, description: 'The RailStream journey' },
+    { id: 'technology', label: 'Our Technology', href: '/technology', description: 'Self-hosted infrastructure', badge: 'NEW' },
+    { id: 'host', label: 'Host a Camera', href: '/host', description: 'Partner with us' },
+    { id: '15years', label: '15 Year Anniversary', href: '/15years', description: 'Celebrating since 2011', emoji: '\ud83c\udf89' },
+    { id: 'status', label: 'Network Status', href: '/network-status', description: 'Live system health' },
   ];
 
   const handleNavClick = (item) => {
@@ -181,6 +189,28 @@ function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
       setCurrentPage(item.id);
     }
   };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (aboutRef.current && !aboutRef.current.contains(e.target)) {
+        setAboutOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const handleAboutEnter = () => {
+    if (aboutTimeoutRef.current) clearTimeout(aboutTimeoutRef.current);
+    setAboutOpen(true);
+  };
+
+  const handleAboutLeave = () => {
+    aboutTimeoutRef.current = setTimeout(() => setAboutOpen(false), 200);
+  };
+
+  const isAboutActive = aboutItems.some(item => currentPage === item.id);
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-sm border-b border-white/10" role="navigation" aria-label="Main navigation">
@@ -207,16 +237,79 @@ function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
               role="menuitem"
               aria-current={currentPage === item.id ? 'page' : undefined}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                item.id === '15years' 
-                  ? 'bg-gradient-to-r from-orange-500 to-yellow-500 text-white hover:from-orange-600 hover:to-yellow-600'
-                  : currentPage === item.id 
-                    ? 'bg-[#ff7a00] text-white' 
-                    : 'text-white hover:bg-white/10'
+                currentPage === item.id 
+                  ? 'bg-[#ff7a00] text-white' 
+                  : 'text-white hover:bg-white/10'
               }`}
             >
               {item.label}
             </button>
           ))}
+
+          {/* About Dropdown */}
+          <div
+            ref={aboutRef}
+            className="relative"
+            onMouseEnter={handleAboutEnter}
+            onMouseLeave={handleAboutLeave}
+          >
+            <button
+              onClick={() => setAboutOpen(!aboutOpen)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                isAboutActive
+                  ? 'bg-[#ff7a00] text-white'
+                  : 'text-white hover:bg-white/10'
+              }`}
+              aria-label="About menu"
+              aria-expanded={aboutOpen}
+            >
+              About
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${aboutOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {aboutOpen && (
+              <div
+                className="absolute top-full right-0 mt-2 w-72 bg-[#111]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl shadow-black/50 overflow-hidden"
+                onMouseEnter={handleAboutEnter}
+                onMouseLeave={handleAboutLeave}
+              >
+                <div className="p-1.5">
+                  {aboutItems.map((item) => {
+                    const isActive = currentPage === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => { handleNavClick(item); setAboutOpen(false); }}
+                        className={`flex items-center gap-3 w-full text-left px-3 py-2.5 rounded-lg transition-all group ${
+                          isActive
+                            ? 'bg-[#ff7a00]/15 text-[#ff7a00]'
+                            : 'text-white/80 hover:bg-white/5 hover:text-white'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            {item.emoji && <span className="text-base">{item.emoji}</span>}
+                            <span className="font-medium text-sm">{item.label}</span>
+                            {item.badge && (
+                              <span className="px-1.5 py-0.5 bg-[#ff7a00] text-white text-[10px] font-bold rounded-full leading-none">
+                                {item.badge}
+                              </span>
+                            )}
+                          </div>
+                          <p className={`text-xs mt-0.5 ${isActive ? 'text-[#ff7a00]/70' : 'text-white/40 group-hover:text-white/50'}`}>
+                            {item.description}
+                          </p>
+                        </div>
+                        <svg className={`w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ${isActive ? 'opacity-100' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Auth */}
@@ -258,19 +351,40 @@ function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
 
       {/* Mobile Menu */}
       {menuOpen && (
-        <div className="md:hidden bg-black/95 border-b border-white/10 p-4" role="menu">
+        <div className="md:hidden bg-black/95 border-b border-white/10 p-4 max-h-[80vh] overflow-y-auto" role="menu">
           {navItems.map(item => (
             <button
               key={item.id}
               onClick={() => { handleNavClick(item); setMenuOpen(false); }}
               role="menuitem"
-              className={`block w-full text-left px-4 py-3 rounded-lg text-white font-medium ${
-                item.id === '15years'
-                  ? 'bg-gradient-to-r from-orange-500 to-yellow-500'
-                  : currentPage === item.id ? 'bg-[#ff7a00]' : 'hover:bg-white/10'
+              className={`block w-full text-left px-4 py-3 rounded-lg text-white font-medium mb-1 ${
+                currentPage === item.id ? 'bg-[#ff7a00]' : 'hover:bg-white/10'
               }`}
             >
               {item.label}
+            </button>
+          ))}
+
+          {/* About section divider */}
+          <div className="border-t border-white/10 my-3 mx-4" />
+          <p className="px-4 py-1 text-xs font-bold text-white/40 uppercase tracking-wider">About RailStream</p>
+
+          {aboutItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => { handleNavClick(item); setMenuOpen(false); }}
+              role="menuitem"
+              className={`block w-full text-left px-4 py-3 rounded-lg text-white font-medium mb-1 ${
+                currentPage === item.id ? 'bg-[#ff7a00]' : 'hover:bg-white/10'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                {item.emoji && <span>{item.emoji}</span>}
+                {item.label}
+                {item.badge && (
+                  <span className="px-1.5 py-0.5 bg-[#ff7a00] text-white text-[10px] font-bold rounded-full">{item.badge}</span>
+                )}
+              </span>
             </button>
           ))}
         </div>

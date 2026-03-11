@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Menu, X, Crown, Shield, Zap, LogOut } from 'lucide-react';
+import { Menu, X, Crown, Shield, Zap, LogOut, ChevronDown } from 'lucide-react';
 
 const TIERS = {
   fireman: { label: 'Fireman', color: 'from-blue-500 to-blue-600', icon: Zap },
@@ -12,22 +12,29 @@ const TIERS = {
 
 const NAV_ITEMS = [
   { id: 'home', label: 'Home', href: '/' },
-  { id: '15years', label: '🎉 15 Years', href: '/15years', special: true },
   { id: 'watch', label: 'Watch', href: '/?page=watch' },
   { id: 'cameras', label: 'Cameras', href: '/cameras' },
   { id: 'sightings', label: 'Train Log', href: '/sightings' },
-  { id: 'status', label: 'Status', href: '/network-status' },
-  { id: 'host', label: 'Host', href: '/host' },
-  { id: 'about', label: 'About', href: '/?page=about' },
+];
+
+const ABOUT_DROPDOWN = [
+  { id: 'about', label: 'Our Story', href: '/?page=about', description: 'The RailStream journey' },
+  { id: 'technology', label: 'Our Technology', href: '/technology', description: 'Self-hosted infrastructure', badge: 'NEW' },
+  { id: 'host', label: 'Host a Camera', href: '/host', description: 'Partner with us' },
+  { id: '15years', label: '15 Year Anniversary', href: '/15years', description: 'Celebrating since 2011', emoji: '🎉' },
+  { id: 'status', label: 'Network Status', href: '/network-status', description: 'Live system health' },
 ];
 
 export default function SiteHeader({ currentPage = '', user: userProp = null, onLogin, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [autoUser, setAutoUser] = useState(null);
+  const aboutRef = useRef(null);
+  const aboutTimeoutRef = useRef(null);
 
   // Auto-detect logged-in user if no user prop is passed
   useEffect(() => {
-    if (userProp) return; // Parent already provided user
+    if (userProp) return;
     try {
       const token = localStorage.getItem('railstream_token');
       if (token) {
@@ -43,8 +50,36 @@ export default function SiteHeader({ currentPage = '', user: userProp = null, on
 
   const user = userProp || autoUser;
 
-  // For standalone pages, determine active from href
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (aboutRef.current && !aboutRef.current.contains(e.target)) {
+        setAboutOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
   const activePage = currentPage || (typeof window !== 'undefined' ? window.location.pathname.replace('/', '') || 'home' : 'home');
+
+  const handleAboutEnter = () => {
+    if (aboutTimeoutRef.current) clearTimeout(aboutTimeoutRef.current);
+    setAboutOpen(true);
+  };
+
+  const handleAboutLeave = () => {
+    aboutTimeoutRef.current = setTimeout(() => setAboutOpen(false), 200);
+  };
+
+  // Check if any about dropdown item is active
+  const isAboutActive = ABOUT_DROPDOWN.some(item => 
+    activePage === item.id || 
+    (item.id === 'status' && activePage === 'network-status') ||
+    (item.id === '15years' && activePage === '15years') ||
+    (item.id === 'host' && activePage === 'host') ||
+    (item.id === 'technology' && activePage === 'technology')
+  );
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-sm border-b border-white/10">
@@ -63,9 +98,6 @@ export default function SiteHeader({ currentPage = '', user: userProp = null, on
           {NAV_ITEMS.map(item => {
             const isActive = activePage === item.id || 
               (item.id === 'cameras' && activePage === 'cameras') ||
-              (item.id === '15years' && activePage === '15years') ||
-              (item.id === 'host' && activePage === 'host') ||
-              (item.id === 'status' && activePage === 'network-status') ||
               (item.id === 'sightings' && activePage === 'sightings');
 
             return (
@@ -73,17 +105,87 @@ export default function SiteHeader({ currentPage = '', user: userProp = null, on
                 key={item.id}
                 href={item.href}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  item.special
-                    ? 'bg-gradient-to-r from-orange-500 to-yellow-500 text-white hover:from-orange-600 hover:to-yellow-600'
-                    : isActive
-                      ? 'bg-[#ff7a00] text-white'
-                      : 'text-white hover:bg-white/10'
+                  isActive
+                    ? 'bg-[#ff7a00] text-white'
+                    : 'text-white hover:bg-white/10'
                 }`}
               >
                 {item.label}
               </Link>
             );
           })}
+
+          {/* About Dropdown */}
+          <div 
+            ref={aboutRef}
+            className="relative"
+            onMouseEnter={handleAboutEnter}
+            onMouseLeave={handleAboutLeave}
+          >
+            <button
+              onClick={() => setAboutOpen(!aboutOpen)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                isAboutActive
+                  ? 'bg-[#ff7a00] text-white'
+                  : 'text-white hover:bg-white/10'
+              }`}
+              aria-label="About menu"
+              aria-expanded={aboutOpen}
+            >
+              About
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${aboutOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* Dropdown Panel */}
+            {aboutOpen && (
+              <div 
+                className="absolute top-full right-0 mt-2 w-72 bg-[#111]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl shadow-black/50 overflow-hidden"
+                onMouseEnter={handleAboutEnter}
+                onMouseLeave={handleAboutLeave}
+              >
+                <div className="p-1.5">
+                  {ABOUT_DROPDOWN.map((item) => {
+                    const isActive = activePage === item.id ||
+                      (item.id === 'status' && activePage === 'network-status') ||
+                      (item.id === '15years' && activePage === '15years') ||
+                      (item.id === 'host' && activePage === 'host') ||
+                      (item.id === 'technology' && activePage === 'technology');
+
+                    return (
+                      <Link
+                        key={item.id}
+                        href={item.href}
+                        onClick={() => setAboutOpen(false)}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group ${
+                          isActive
+                            ? 'bg-[#ff7a00]/15 text-[#ff7a00]'
+                            : 'text-white/80 hover:bg-white/5 hover:text-white'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            {item.emoji && <span className="text-base">{item.emoji}</span>}
+                            <span className="font-medium text-sm">{item.label}</span>
+                            {item.badge && (
+                              <span className="px-1.5 py-0.5 bg-[#ff7a00] text-white text-[10px] font-bold rounded-full leading-none">
+                                {item.badge}
+                              </span>
+                            )}
+                          </div>
+                          <p className={`text-xs mt-0.5 ${isActive ? 'text-[#ff7a00]/70' : 'text-white/40 group-hover:text-white/50'}`}>
+                            {item.description}
+                          </p>
+                        </div>
+                        <svg className={`w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity ${isActive ? 'opacity-100' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Auth */}
@@ -127,19 +229,43 @@ export default function SiteHeader({ currentPage = '', user: userProp = null, on
 
       {/* Mobile Menu */}
       {menuOpen && (
-        <div className="md:hidden bg-black/95 border-b border-white/10 p-4">
+        <div className="md:hidden bg-black/95 border-b border-white/10 p-4 max-h-[80vh] overflow-y-auto">
+          {/* Primary nav items */}
           {NAV_ITEMS.map(item => (
             <Link
               key={item.id}
               href={item.href}
               onClick={() => setMenuOpen(false)}
               className={`block w-full text-left px-4 py-3 rounded-lg text-white font-medium mb-1 ${
-                item.special
-                  ? 'bg-gradient-to-r from-orange-500 to-yellow-500'
-                  : activePage === item.id ? 'bg-[#ff7a00]' : 'hover:bg-white/10'
+                activePage === item.id ? 'bg-[#ff7a00]' : 'hover:bg-white/10'
               }`}
             >
               {item.label}
+            </Link>
+          ))}
+
+          {/* About section divider */}
+          <div className="border-t border-white/10 my-3 mx-4" />
+          <p className="px-4 py-1 text-xs font-bold text-white/40 uppercase tracking-wider">About RailStream</p>
+
+          {ABOUT_DROPDOWN.map(item => (
+            <Link
+              key={item.id}
+              href={item.href}
+              onClick={() => setMenuOpen(false)}
+              className={`block w-full text-left px-4 py-3 rounded-lg text-white font-medium mb-1 ${
+                activePage === item.id || (item.id === 'status' && activePage === 'network-status')
+                  ? 'bg-[#ff7a00]' 
+                  : 'hover:bg-white/10'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                {item.emoji && <span>{item.emoji}</span>}
+                {item.label}
+                {item.badge && (
+                  <span className="px-1.5 py-0.5 bg-[#ff7a00] text-white text-[10px] font-bold rounded-full">{item.badge}</span>
+                )}
+              </span>
             </Link>
           ))}
         </div>
