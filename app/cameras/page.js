@@ -419,7 +419,7 @@ export default function CamerasPage() {
       <footer className="py-8 px-6 border-t border-gray-800">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <Link href="/" className="text-orange-400 font-bold text-xl">RailStream</Link>
-          <p className="text-gray-500 text-sm">© 2010-2025 RailStream. Celebrating 15 years.</p>
+          <p className="text-gray-500 text-sm">© 2011-2026 RailStream, LLC. Celebrating 15 years.</p>
         </div>
       </footer>
 

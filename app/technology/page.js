@@ -481,7 +481,7 @@ export default function TechnologyPage() {
               alt="RailStream"
               className="h-8 opacity-60"
             />
-            <span className="text-white/30 text-sm">© 2011–{new Date().getFullYear()} RailStream. All rights reserved.</span>
+            <span className="text-white/30 text-sm">© 2011-2026 RailStream, LLC. All rights reserved.</span>
           </div>
           <div className="flex items-center gap-6">
             <a href="https://casestudies.ui.com/case-study/railstream" target="_blank" rel="noopener noreferrer" className="text-white/30 hover:text-[#ff7a00] text-sm transition-colors">

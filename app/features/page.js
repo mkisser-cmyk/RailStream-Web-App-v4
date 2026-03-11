@@ -104,7 +104,7 @@ const FEATURES = [
 
 export default function FeaturesPage() {
   return (
-    <main className="min-h-screen bg-black text-white">
+    <main id="main-content" className="min-h-screen bg-black text-white" role="main">
       <SiteHeader currentPage="features" />
 
       {/* Hero Section */}
@@ -310,7 +310,7 @@ export default function FeaturesPage() {
       <footer className="py-8 px-6 border-t border-white/5">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <Link href="/" className="text-[#ff7a00] font-bold text-xl">RailStream</Link>
-          <p className="text-white/30 text-sm">© 2010-2025 RailStream, LLC. All rights reserved.</p>
+          <p className="text-white/30 text-sm">© 2011-2026 RailStream, LLC. All rights reserved.</p>
         </div>
       </footer>
     </main>

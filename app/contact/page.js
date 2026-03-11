@@ -6,7 +6,7 @@ import SiteHeader from '@/components/SiteHeader';
 
 export default function ContactPage() {
   return (
-    <main className="min-h-screen bg-black text-white">
+    <main id="main-content" className="min-h-screen bg-black text-white" role="main">
       <SiteHeader currentPage="contact" />
 
       {/* Hero */}
@@ -143,7 +143,7 @@ export default function ContactPage() {
             <span className="text-white/30 text-sm font-medium uppercase tracking-wider">RailStream, LLC</span>
           </div>
           <p className="text-white/40 text-sm max-w-xl mx-auto">
-            Celebrating 15 years of live train streaming since 2010. Built by railfans, for railfans.
+            Celebrating 15 years of live train streaming since 2011. Built by railfans, for railfans.
           </p>
           <div className="flex justify-center gap-6 mt-6 text-white/30 text-sm">
             <Link href="/terms" className="hover:text-white/60 transition-colors">Terms of Service</Link>
@@ -157,7 +157,7 @@ export default function ContactPage() {
       <footer className="py-8 px-6 border-t border-white/5">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <Link href="/" className="text-[#ff7a00] font-bold text-xl">RailStream</Link>
-          <p className="text-white/30 text-sm">© 2010-2025 RailStream, LLC. All rights reserved.</p>
+          <p className="text-white/30 text-sm">© 2011-2026 RailStream, LLC. All rights reserved.</p>
         </div>
       </footer>
     </main>

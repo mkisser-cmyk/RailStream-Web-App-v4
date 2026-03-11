@@ -121,7 +121,7 @@ export default function PricingPage() {
   const [openFaq, setOpenFaq] = useState(null);
 
   return (
-    <main className="min-h-screen bg-black text-white">
+    <main id="main-content" className="min-h-screen bg-black text-white" role="main">
       <SiteHeader currentPage="pricing" />
 
       {/* Hero */}
@@ -161,8 +161,8 @@ export default function PricingPage() {
       </section>
 
       {/* Pricing Cards */}
-      <section className="py-12 px-6">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
+      <section className="py-12 px-6" aria-label="Pricing plans">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6" role="list">
           {TIERS.map((tier) => {
             const Icon = tier.icon;
             const displayPrice = billing === 'yearly' && tier.yearlyPrice ? tier.yearlyPrice : tier.price;
@@ -176,6 +176,8 @@ export default function PricingPage() {
                     ? 'border-[#ff7a00]/50 bg-gradient-to-b from-[#ff7a00]/10 to-transparent' 
                     : 'border-white/10 bg-white/[0.02]'
                 } p-8 flex flex-col`}
+                role="listitem"
+                aria-label={`${tier.name} plan - ${tier.price}${tier.period}`}
               >
                 {tier.popular && (
                   <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
@@ -281,18 +283,20 @@ export default function PricingPage() {
             <span className="text-[#ff7a00]"> Questions</span>
           </h2>
 
-          <div className="space-y-3">
+          <div className="space-y-3" role="list" aria-label="Frequently asked questions">
             {FAQS.map((faq, i) => (
-              <div key={i} className="border border-white/5 rounded-xl overflow-hidden">
+              <div key={i} className="border border-white/5 rounded-xl overflow-hidden" role="listitem">
                 <button
                   onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                  className="w-full flex items-center justify-between p-5 text-left hover:bg-white/[0.02] transition-colors"
+                  className="w-full flex items-center justify-between p-5 text-left hover:bg-white/[0.02] transition-colors focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/50 focus:ring-inset"
+                  aria-expanded={openFaq === i}
+                  aria-controls={`faq-answer-${i}`}
                 >
                   <span className="text-white font-medium pr-4">{faq.q}</span>
-                  <ChevronDown className={`w-5 h-5 text-white/30 flex-shrink-0 transition-transform ${openFaq === i ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-5 h-5 text-white/30 flex-shrink-0 transition-transform ${openFaq === i ? 'rotate-180' : ''}`} aria-hidden="true" />
                 </button>
                 {openFaq === i && (
-                  <div className="px-5 pb-5">
+                  <div id={`faq-answer-${i}`} className="px-5 pb-5" role="region" aria-label={faq.q}>
                     <p className="text-white/50 text-sm leading-relaxed">{faq.a}</p>
                   </div>
                 )}
@@ -326,7 +330,7 @@ export default function PricingPage() {
             <Link href="/terms" className="hover:text-white/60 transition-colors">Terms of Service</Link>
             <Link href="/contact" className="hover:text-white/60 transition-colors">Contact</Link>
           </div>
-          <p className="text-white/30 text-sm">© 2010-2025 RailStream, LLC.</p>
+          <p className="text-white/30 text-sm">© 2011-2026 RailStream, LLC.</p>
         </div>
       </footer>
     </main>

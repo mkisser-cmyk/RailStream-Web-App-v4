@@ -5,7 +5,7 @@ import SiteHeader from '@/components/SiteHeader';
 
 export default function TermsPage() {
   return (
-    <main className="min-h-screen bg-black text-white">
+    <main id="main-content" className="min-h-screen bg-black text-white" role="main">
       <SiteHeader currentPage="terms" />
 
       <div className="max-w-4xl mx-auto px-6 pt-24 pb-20 md:pt-32">
@@ -13,7 +13,7 @@ export default function TermsPage() {
           Terms of
           <span className="text-[#ff7a00]"> Service</span>
         </h1>
-        <p className="text-white/40 text-sm mb-12">Last Updated: March 2025</p>
+        <p className="text-white/40 text-sm mb-12">Last Updated: March 2026</p>
 
         <div className="prose prose-invert prose-sm max-w-none space-y-8">
           
@@ -179,7 +179,7 @@ export default function TermsPage() {
             <Link href="/pricing" className="hover:text-white/60 transition-colors">Pricing</Link>
             <Link href="/features" className="hover:text-white/60 transition-colors">Features</Link>
           </div>
-          <p className="text-white/30 text-sm">© 2010-2025 RailStream, LLC.</p>
+          <p className="text-white/30 text-sm">© 2011-2026 RailStream, LLC.</p>
         </div>
       </footer>
     </main>
