@@ -1505,14 +1505,14 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                         </button>
                       )}
                       
-                      {/* Camera label + expand button */}
-                      <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity ${isCompact ? 'p-1' : 'p-2'}`}>
-                        <div className="flex items-center justify-between">
-                          <div className="min-w-0">
-                            <p className={`text-white font-medium truncate ${isCompact ? 'text-[10px]' : 'text-sm'}`}>{camera.name}</p>
-                            {!isCompact && <p className="text-white/70 text-xs truncate">{camera.location}</p>}
-                          </div>
-                          {viewMode !== 'single' && (
+                      {/* Camera label + expand button (multi-view only) */}
+                      {viewMode !== 'single' && camera && (
+                        <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity ${isCompact ? 'p-1' : 'p-2'}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="min-w-0">
+                              <p className={`text-white font-medium truncate ${isCompact ? 'text-[10px]' : 'text-sm'}`}>{camera.name}</p>
+                              {!isCompact && <p className="text-white/70 text-xs truncate">{camera.location}</p>}
+                            </div>
                             <button
                               onClick={(e) => { e.stopPropagation(); handleTileFocus(i); }}
                               className={`flex-shrink-0 p-1 rounded bg-[#ff7a00]/80 hover:bg-[#ff7a00] text-white transition ${isCompact ? 'ml-1' : 'ml-2'}`}
@@ -1520,9 +1520,9 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                             >
                               <Monitor className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'}`} />
                             </button>
-                          )}
+                          </div>
                         </div>
-                      </div>
+                      )}
                       
                       <button
                         onClick={(e) => {

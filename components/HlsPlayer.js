@@ -594,13 +594,13 @@ export default function HlsPlayer({
           )}
 
           {/* Controls Row */}
-          <div className="relative px-4 py-2 flex items-center gap-1.5">
+          <div className="relative px-4 py-2.5 flex items-center gap-2">
             {/* Play/Pause */}
-            <button onClick={togglePlay} className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors" aria-label={isPlaying ? 'Pause' : 'Play'}>
+            <button onClick={togglePlay} className="p-2 rounded-lg hover:bg-white/10 text-white transition-colors" aria-label={isPlaying ? 'Pause' : 'Play'}>
               {isPlaying ? (
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
               ) : (
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
               )}
             </button>
 
@@ -611,14 +611,14 @@ export default function HlsPlayer({
                   videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
                 }
               }}
-              className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors"
+              className="flex items-center gap-0.5 px-2 py-1.5 rounded-lg hover:bg-white/10 text-white transition-colors"
               aria-label="Rewind 10 seconds"
               title="Rewind 10 seconds"
             >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12.5 3C7.81 3 4.01 6.54 3.61 11H1l3.89 3.89.07.14L9 11H6.63C7.03 7.86 9.49 5.4 12.5 5.4c3.31 0 6 2.69 6 6s-2.69 6-6 6c-1.66 0-3.16-.67-4.24-1.76l-1.42 1.42C8.28 18.5 10.29 19.4 12.5 19.4c4.42 0 8-3.58 8-8s-3.58-8-8-8z"/>
-                <text x="10.5" y="14.5" fontSize="7.5" fontWeight="bold" textAnchor="middle" fill="currentColor">10</text>
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12.5 8V4l-5 4 5 4V8c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4.5c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" fill="currentColor" stroke="none" />
               </svg>
+              <span className="text-xs font-bold">10</span>
             </button>
 
             {/* Forward 10s */}
@@ -629,25 +629,27 @@ export default function HlsPlayer({
                   videoRef.current.currentTime = Math.min(max, videoRef.current.currentTime + 10);
                 }
               }}
-              className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors"
+              className="flex items-center gap-0.5 px-2 py-1.5 rounded-lg hover:bg-white/10 text-white transition-colors"
               aria-label="Forward 10 seconds"
               title="Forward 10 seconds"
             >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M11.5 3c4.69 0 8.49 3.54 8.89 8H23l-3.89 3.89-.07.14L15 11h2.37C16.97 7.86 14.51 5.4 11.5 5.4c-3.31 0-6 2.69-6 6s2.69 6 6 6c1.66 0 3.16-.67 4.24-1.76l1.42 1.42C15.72 18.5 13.71 19.4 11.5 19.4c-4.42 0-8-3.58-8-8s3.58-8 8-8z"/>
-                <text x="13.5" y="14.5" fontSize="7.5" fontWeight="bold" textAnchor="middle" fill="currentColor">10</text>
+              <span className="text-xs font-bold">10</span>
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11.5 8V4l5 4-5 4V8c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z" fill="currentColor" stroke="none" />
               </svg>
             </button>
+
+            <div className="w-px h-5 bg-white/20 mx-1" />
 
             {/* Live / Back to Live */}
             {!isReviewMode && (
               <button
                 onClick={jumpToLive}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-colors ${
-                  isLive ? 'bg-red-600/80 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors ${
+                  isLive ? 'bg-red-600 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
                 }`}
               >
-                <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-white animate-pulse' : 'bg-white/40'}`} />
+                <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-white animate-pulse' : 'bg-white/40'}`} />
                 LIVE
               </button>
             )}
@@ -656,7 +658,7 @@ export default function HlsPlayer({
             {!isReviewMode && !hideReviewButton && (
               <button
                 onClick={() => setShowReviewOps(true)}
-                className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-xs font-medium transition-colors"
+                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-sm font-medium transition-colors"
               >
                 Review Ops
               </button>
@@ -670,11 +672,11 @@ export default function HlsPlayer({
               <div className="relative">
                 <button
                   onClick={() => setShowAudioMenu(!showAudioMenu)}
-                  className={`p-1.5 rounded-lg hover:bg-white/10 transition-colors ${showAudioMenu ? 'bg-white/10 text-[#ff7a00]' : 'text-white'}`}
+                  className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${showAudioMenu ? 'bg-white/10 text-[#ff7a00]' : 'text-white'}`}
                   aria-label="Audio tracks"
                   title="Audio tracks"
                 >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
                   </svg>
                 </button>
@@ -707,14 +709,14 @@ export default function HlsPlayer({
 
             {/* Volume with hover slider */}
             <div className="flex items-center gap-1 group/vol">
-              <button onClick={toggleMute} className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors" aria-label={isMuted ? 'Unmute' : 'Mute'} title={isMuted ? 'Unmute' : 'Mute'}>
+              <button onClick={toggleMute} className="p-2 rounded-lg hover:bg-white/10 text-white transition-colors" aria-label={isMuted ? 'Unmute' : 'Mute'} title={isMuted ? 'Unmute' : 'Mute'}>
                 {isMuted || volume === 0 ? (
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
                   </svg>
                 ) : (
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                   </svg>
                 )}
@@ -723,7 +725,7 @@ export default function HlsPlayer({
                 type="range" min="0" max="1" step="0.05"
                 value={isMuted ? 0 : volume}
                 onChange={handleVolumeChange}
-                className="w-0 group-hover/vol:w-20 transition-all duration-200 h-1 appearance-none bg-white/30 rounded-full cursor-pointer
+                className="w-0 group-hover/vol:w-24 transition-all duration-200 h-1.5 appearance-none bg-white/30 rounded-full cursor-pointer
                   [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#ff7a00]
                   [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#ff7a00] [&::-moz-range-thumb]:border-0"
                 aria-label="Volume"
@@ -758,24 +760,24 @@ export default function HlsPlayer({
                   console.error('Snapshot failed:', e);
                 }
               }}
-              className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors"
+              className="p-2 rounded-lg hover:bg-white/10 text-white transition-colors"
               aria-label="Take snapshot"
               title="Capture snapshot"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
               </svg>
             </button>
 
             {/* Fullscreen */}
-            <button onClick={toggleFullscreen} className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors" aria-label="Fullscreen" title="Fullscreen">
+            <button onClick={toggleFullscreen} className="p-2 rounded-lg hover:bg-white/10 text-white transition-colors" aria-label="Fullscreen" title="Fullscreen">
               {isFullscreen ? (
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
                 </svg>
               ) : (
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
                 </svg>
               )}
