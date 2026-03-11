@@ -1246,6 +1246,152 @@ async function handleRoute(request, { params }) {
       }
     }
 
+    // ========== ADS MANAGEMENT ==========
+
+    // GET /api/ads - Get all ads (public: only enabled, admin: all)
+    if (route === '/ads' && method === 'GET') {
+      try {
+        const db = await getMongoDb();
+        const col = db.collection('ads');
+        
+        // Check if caller is admin
+        let isAdmin = false;
+        const token = getToken(request);
+        if (token) {
+          try {
+            const authRes = await fetch(`${API_BASE}/api/auth/me`, {
+              headers: { 'Authorization': `Bearer ${token}`, 'X-API-Key': API_KEY },
+            });
+            if (authRes.ok) {
+              const userData = await authRes.json();
+              isAdmin = userData.is_admin === true;
+            }
+          } catch (e) {}
+        }
+        
+        const filter = isAdmin ? {} : { enabled: true };
+        const ads = await col.find(filter).sort({ priority: 1, createdAt: -1 }).toArray();
+        return handleCORS(NextResponse.json({ ads, isAdmin }));
+      } catch (error) {
+        console.error('Ads fetch error:', error);
+        return handleCORS(NextResponse.json({ ads: [] }));
+      }
+    }
+
+    // POST /api/ads - Create ad (admin only)
+    if (route === '/ads' && method === 'POST') {
+      const token = getToken(request);
+      if (!token) return handleCORS(NextResponse.json({ error: 'Auth required' }, { status: 401 }));
+      
+      try {
+        const authRes = await fetch(`${API_BASE}/api/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'X-API-Key': API_KEY },
+        });
+        if (!authRes.ok) return handleCORS(NextResponse.json({ error: 'Auth failed' }, { status: 401 }));
+        const userData = await authRes.json();
+        if (!userData.is_admin) return handleCORS(NextResponse.json({ error: 'Admin only' }, { status: 403 }));
+        
+        const body = await request.json();
+        const { type, title, imageUrl, videoUrl, clickUrl, skipAfter, interval, priority } = body;
+        
+        if (!type || !['preroll', 'midroll', 'companion'].includes(type)) {
+          return handleCORS(NextResponse.json({ error: 'Invalid ad type. Must be preroll, midroll, or companion.' }, { status: 400 }));
+        }
+        
+        const db = await getMongoDb();
+        const ad = {
+          _id: crypto.randomUUID(),
+          type,
+          title: title || '',
+          imageUrl: imageUrl || '',
+          videoUrl: videoUrl || '',
+          clickUrl: clickUrl || '',
+          enabled: true,
+          skipAfter: skipAfter || 5,
+          interval: interval || 15,
+          priority: priority || 10,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        
+        await db.collection('ads').insertOne(ad);
+        return handleCORS(NextResponse.json({ ok: true, ad }));
+      } catch (error) {
+        console.error('Ads create error:', error);
+        return handleCORS(NextResponse.json({ error: 'Failed to create ad' }, { status: 500 }));
+      }
+    }
+
+    // PUT /api/ads/{id} - Update ad (admin only)
+    if (route.startsWith('/ads/') && method === 'PUT') {
+      const adId = path[1];
+      const token = getToken(request);
+      if (!token) return handleCORS(NextResponse.json({ error: 'Auth required' }, { status: 401 }));
+      
+      try {
+        const authRes = await fetch(`${API_BASE}/api/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'X-API-Key': API_KEY },
+        });
+        if (!authRes.ok) return handleCORS(NextResponse.json({ error: 'Auth failed' }, { status: 401 }));
+        const userData = await authRes.json();
+        if (!userData.is_admin) return handleCORS(NextResponse.json({ error: 'Admin only' }, { status: 403 }));
+        
+        const body = await request.json();
+        const updates = { updatedAt: new Date().toISOString() };
+        
+        if (body.type !== undefined) updates.type = body.type;
+        if (body.title !== undefined) updates.title = body.title;
+        if (body.imageUrl !== undefined) updates.imageUrl = body.imageUrl;
+        if (body.videoUrl !== undefined) updates.videoUrl = body.videoUrl;
+        if (body.clickUrl !== undefined) updates.clickUrl = body.clickUrl;
+        if (body.enabled !== undefined) updates.enabled = body.enabled;
+        if (body.skipAfter !== undefined) updates.skipAfter = body.skipAfter;
+        if (body.interval !== undefined) updates.interval = body.interval;
+        if (body.priority !== undefined) updates.priority = body.priority;
+        
+        const db = await getMongoDb();
+        const result = await db.collection('ads').updateOne({ _id: adId }, { $set: updates });
+        
+        if (result.matchedCount === 0) {
+          return handleCORS(NextResponse.json({ error: 'Ad not found' }, { status: 404 }));
+        }
+        
+        const updated = await db.collection('ads').findOne({ _id: adId });
+        return handleCORS(NextResponse.json({ ok: true, ad: updated }));
+      } catch (error) {
+        console.error('Ads update error:', error);
+        return handleCORS(NextResponse.json({ error: 'Failed to update ad' }, { status: 500 }));
+      }
+    }
+
+    // DELETE /api/ads/{id} - Delete ad (admin only)
+    if (route.startsWith('/ads/') && method === 'DELETE') {
+      const adId = path[1];
+      const token = getToken(request);
+      if (!token) return handleCORS(NextResponse.json({ error: 'Auth required' }, { status: 401 }));
+      
+      try {
+        const authRes = await fetch(`${API_BASE}/api/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'X-API-Key': API_KEY },
+        });
+        if (!authRes.ok) return handleCORS(NextResponse.json({ error: 'Auth failed' }, { status: 401 }));
+        const userData = await authRes.json();
+        if (!userData.is_admin) return handleCORS(NextResponse.json({ error: 'Admin only' }, { status: 403 }));
+        
+        const db = await getMongoDb();
+        const result = await db.collection('ads').deleteOne({ _id: adId });
+        
+        if (result.deletedCount === 0) {
+          return handleCORS(NextResponse.json({ error: 'Ad not found' }, { status: 404 }));
+        }
+        
+        return handleCORS(NextResponse.json({ ok: true, deleted: adId }));
+      } catch (error) {
+        console.error('Ads delete error:', error);
+        return handleCORS(NextResponse.json({ error: 'Failed to delete ad' }, { status: 500 }));
+      }
+    }
+
     // Route not found
     return handleCORS(NextResponse.json({ error: `Route ${route} not found` }, { status: 404 }));
 

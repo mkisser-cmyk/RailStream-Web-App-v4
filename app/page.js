@@ -52,6 +52,12 @@ import {
   Download,
   Camera,
   ArrowRight,
+  Settings,
+  ToggleLeft,
+  ToggleRight,
+  ImageIcon,
+  Video,
+  Plus,
 } from 'lucide-react';
 import { clientApi } from '@/lib/api';
 import { auth } from '@/lib/auth';
@@ -1368,6 +1374,402 @@ function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCame
 }
 
 
+// ============================================
+// AD MANAGER MODAL (Admin Only)
+// ============================================
+function AdManagerModal({ onClose }) {
+  const [ads, setAds] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editingAd, setEditingAd] = useState(null);
+  const [form, setForm] = useState({ type: 'companion', title: '', imageUrl: '', videoUrl: '', clickUrl: '', skipAfter: 5, interval: 15, priority: 10 });
+  const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState('companion');
+
+  const fetchAds = async () => {
+    try {
+      const token = localStorage.getItem('railstream_token');
+      const res = await fetch('/api/ads', { headers: { 'Authorization': `Bearer ${token}` } });
+      const data = await res.json();
+      setAds(data.ads || []);
+    } catch (e) { console.error('Failed to fetch ads:', e); }
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchAds(); }, []);
+
+  const saveAd = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    const token = localStorage.getItem('railstream_token');
+    try {
+      const url = editingAd ? `/api/ads/${editingAd._id}` : '/api/ads';
+      const method = editingAd ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        toast.success(editingAd ? 'Ad updated' : 'Ad created');
+        setEditingAd(null);
+        setForm({ type: activeTab, title: '', imageUrl: '', videoUrl: '', clickUrl: '', skipAfter: 5, interval: 15, priority: 10 });
+        fetchAds();
+      } else {
+        toast.error(data.error || 'Failed to save');
+      }
+    } catch (e) { toast.error('Network error'); }
+    setSaving(false);
+  };
+
+  const toggleAd = async (ad) => {
+    const token = localStorage.getItem('railstream_token');
+    try {
+      await fetch(`/api/ads/${ad._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ enabled: !ad.enabled }),
+      });
+      fetchAds();
+    } catch (e) { toast.error('Failed to toggle ad'); }
+  };
+
+  const deleteAd = async (ad) => {
+    if (!confirm(`Delete "${ad.title || ad.type}" ad?`)) return;
+    const token = localStorage.getItem('railstream_token');
+    try {
+      await fetch(`/api/ads/${ad._id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+      toast.success('Ad deleted');
+      fetchAds();
+    } catch (e) { toast.error('Failed to delete ad'); }
+  };
+
+  const startEdit = (ad) => {
+    setEditingAd(ad);
+    setForm({
+      type: ad.type,
+      title: ad.title || '',
+      imageUrl: ad.imageUrl || '',
+      videoUrl: ad.videoUrl || '',
+      clickUrl: ad.clickUrl || '',
+      skipAfter: ad.skipAfter || 5,
+      interval: ad.interval || 15,
+      priority: ad.priority || 10,
+    });
+    setActiveTab(ad.type);
+  };
+
+  const cancelEdit = () => {
+    setEditingAd(null);
+    setForm({ type: activeTab, title: '', imageUrl: '', videoUrl: '', clickUrl: '', skipAfter: 5, interval: 15, priority: 10 });
+  };
+
+  const filteredAds = ads.filter(a => a.type === activeTab);
+
+  const AD_TYPES = [
+    { id: 'companion', label: 'Sidebar', icon: ImageIcon, desc: 'Display ad beside player' },
+    { id: 'preroll', label: 'Pre-Roll', icon: Video, desc: 'Video/image before stream' },
+    { id: 'midroll', label: 'Mid-Roll', icon: Clock, desc: 'Overlay during viewing' },
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-white/10">
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <Settings className="w-5 h-5 text-[#ff7a00]" />
+            Ad Manager
+          </h2>
+          <button onClick={onClose} className="text-white/70 hover:text-white transition p-1 rounded-lg hover:bg-white/10">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Type Tabs */}
+        <div className="flex border-b border-white/10">
+          {AD_TYPES.map(t => (
+            <button
+              key={t.id}
+              onClick={() => { setActiveTab(t.id); if (!editingAd) setForm(f => ({ ...f, type: t.id })); }}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition ${
+                activeTab === t.id ? 'text-[#ff7a00] border-b-2 border-[#ff7a00] bg-[#ff7a00]/5' : 'text-white/50 hover:text-white/80 hover:bg-white/5'
+              }`}
+            >
+              <t.icon className="w-4 h-4" />
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="overflow-y-auto max-h-[calc(85vh-140px)]">
+          {/* Ad Form */}
+          <form onSubmit={saveAd} className="p-4 border-b border-white/10 bg-zinc-800/50">
+            <div className="flex items-center gap-2 mb-3">
+              <Plus className="w-4 h-4 text-[#ff7a00]" />
+              <h3 className="text-white font-semibold text-sm">{editingAd ? 'Edit Ad' : 'Add New Ad'}</h3>
+              {editingAd && (
+                <button type="button" onClick={cancelEdit} className="ml-auto text-white/50 hover:text-white text-xs underline">Cancel Edit</button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label htmlFor="ad-title" className="text-white/60 text-xs font-medium mb-1 block">Title / Label</label>
+                <input
+                  id="ad-title"
+                  type="text"
+                  value={form.title}
+                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder="e.g. Club Med Banner"
+                  className="w-full bg-zinc-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-[#ff7a00] focus:outline-none"
+                />
+              </div>
+              <div>
+                <label htmlFor="ad-click" className="text-white/60 text-xs font-medium mb-1 block">Click-Through URL</label>
+                <input
+                  id="ad-click"
+                  type="url"
+                  value={form.clickUrl}
+                  onChange={e => setForm(f => ({ ...f, clickUrl: e.target.value }))}
+                  placeholder="https://advertiser.com"
+                  className="w-full bg-zinc-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-[#ff7a00] focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {(activeTab === 'companion' || activeTab === 'midroll') && (
+              <div className="mb-3">
+                <label htmlFor="ad-image" className="text-white/60 text-xs font-medium mb-1 block">Image URL</label>
+                <input
+                  id="ad-image"
+                  type="url"
+                  value={form.imageUrl}
+                  onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))}
+                  placeholder="https://cdn.example.com/ad-banner.jpg"
+                  className="w-full bg-zinc-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-[#ff7a00] focus:outline-none"
+                />
+              </div>
+            )}
+
+            {activeTab === 'preroll' && (
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label htmlFor="ad-video" className="text-white/60 text-xs font-medium mb-1 block">Video / VAST URL</label>
+                  <input
+                    id="ad-video"
+                    type="url"
+                    value={form.videoUrl}
+                    onChange={e => setForm(f => ({ ...f, videoUrl: e.target.value }))}
+                    placeholder="https://ads.example.com/vast.xml"
+                    className="w-full bg-zinc-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-[#ff7a00] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="ad-skip" className="text-white/60 text-xs font-medium mb-1 block">Skip After (seconds)</label>
+                  <input
+                    id="ad-skip"
+                    type="number"
+                    min="0"
+                    max="30"
+                    value={form.skipAfter}
+                    onChange={e => setForm(f => ({ ...f, skipAfter: parseInt(e.target.value) || 5 }))}
+                    className="w-full bg-zinc-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-[#ff7a00] focus:outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'midroll' && (
+              <div className="mb-3">
+                <label htmlFor="ad-interval" className="text-white/60 text-xs font-medium mb-1 block">Show Every (minutes)</label>
+                <input
+                  id="ad-interval"
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={form.interval}
+                  onChange={e => setForm(f => ({ ...f, interval: parseInt(e.target.value) || 15 }))}
+                  className="w-full max-w-[120px] bg-zinc-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-[#ff7a00] focus:outline-none"
+                />
+              </div>
+            )}
+
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <label htmlFor="ad-priority" className="text-white/60 text-xs font-medium mb-1 block">Priority (lower = higher)</label>
+                <input
+                  id="ad-priority"
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={form.priority}
+                  onChange={e => setForm(f => ({ ...f, priority: parseInt(e.target.value) || 10 }))}
+                  className="w-full max-w-[100px] bg-zinc-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-[#ff7a00] focus:outline-none"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-6 py-2 bg-[#ff7a00] hover:bg-[#ff8c20] text-white font-semibold rounded-lg text-sm transition disabled:opacity-50 mt-5"
+              >
+                {saving ? 'Saving...' : editingAd ? 'Update Ad' : 'Add Ad'}
+              </button>
+            </div>
+          </form>
+
+          {/* Existing Ads List */}
+          <div className="p-4">
+            <h3 className="text-white/60 text-xs font-bold uppercase tracking-wider mb-3">
+              {AD_TYPES.find(t => t.id === activeTab)?.label} Ads ({filteredAds.length})
+            </h3>
+
+            {loading ? (
+              <div className="text-center py-8 text-white/40"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></div>
+            ) : filteredAds.length === 0 ? (
+              <p className="text-center py-8 text-white/30 text-sm">No {activeTab} ads configured yet</p>
+            ) : (
+              <div className="space-y-2">
+                {filteredAds.map(ad => (
+                  <div key={ad._id} className={`flex items-center gap-3 p-3 rounded-xl border transition ${ad.enabled ? 'bg-zinc-800/50 border-white/10' : 'bg-zinc-800/20 border-white/5 opacity-60'}`}>
+                    {/* Preview */}
+                    {ad.imageUrl && (
+                      <div className="w-16 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-zinc-700">
+                        <img src={ad.imageUrl} alt="" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    {!ad.imageUrl && (
+                      <div className="w-16 h-12 rounded-lg flex-shrink-0 bg-zinc-700 flex items-center justify-center">
+                        {ad.type === 'preroll' ? <Video className="w-5 h-5 text-white/30" /> : <ImageIcon className="w-5 h-5 text-white/30" />}
+                      </div>
+                    )}
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-medium text-sm truncate">{ad.title || `${ad.type} ad`}</p>
+                      <p className="text-white/40 text-xs truncate">{ad.clickUrl || 'No click URL'}</p>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        onClick={() => toggleAd(ad)}
+                        className={`p-1.5 rounded-lg transition ${ad.enabled ? 'text-emerald-400 hover:bg-emerald-500/10' : 'text-white/30 hover:bg-white/5'}`}
+                        title={ad.enabled ? 'Disable' : 'Enable'}
+                      >
+                        {ad.enabled ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
+                      </button>
+                      <button
+                        onClick={() => startEdit(ad)}
+                        className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition"
+                        title="Edit"
+                      >
+                        <Settings className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => deleteAd(ad)}
+                        className="p-1.5 rounded-lg text-red-400/50 hover:text-red-400 hover:bg-red-500/10 transition"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// COMPANION AD SIDEBAR (Free Users)
+// ============================================
+function CompanionAdPanel({ ads }) {
+  const [currentAdIndex, setCurrentAdIndex] = useState(0);
+  const companionAds = (ads || []).filter(a => a.type === 'companion' && a.enabled);
+
+  // Rotate ads every 30 seconds
+  useEffect(() => {
+    if (companionAds.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentAdIndex(prev => (prev + 1) % companionAds.length);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [companionAds.length]);
+
+  if (companionAds.length === 0) return null;
+
+  const ad = companionAds[currentAdIndex % companionAds.length];
+  if (!ad) return null;
+
+  return (
+    <div className="w-[300px] flex-shrink-0 border-l border-white/10 bg-zinc-900/50 flex flex-col">
+      {/* Upsell banner */}
+      <div className="p-3 border-b border-white/10 bg-gradient-to-r from-[#ff7a00]/10 to-orange-600/10">
+        <p className="text-white/80 text-xs font-medium text-center">
+          <span className="text-[#ff7a00] font-bold">Go Ad-Free</span> — Members enjoy zero ads
+        </p>
+        <a
+          href="/join"
+          className="mt-2 block w-full text-center px-3 py-1.5 bg-[#ff7a00] hover:bg-[#ff8c20] text-white text-xs font-bold rounded-lg transition"
+        >
+          Join RailStream →
+        </a>
+      </div>
+
+      {/* Sponsored label */}
+      <div className="px-3 py-1.5 border-b border-white/5">
+        <span className="text-white/30 text-[10px] font-medium uppercase tracking-wider">Sponsored</span>
+      </div>
+
+      {/* Ad Content */}
+      <div className="flex-1 p-3">
+        {ad.clickUrl ? (
+          <a href={ad.clickUrl} target="_blank" rel="noopener noreferrer sponsored" className="block group">
+            {ad.imageUrl && (
+              <div className="rounded-xl overflow-hidden mb-2 border border-white/5 group-hover:border-[#ff7a00]/30 transition">
+                <img src={ad.imageUrl} alt={ad.title || 'Advertisement'} className="w-full object-cover" />
+              </div>
+            )}
+            {ad.title && (
+              <p className="text-white/70 text-sm group-hover:text-white transition flex items-center gap-1">
+                {ad.title}
+                <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" />
+              </p>
+            )}
+          </a>
+        ) : (
+          <>
+            {ad.imageUrl && (
+              <div className="rounded-xl overflow-hidden mb-2 border border-white/5">
+                <img src={ad.imageUrl} alt={ad.title || 'Advertisement'} className="w-full object-cover" />
+              </div>
+            )}
+            {ad.title && <p className="text-white/70 text-sm">{ad.title}</p>}
+          </>
+        )}
+      </div>
+
+      {/* Rotation indicator */}
+      {companionAds.length > 1 && (
+        <div className="px-3 py-2 border-t border-white/5 flex justify-center gap-1">
+          {companionAds.map((_, i) => (
+            <div
+              key={i}
+              className={`w-1.5 h-1.5 rounded-full transition ${i === currentAdIndex % companionAds.length ? 'bg-[#ff7a00]' : 'bg-white/20'}`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 // WATCH PAGE
 // ============================================
 function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera, removeCamera, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp, replaySeekOffset = 0, clearReplaySeek, playerStatsRef }) {
@@ -1383,6 +1785,26 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   const [sightingForm, setSightingForm] = useState(null); // { imageData, sightingTime, cameraId, cameraName, cameraLocation }
   const [sightingSubmitting, setSightingSubmitting] = useState(false);
   const [sightingData, setSightingData] = useState({ railroad: '', train_id: '', direction: '', locomotives: '', train_type: '', notes: '' });
+
+  // Ads system
+  const [ads, setAds] = useState([]);
+  const [showAdManager, setShowAdManager] = useState(false);
+
+  // Fetch ads on mount
+  useEffect(() => {
+    const fetchAds = async () => {
+      try {
+        const token = localStorage.getItem('railstream_token');
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        const res = await fetch('/api/ads', { headers });
+        const data = await res.json();
+        setAds(data.ads || []);
+      } catch (e) {}
+    };
+    fetchAds();
+  }, []);
+
+  const showCompanionAds = !user && ads.some(a => a.type === 'companion' && a.enabled);
 
   const RAILROADS = ['CSX', 'NS', 'UP', 'BNSF', 'CN', 'CP', 'KCS', 'Amtrak', 'Other'];
   const TRAIN_TYPES = ['Intermodal', 'Manifest', 'Coal', 'Grain', 'Auto', 'Passenger', 'Local', 'Work Train', 'Light Power', 'Other'];
@@ -1660,6 +2082,18 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
               <MessageCircle className="w-4 h-4" />
               <span className="hidden sm:inline">Chat</span>
             </button>
+
+            {/* Admin: Ad Manager */}
+            {user?.is_admin && (
+              <button
+                onClick={() => setShowAdManager(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-purple-400 hover:bg-purple-500/10 transition"
+                aria-label="Ad Manager"
+              >
+                <Settings className="w-4 h-4" />
+                <span className="hidden sm:inline">Ads</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1923,8 +2357,16 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
               />
             </div>
           )}
+
+          {/* Companion Ad Sidebar (free/non-signed-in users only) */}
+          {showCompanionAds && !chatOpen && (
+            <CompanionAdPanel ads={ads} />
+          )}
         </div>
       </div>
+
+      {/* Ad Manager Modal (admin only) */}
+      {showAdManager && <AdManagerModal onClose={() => setShowAdManager(false)} />}
 
       {/* Train Sighting Modal */}
       {sightingForm && (
