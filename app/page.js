@@ -3363,6 +3363,15 @@ export default function App() {
 
   const handleLogout = () => {
     stopAllSessions();
+    // Unregister this web device from the user's account
+    const token = auth.getToken();
+    const deviceId = getDeviceId();
+    if (token && deviceId) {
+      fetch(`/api/devices/${encodeURIComponent(deviceId)}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      }).catch(() => {}); // Best-effort, don't block logout
+    }
     auth.clear();
     setUser(null);
     clientApi.logout();
