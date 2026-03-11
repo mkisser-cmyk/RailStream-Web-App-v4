@@ -1080,8 +1080,8 @@ export default function HlsPlayer({
 
             <div className="w-px h-5 bg-white/20 mx-1" />
 
-            {/* Live / Return to Live */}
-            {!isReviewMode && (
+            {/* Live / Return to Live (hidden in compact multi-view modes) */}
+            {!isReviewMode && viewMode === 'single' && (
               <button
                 onClick={jumpToLive}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors ${

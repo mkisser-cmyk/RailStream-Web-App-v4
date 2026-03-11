@@ -1886,7 +1886,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
     const intervalMinutes = enabledMidrolls[0]?.interval || 15;
     const intervalMs = intervalMinutes * 60 * 1000;
     // First midroll after 2 minutes, then every intervalMs after
-    const initialDelayMs = 2 * 60 * 1000;
+    const initialDelayMs = 2 * 60 * 1000; // First midroll after 2 minutes
 
     const triggerMidroll = () => {
       // Pick a random enabled midroll ad
@@ -2297,7 +2297,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
         )}
 
         {/* Video Grid */}
-          <div className={`transition-all duration-700 ease-in-out ${midrollActive ? 'w-[35%] flex-shrink-0' : 'flex-1'} min-w-0 flex`}>
+          <div className={`transition-all duration-700 ease-in-out ${midrollActive ? 'w-[35%] flex-none' : 'flex-1'} min-w-0 flex`}>
           {/* Focused single-camera fullscreen view */}
           {focusedSlot !== null && selectedCameras[focusedSlot] ? (
             <div className="flex-1 relative bg-black">
@@ -2605,7 +2605,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
 
           {/* Mid-Roll Split-Screen Ad Panel (free users only) */}
           {midrollActive && midrollAd && (
-            <div className="flex-1 flex-shrink-0 transition-all duration-700 ease-in-out bg-black border-l border-white/10 flex flex-col relative overflow-hidden">
+            <div className="flex-1 min-w-0 transition-all duration-700 ease-in-out bg-black border-l border-white/10 flex flex-col relative overflow-hidden">
               {/* Ad Header Bar */}
               <div className="flex items-center justify-between px-4 py-2 bg-zinc-900/80 border-b border-white/10">
                 <div className="flex items-center gap-2">
