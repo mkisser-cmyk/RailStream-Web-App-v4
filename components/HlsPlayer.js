@@ -328,9 +328,10 @@ export default function HlsPlayer({
       const hls = new Hls({
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
-        backBufferLength: 300,
+        backBufferLength: Infinity,
         liveSyncDurationCount: 3,
-        liveMaxLatencyDurationCount: 100,
+        liveMaxLatencyDurationCount: 99999,
+        liveSyncOnStallIncrease: 0,
         enableWorker: true,
         lowLatencyMode: false,
         startLevel: -1,
