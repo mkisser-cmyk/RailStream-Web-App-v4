@@ -779,7 +779,7 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
                 </a>
               ))}
             </nav>
-            <p className="text-white/50 text-sm">
+            <p className="text-white/70 text-sm">
               © {new Date().getFullYear()} RailStream, LLC. All rights reserved.
             </p>
           </div>
@@ -934,7 +934,7 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-2">
               {presets.length === 0 ? (
-                <div className="text-center py-8 text-white/50">
+                <div className="text-center py-8 text-white/70">
                   <Bookmark className="w-8 h-8 mx-auto mb-2 opacity-50" aria-hidden="true" />
                   <p className="text-sm">No presets saved yet</p>
                   <p className="text-xs mt-1">Set up your view and save it!</p>
@@ -964,7 +964,7 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
                       ))}
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-white/50">{preset.viewMode} view • {preset.cameras.filter(Boolean).length} cameras</span>
+                      <span className="text-xs text-white/70">{preset.viewMode} view • {preset.cameras.filter(Boolean).length} cameras</span>
                       <Button 
                         size="sm" 
                         onClick={() => { onLoadPreset(preset); setShowPresets(false); toast.success(`Loaded "${preset.name}"`); }}
@@ -984,12 +984,12 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
           <div className="p-3 border-b border-white/5 space-y-2">
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" aria-hidden="true" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/60" aria-hidden="true" />
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search cameras..."
-                  className="pl-9 bg-white/5 border-white/10 text-white text-sm placeholder:text-white/30"
+                  className="pl-9 bg-white/5 border-white/10 text-white text-sm placeholder:text-white/60"
                   aria-label="Search cameras"
                 />
               </div>
@@ -1044,8 +1044,8 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
                         <span className="text-[10px] font-black tracking-wider text-[#ff7a00]/70 bg-[#ff7a00]/10 px-1.5 py-0.5 rounded">
                           {STATE_ABBREV[state] || state.slice(0, 2).toUpperCase()}
                         </span>
-                        <h4 className="text-xs font-semibold text-white/40">{state}</h4>
-                        <span className="text-[10px] text-white/20 ml-auto">{cams.length}</span>
+                        <h4 className="text-xs font-semibold text-white/70">{state}</h4>
+                        <span className="text-[10px] text-white/60 ml-auto">{cams.length}</span>
                       </>
                     )}
                   </div>
@@ -1083,14 +1083,14 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm text-white truncate">{camera.name}</p>
-                                <p className="text-xs text-white/50 truncate">{camera.location}</p>
+                                <p className="text-xs text-white/70 truncate">{camera.location}</p>
                               </div>
                             </button>
                             
                             {userTier && (
                               <button
                                 onClick={(e) => toggleFavorite(camera._id, e)}
-                                className={`p-1.5 rounded transition ${isFavorite ? 'text-yellow-500' : 'text-white/30 hover:text-yellow-500'}`}
+                                className={`p-1.5 rounded transition ${isFavorite ? 'text-yellow-500' : 'text-white/60 hover:text-yellow-500'}`}
                                 aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                               >
                                 <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
@@ -1111,7 +1111,7 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
               ))}
               
               {sortedGroups.length === 0 && (
-                <div className="text-center py-8 text-white/50">
+                <div className="text-center py-8 text-white/70">
                   <Search className="w-8 h-8 mx-auto mb-2 opacity-50" aria-hidden="true" />
                   <p className="text-sm">No cameras found</p>
                 </div>
@@ -1198,7 +1198,7 @@ function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCame
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Layout name (e.g. All Ohio)"
-                  className="flex-1 min-w-0 bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2 focus:border-[#ff7a00] focus:outline-none placeholder:text-white/40"
+                  className="flex-1 min-w-0 bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60 placeholder:text-white/70"
                   autoFocus
                   onKeyDown={(e) => e.key === 'Enter' && handleSave()}
                 />
@@ -1216,7 +1216,7 @@ function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCame
           <div className="max-h-64 overflow-y-auto">
             {presets.length === 0 ? (
               <div className="px-4 py-8 text-center">
-                <Bookmark className="w-8 h-8 text-white/50 mx-auto mb-2" />
+                <Bookmark className="w-8 h-8 text-white/70 mx-auto mb-2" />
                 <p className="text-white/70 text-sm">No layouts saved yet</p>
                 <p className="text-white/60 text-xs mt-1">Set up your cameras and click &quot;Save Current&quot;</p>
               </div>
@@ -1238,7 +1238,7 @@ function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCame
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); onDelete(i); toast.success('Layout deleted'); }}
-                    className="p-1 text-white/30 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
+                    className="p-1 text-white/60 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
                     aria-label={`Delete ${preset.name}`}
                   >
                     <X className="w-3.5 h-3.5" />
@@ -1472,14 +1472,14 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                     onClick={() => !needsUpgrade && setViewMode(mode.id)}
                     disabled={needsUpgrade}
                     className={`relative flex items-center gap-1 px-2 py-1.5 rounded transition-all text-xs font-medium ${
-                      viewMode === mode.id ? 'bg-[#ff7a00] text-white' : needsUpgrade ? 'text-white/20' : 'text-white/70 hover:bg-white/10 hover:text-white'
+                      viewMode === mode.id ? 'bg-[#ff7a00] text-white' : needsUpgrade ? 'text-white/60' : 'text-white/70 hover:bg-white/10 hover:text-white'
                     }`}
                     aria-label={`${mode.label} camera view${needsUpgrade ? ' (upgrade required)' : ''}`}
                     aria-pressed={viewMode === mode.id}
                   >
                     <mode.icon className="w-3.5 h-3.5" />
                     <span className="hidden md:inline">{mode.label}</span>
-                    {needsUpgrade && <Lock className="w-2.5 h-2.5 text-white/40" aria-hidden="true" />}
+                    {needsUpgrade && <Lock className="w-2.5 h-2.5 text-white/70" aria-hidden="true" />}
                   </button>
                 );
               })}
@@ -1510,7 +1510,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all ${
                   canReviewOps
                     ? 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/30 hover:text-amber-300 border border-amber-500/20'
-                    : 'bg-white/5 text-white/30 cursor-not-allowed border border-white/5'
+                    : 'bg-white/5 text-white/60 cursor-not-allowed border border-white/5'
                 }`}
                 title={!user ? 'Sign in required' : !isHighTier ? 'Conductor or Engineer membership required' : !selectedCameras[0] ? 'Select a camera first' : 'Open DVR Review Ops'}
                 aria-label="Review Ops - DVR Rewind"
@@ -1648,7 +1648,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                                 <p className="text-white/60 text-sm mb-3">
                                   {state.streamLimit.message || `You've reached your limit of ${state.streamLimit.stream_limit} concurrent streams.`}
                                 </p>
-                                <p className="text-white/50 text-xs mb-3">
+                                <p className="text-white/70 text-xs mb-3">
                                   Active streams: {state.streamLimit.active_streams} / {state.streamLimit.stream_limit}
                                 </p>
                                 <button
@@ -1697,7 +1697,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                           onClick={(e) => { e.stopPropagation(); toggleSlotMute(i); }}
                           className={`absolute ${isCompact ? 'top-0.5 left-0.5 p-0.5' : 'top-2 left-2 p-1.5'} rounded-md transition-all z-10 ${
                             isSlotMuted(i)
-                              ? 'bg-black/60 text-white/50 hover:text-white hover:bg-black/80'
+                              ? 'bg-black/60 text-white/70 hover:text-white hover:bg-black/80'
                               : 'bg-[#ff7a00]/80 text-white hover:bg-[#ff7a00]'
                           }`}
                           title={isSlotMuted(i) ? `Unmute ${camera.name}` : `Mute ${camera.name}`}
@@ -1775,19 +1775,19 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                           <>
                             {targetSlot === i ? (
                               <>
-                                <p className="text-[#ff7a00] text-sm font-semibold mb-1">Slot {i + 1} Selected</p>
-                                <p className="text-white/70 text-xs">Now pick a camera from the sidebar</p>
+                                <p className="text-[#ff7a00] text-lg font-bold mb-1">Slot {i + 1} Selected</p>
+                                <p className="text-white/80 text-base">Now pick a camera from the sidebar</p>
                               </>
                             ) : (
                               <>
-                                <p className="text-white text-sm font-medium mb-1">Slot {i + 1}</p>
-                                <p className="text-white/70 text-xs">Click to add a camera here</p>
+                                <p className="text-white text-lg font-bold mb-1">Slot {i + 1}</p>
+                                <p className="text-white/80 text-base">Click to add a camera here</p>
                               </>
                             )}
                           </>
                         )}
                         {isCompact && (
-                          <p className={`text-[10px] font-medium ${targetSlot === i ? 'text-[#ff7a00] font-semibold' : 'text-white/70'}`}>
+                          <p className={`text-xs font-bold ${targetSlot === i ? 'text-[#ff7a00]' : 'text-white/80'}`}>
                             {targetSlot === i ? `Slot ${i + 1} ✓` : `+ Slot ${i + 1}`}
                           </p>
                         )}
@@ -1822,7 +1822,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                 <Train className="w-5 h-5 text-[#ff7a00]" />
                 Log Train Sighting
               </h2>
-              <button onClick={() => setSightingForm(null)} className="text-white/40 hover:text-white transition p-1 rounded-lg hover:bg-white/10">
+              <button onClick={() => setSightingForm(null)} className="text-white/70 hover:text-white transition p-1 rounded-lg hover:bg-white/10">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1846,7 +1846,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                 <MapPin className="w-4 h-4 text-[#ff7a00] flex-shrink-0" />
                 <div>
                   <p className="text-white text-sm font-medium">{sightingForm.cameraName}</p>
-                  <p className="text-white/50 text-xs">{sightingForm.cameraLocation}</p>
+                  <p className="text-white/70 text-xs">{sightingForm.cameraLocation}</p>
                 </div>
                 <div className="ml-auto text-right">
                   <p className="text-white/70 text-xs flex items-center gap-1">
@@ -1859,12 +1859,13 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
               {/* Railroad + Train Type row */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-white/70 text-sm mb-1 font-medium">Railroad *</label>
+                  <label htmlFor="sighting-railroad" className="block text-white/70 text-sm mb-1 font-medium">Railroad *</label>
                   <select
+                    id="sighting-railroad"
                     value={sightingData.railroad}
                     onChange={e => setSightingData(f => ({ ...f, railroad: e.target.value }))}
                     required
-                    className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
+                    className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60"
                   >
                     <option value="">Select...</option>
                     {RAILROADS.map(r => (
@@ -1873,11 +1874,12 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                   </select>
                 </div>
                 <div>
-                  <label className="block text-white/70 text-sm mb-1 font-medium">Train Type</label>
+                  <label htmlFor="sighting-traintype" className="block text-white/70 text-sm mb-1 font-medium">Train Type</label>
                   <select
+                    id="sighting-traintype"
                     value={sightingData.train_type}
                     onChange={e => setSightingData(f => ({ ...f, train_type: e.target.value }))}
-                    className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
+                    className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60"
                   >
                     <option value="">Select...</option>
                     {TRAIN_TYPES.map(t => (
@@ -1890,21 +1892,23 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
               {/* Train ID + Direction row */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-white/70 text-sm mb-1 font-medium">Train ID / Symbol</label>
+                  <label htmlFor="sighting-trainid" className="block text-white/70 text-sm mb-1 font-medium">Train ID / Symbol</label>
                   <input
+                    id="sighting-trainid"
                     type="text"
                     value={sightingData.train_id}
                     onChange={e => setSightingData(f => ({ ...f, train_id: e.target.value }))}
                     placeholder="e.g., Q335, N956"
-                    className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30 placeholder:text-white/30"
+                    className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60 placeholder:text-white/60"
                   />
                 </div>
                 <div>
-                  <label className="block text-white/70 text-sm mb-1 font-medium">Direction</label>
+                  <label htmlFor="sighting-direction" className="block text-white/70 text-sm mb-1 font-medium">Direction</label>
                   <select
+                    id="sighting-direction"
                     value={sightingData.direction}
                     onChange={e => setSightingData(f => ({ ...f, direction: e.target.value }))}
-                    className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
+                    className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60"
                   >
                     <option value="">Select...</option>
                     {DIRECTIONS.map(d => (
@@ -1916,25 +1920,27 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
 
               {/* Locomotives */}
               <div>
-                <label className="block text-white/70 text-sm mb-1 font-medium">Locomotive(s)</label>
+                <label htmlFor="sighting-locos" className="block text-white/70 text-sm mb-1 font-medium">Locomotive(s)</label>
                 <input
+                  id="sighting-locos"
                   type="text"
                   value={sightingData.locomotives}
                   onChange={e => setSightingData(f => ({ ...f, locomotives: e.target.value }))}
                   placeholder="e.g., CSX 3194, CSX 812"
-                  className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30 placeholder:text-white/30"
+                  className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60 placeholder:text-white/60"
                 />
               </div>
 
               {/* Notes */}
               <div>
-                <label className="block text-white/70 text-sm mb-1 font-medium">Notes</label>
+                <label htmlFor="sighting-notes" className="block text-white/70 text-sm mb-1 font-medium">Notes</label>
                 <textarea
+                  id="sighting-notes"
                   value={sightingData.notes}
                   onChange={e => setSightingData(f => ({ ...f, notes: e.target.value }))}
                   placeholder="Horn, meets, rare power, DPU, etc."
                   rows={2}
-                  className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30 placeholder:text-white/30 resize-none"
+                  className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60 placeholder:text-white/60 resize-none"
                 />
               </div>
 
@@ -2010,12 +2016,12 @@ function CamerasPage({ cameras, user, onSelectCamera }) {
 
         <div className="flex flex-col sm:flex-row gap-4 mb-8 max-w-2xl mx-auto">
           <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" aria-hidden="true" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/60" aria-hidden="true" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by location, state, or railroad..."
-              className="pl-12 h-12 bg-white/5 border-white/10 text-white placeholder:text-white/30"
+              className="pl-12 h-12 bg-white/5 border-white/10 text-white placeholder:text-white/60"
               aria-label="Search cameras"
             />
           </div>
@@ -2042,7 +2048,7 @@ function CamerasPage({ cameras, user, onSelectCamera }) {
                 </div>
                 <div>
                   <h2 id={`${tier}-heading`} className="text-xl font-semibold text-white">{group.title}</h2>
-                  <p className="text-sm text-white/50">{group.subtitle}</p>
+                  <p className="text-sm text-white/70">{group.subtitle}</p>
                 </div>
               </div>
               
@@ -2096,7 +2102,7 @@ function CamerasPage({ cameras, user, onSelectCamera }) {
                       
                       <div className="p-4">
                         <h3 className="font-semibold text-white mb-1">{camera.name}</h3>
-                        <p className="text-sm text-white/50">{camera.location}</p>
+                        <p className="text-sm text-white/70">{camera.location}</p>
                       </div>
                     </button>
                   );
@@ -2242,7 +2248,7 @@ function HostsPage() {
               </div>
               <div>
                 <h3 className="font-semibold text-white">{host.name}</h3>
-                <p className="text-sm text-white/50 mb-2">{host.location}</p>
+                <p className="text-sm text-white/70 mb-2">{host.location}</p>
                 {host.url && (
                   <a href={host.url} target="_blank" rel="noopener noreferrer" className="text-sm text-[#ff7a00] hover:underline inline-flex items-center gap-1">
                     Visit <ExternalLink className="w-3 h-3" aria-hidden="true" />
@@ -2354,14 +2360,14 @@ function LoginDialog({ open, onClose, onSuccess }) {
         
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           {error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">{error}</div>}
-          <Input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} className="h-12 bg-zinc-800 border-zinc-700 text-white placeholder:text-white/30" required aria-label="Username" />
-          <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 bg-zinc-800 border-zinc-700 text-white placeholder:text-white/30" required aria-label="Password" />
+          <Input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} className="h-12 bg-zinc-800 border-zinc-700 text-white placeholder:text-white/60" required aria-label="Username" />
+          <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 bg-zinc-800 border-zinc-700 text-white placeholder:text-white/60" required aria-label="Password" />
           <Button type="submit" className="w-full h-12 bg-[#ff7a00] hover:bg-[#ff8c20] text-white font-semibold" disabled={loading}>
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Sign In'}
           </Button>
         </form>
         
-        <p className="text-center text-white/50 text-sm mt-4">
+        <p className="text-center text-white/70 text-sm mt-4">
           New to RailStream? <a href="https://railstream.net/member/signup" target="_blank" className="text-[#ff7a00] hover:underline font-medium">Join Today</a>
         </p>
       </DialogContent>
@@ -2801,7 +2807,7 @@ export default function App() {
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
           <img src="https://railstream.net/images/Homepage/WebsiteLogo.png" alt="RailStream" className="h-12 mx-auto mb-4 animate-pulse" />
-          <p className="text-white/50">Loading...</p>
+          <p className="text-white/70">Loading...</p>
         </div>
       </div>
     );

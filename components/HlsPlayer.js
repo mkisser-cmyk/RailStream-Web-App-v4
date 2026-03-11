@@ -560,8 +560,11 @@ export default function HlsPlayer({
     // For large offsets (> 5 minutes), load a timeshift DVR URL instead of seeking
     if (initialSeekOffset > 300 && streamBase) {
       const windowSec = 3600; // 1-hour review window
-      const url = buildStreamUrl(streamBase, initialSeekOffset, windowSec);
-      console.log(`[HlsPlayer] Replay: loading timeshift URL, offset: ${initialSeekOffset}s, window: ${windowSec}s`);
+      // Center the sighting in the middle of the window (offset puts sighting at window END,
+      // so subtract half the window to center it). Add 120s buffer for stream processing delay.
+      const centeredOffset = Math.max(0, initialSeekOffset - Math.floor(windowSec / 2) + 120);
+      const url = buildStreamUrl(streamBase, centeredOffset, windowSec);
+      console.log(`[HlsPlayer] Replay: loading timeshift URL, offset: ${centeredOffset}s (centered from ${initialSeekOffset}s), window: ${windowSec}s`);
       setIsReviewMode(true);
       initialSeekAppliedRef.current = true;
       loadSource(url);
@@ -883,8 +886,8 @@ export default function HlsPlayer({
               </svg>
             </div>
             <p className="text-white font-semibold text-lg mb-1">Stream Unavailable</p>
-            <p className="text-white/50 text-sm mb-4">{error}</p>
-            <button onClick={handleRetry} className="px-6 py-2.5 bg-[#ff7a00] hover:bg-[#ff8c20] text-white font-semibold rounded-lg transition-colors">
+            <p className="text-white/70 text-sm mb-4">{error}</p>
+            <button onClick={handleRetry} aria-label="Retry loading stream" className="px-6 py-2.5 bg-[#ff7a00] hover:bg-[#ff8c20] text-white font-semibold rounded-lg transition-colors">
               Try Again
             </button>
           </div>
@@ -907,7 +910,7 @@ export default function HlsPlayer({
             <span className="px-2 py-0.5 bg-yellow-500/90 text-black text-xs font-bold rounded">REVIEW OPS</span>
             <span className="text-white/80 text-sm">{cameraName}</span>
           </div>
-          <button onClick={backToLiveOps} className="px-3 py-1 bg-[#ff7a00] text-white text-xs font-bold rounded hover:bg-[#ff8c20] transition-colors">
+          <button onClick={backToLiveOps} aria-label="Return to live stream" className="px-3 py-1 bg-[#ff7a00] text-white text-xs font-bold rounded hover:bg-[#ff8c20] transition-colors">
             Back to Live
           </button>
         </div>
@@ -1232,7 +1235,7 @@ export default function HlsPlayer({
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setShowReviewOps(false); }}>
           <div className="bg-[#1a1a1a]/95 border border-white/10 rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
             <h3 className="text-white text-xl font-bold mb-1">Review Ops Setup</h3>
-            <p className="text-white/40 text-sm mb-5">Browse {dvrDays} days of archived footage</p>
+            <p className="text-white/70 text-sm mb-5">Browse {dvrDays} days of archived footage</p>
 
             {/* Day Selector */}
             <label className="text-white/60 text-sm font-medium mb-1 block">Select Day</label>
@@ -1254,7 +1257,7 @@ export default function HlsPlayer({
                 onChange={(e) => setReviewHour(Math.max(1, Math.min(12, parseInt(e.target.value) || 1)))}
                 className="w-20 bg-[#111] border border-white/10 text-white text-center rounded-lg px-2 py-2.5 focus:border-[#ff7a00] focus:outline-none"
               />
-              <span className="text-white/40 self-center text-xl">:</span>
+              <span className="text-white/70 self-center text-xl">:</span>
               <input
                 type="number" min={0} max={59} value={reviewMinute.toString().padStart(2, '0')}
                 onChange={(e) => setReviewMinute(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
@@ -1263,11 +1266,11 @@ export default function HlsPlayer({
               <div className="flex rounded-lg overflow-hidden border border-white/10">
                 <button
                   onClick={() => setReviewAmPm('AM')}
-                  className={`px-3 py-2.5 text-sm font-bold transition-colors ${reviewAmPm === 'AM' ? 'bg-[#ff7a00] text-white' : 'bg-[#111] text-white/50 hover:text-white'}`}
+                  className={`px-3 py-2.5 text-sm font-bold transition-colors ${reviewAmPm === 'AM' ? 'bg-[#ff7a00] text-white' : 'bg-[#111] text-white/70 hover:text-white'}`}
                 >AM</button>
                 <button
                   onClick={() => setReviewAmPm('PM')}
-                  className={`px-3 py-2.5 text-sm font-bold transition-colors ${reviewAmPm === 'PM' ? 'bg-[#ff7a00] text-white' : 'bg-[#111] text-white/50 hover:text-white'}`}
+                  className={`px-3 py-2.5 text-sm font-bold transition-colors ${reviewAmPm === 'PM' ? 'bg-[#ff7a00] text-white' : 'bg-[#111] text-white/70 hover:text-white'}`}
                 >PM</button>
               </div>
             </div>
@@ -1282,14 +1285,14 @@ export default function HlsPlayer({
                   className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors border ${
                     reviewBlock === b.seconds
                       ? 'bg-[#ff7a00] text-white border-[#ff7a00]'
-                      : 'bg-[#111] text-white/50 border-white/10 hover:border-white/30 hover:text-white'
+                      : 'bg-[#111] text-white/70 border-white/10 hover:border-white/30 hover:text-white'
                   }`}
                 >
                   {b.label}
                 </button>
               ))}
             </div>
-            <p className="text-white/50 text-xs mb-5">Total Timeline: {dvrDays}d 00h</p>
+            <p className="text-white/70 text-xs mb-5">Total Timeline: {dvrDays}d 00h</p>
 
             {/* Error message */}
             {reviewError && (
@@ -1308,7 +1311,7 @@ export default function HlsPlayer({
               <button onClick={() => { setShowReviewOps(false); setReviewError(''); }} className="flex-1 py-2.5 rounded-lg border border-white/10 text-white/70 hover:bg-white/5 font-medium transition-colors">
                 Cancel
               </button>
-              <button onClick={startReviewOps} className="flex-1 py-2.5 rounded-lg bg-[#ff7a00] hover:bg-[#ff8c20] text-white font-bold transition-colors">
+              <button onClick={startReviewOps} aria-label="Start reviewing archived footage" className="flex-1 py-2.5 rounded-lg bg-[#ff7a00] hover:bg-[#ff8c20] text-white font-bold transition-colors">
                 Start Review Ops
               </button>
             </div>

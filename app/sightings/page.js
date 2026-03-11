@@ -239,7 +239,7 @@ export default function SightingsPage() {
                   </div>
                   <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Train Sightings</h1>
                 </div>
-                <p className="text-white/50 text-base md:text-lg max-w-xl">
+                <p className="text-white/70 text-base md:text-lg max-w-xl">
                   Community-driven train log. Spot something? Log it for the community.
                 </p>
               </div>
@@ -268,33 +268,33 @@ export default function SightingsPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
             <div className="bg-zinc-900/80 border border-white/[0.06] rounded-xl p-4 md:p-5 hover:border-white/10 transition">
               <div className="flex items-center gap-2 mb-2">
-                <BarChart3 className="w-4 h-4 text-white/30" />
-                <p className="text-white/40 text-xs uppercase tracking-wider font-medium">Total Sightings</p>
+                <BarChart3 className="w-4 h-4 text-white/60" />
+                <p className="text-white/70 text-xs uppercase tracking-wider font-medium">Total Sightings</p>
               </div>
               <p className="text-3xl md:text-4xl font-bold text-white tabular-nums">{stats.total?.toLocaleString() || '0'}</p>
             </div>
             <div className="bg-zinc-900/80 border border-white/[0.06] rounded-xl p-4 md:p-5 hover:border-white/10 transition">
               <div className="flex items-center gap-2 mb-2">
                 <TrendingUp className="w-4 h-4 text-[#ff7a00]/50" />
-                <p className="text-white/40 text-xs uppercase tracking-wider font-medium">Today</p>
+                <p className="text-white/70 text-xs uppercase tracking-wider font-medium">Today</p>
               </div>
               <p className="text-3xl md:text-4xl font-bold text-[#ff7a00] tabular-nums">{stats.today?.toLocaleString() || '0'}</p>
             </div>
             <div className="bg-zinc-900/80 border border-white/[0.06] rounded-xl p-4 md:p-5 hover:border-white/10 transition">
               <div className="flex items-center gap-2 mb-2">
-                <Award className="w-4 h-4 text-white/30" />
-                <p className="text-white/40 text-xs uppercase tracking-wider font-medium">Top Railroad</p>
+                <Award className="w-4 h-4 text-white/60" />
+                <p className="text-white/70 text-xs uppercase tracking-wider font-medium">Top Railroad</p>
               </div>
               <p className="text-2xl md:text-3xl font-bold text-white">{stats.top_railroads?.[0]?.name || '—'}</p>
-              {stats.top_railroads?.[0] && <p className="text-white/30 text-xs mt-1">{stats.top_railroads[0].count} sightings</p>}
+              {stats.top_railroads?.[0] && <p className="text-white/60 text-xs mt-1">{stats.top_railroads[0].count} sightings</p>}
             </div>
             <div className="bg-zinc-900/80 border border-white/[0.06] rounded-xl p-4 md:p-5 hover:border-white/10 transition">
               <div className="flex items-center gap-2 mb-2">
-                <MapPin className="w-4 h-4 text-white/30" />
-                <p className="text-white/40 text-xs uppercase tracking-wider font-medium">Top Location</p>
+                <MapPin className="w-4 h-4 text-white/60" />
+                <p className="text-white/70 text-xs uppercase tracking-wider font-medium">Top Location</p>
               </div>
               <p className="text-lg md:text-xl font-bold text-white truncate">{stats.top_locations?.[0]?.name || '—'}</p>
-              {stats.top_locations?.[0] && <p className="text-white/30 text-xs mt-1">{stats.top_locations[0].count} sightings</p>}
+              {stats.top_locations?.[0] && <p className="text-white/60 text-xs mt-1">{stats.top_locations[0].count} sightings</p>}
             </div>
           </div>
         )}
@@ -305,7 +305,7 @@ export default function SightingsPage() {
             <div className="px-5 py-3.5 border-b border-white/[0.06] flex items-center gap-2.5">
               <Award className="w-4 h-4 text-[#ff7a00]" />
               <h2 className="text-sm font-bold text-white uppercase tracking-wider">Top Spotters</h2>
-              <span className="text-white/25 text-xs ml-auto">10 pts per sighting</span>
+              <span className="text-white/60 text-xs ml-auto">10 pts per sighting</span>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 divide-x divide-white/[0.04]">
               {stats.leaderboard.slice(0, 5).map((entry, idx) => {
@@ -319,7 +319,7 @@ export default function SightingsPage() {
                     <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 ${
                       idx < 3
                         ? 'text-black'
-                        : 'bg-white/[0.06] text-white/40'
+                        : 'bg-white/[0.06] text-white/70'
                     }`}
                       style={idx < 3 ? { background: medals[idx] } : {}}
                     >
@@ -331,7 +331,7 @@ export default function SightingsPage() {
                         {isMe && <span className="text-[10px] text-[#ff7a00]/60 ml-1.5">(you)</span>}
                       </p>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-white/30 text-[11px]">{entry.sightings} sighting{entry.sightings !== 1 ? 's' : ''}</span>
+                        <span className="text-white/60 text-[11px]">{entry.sightings} sighting{entry.sightings !== 1 ? 's' : ''}</span>
                         <span className="text-[#ff7a00]/60 text-[11px] font-bold">{entry.points} pts</span>
                       </div>
                     </div>
@@ -366,7 +366,7 @@ export default function SightingsPage() {
                 <select
                   value={filterCamera}
                   onChange={(e) => { setFilterCamera(e.target.value); setPage(1); }}
-                  className="bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
+                  className="bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60"
                 >
                   <option value="">All Locations</option>
                   {cameras.map(c => (
@@ -377,12 +377,12 @@ export default function SightingsPage() {
                   type="date"
                   value={filterDate}
                   onChange={(e) => { setFilterDate(e.target.value); setPage(1); }}
-                  className="bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
+                  className="bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60"
                 />
                 <select
                   value={filterRailroad}
                   onChange={(e) => { setFilterRailroad(e.target.value); setPage(1); }}
-                  className="bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
+                  className="bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60"
                 >
                   <option value="">All Railroads</option>
                   {RAILROADS.map(r => (
@@ -406,15 +406,15 @@ export default function SightingsPage() {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20">
             <div className="w-10 h-10 border-2 border-[#ff7a00]/20 border-t-[#ff7a00] rounded-full animate-spin" />
-            <p className="text-white/40 mt-4 text-sm">Loading sightings...</p>
+            <p className="text-white/70 mt-4 text-sm">Loading sightings...</p>
           </div>
         ) : sightings.length === 0 ? (
           <div className="text-center py-24 bg-zinc-900/50 border border-white/[0.06] rounded-2xl">
             <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mx-auto mb-4">
               <Train className="w-8 h-8 text-white/15" />
             </div>
-            <p className="text-white/50 text-lg font-medium">No sightings found</p>
-            <p className="text-white/25 text-sm mt-1.5 max-w-md mx-auto">
+            <p className="text-white/70 text-lg font-medium">No sightings found</p>
+            <p className="text-white/60 text-sm mt-1.5 max-w-md mx-auto">
               {activeFilters > 0 ? 'Try adjusting your filters.' : 'Be the first to log a train sighting!'}
             </p>
             {isPaidMember && activeFilters === 0 && (
@@ -433,7 +433,7 @@ export default function SightingsPage() {
         ) : (
           <>
             <div className="flex items-center justify-between mb-4">
-              <p className="text-white/30 text-sm">
+              <p className="text-white/60 text-sm">
                 {total} sighting{total !== 1 ? 's' : ''} {activeFilters > 0 ? 'matched' : 'total'}
               </p>
             </div>
@@ -491,12 +491,12 @@ export default function SightingsPage() {
                                 <span className="text-white/35 text-xs">• {s.train_type}</span>
                               )}
                               {s.direction && (
-                                <span className="text-white/50 text-xs bg-white/[0.06] px-2 py-0.5 rounded-md font-medium">{s.direction}</span>
+                                <span className="text-white/70 text-xs bg-white/[0.06] px-2 py-0.5 rounded-md font-medium">{s.direction}</span>
                               )}
                             </div>
 
                             {/* Location + Time */}
-                            <div className="flex items-center gap-4 text-xs text-white/40 mb-2">
+                            <div className="flex items-center gap-4 text-xs text-white/70 mb-2">
                               <span className="flex items-center gap-1.5">
                                 <MapPin className="w-3 h-3" />
                                 <span className="text-white/60">{s.camera_name || s.location || 'Unknown'}</span>
@@ -504,27 +504,27 @@ export default function SightingsPage() {
                               <span className="flex items-center gap-1.5">
                                 <Clock className="w-3 h-3" />
                                 <span>{sightDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                                <span className="text-white/25">at</span>
+                                <span className="text-white/60">at</span>
                                 <span>{sightDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
                               </span>
                             </div>
 
                             {/* Locomotives */}
                             {s.locomotives && (
-                              <p className="text-white/50 text-xs mb-1">
-                                <span className="text-white/25 font-medium">Locos:</span>{' '}
+                              <p className="text-white/70 text-xs mb-1">
+                                <span className="text-white/60 font-medium">Locos:</span>{' '}
                                 <span className="text-white/70 font-mono text-[11px]">{s.locomotives}</span>
                               </p>
                             )}
 
                             {/* Notes */}
                             {s.notes && (
-                              <p className="text-white/40 text-xs mt-1.5 italic leading-relaxed line-clamp-2">{s.notes}</p>
+                              <p className="text-white/70 text-xs mt-1.5 italic leading-relaxed line-clamp-2">{s.notes}</p>
                             )}
 
                             {/* Posted by */}
-                            <p className="text-white/20 text-[11px] mt-2.5">
-                              by <span className="text-white/40 font-medium">{s.user}</span>
+                            <p className="text-white/60 text-[11px] mt-2.5">
+                              by <span className="text-white/70 font-medium">{s.user}</span>
                               {stats?.leaderboard && (() => {
                                 const rank = stats.leaderboard.find(l => l.username === s.user);
                                 if (rank && rank.rank <= 3) {
@@ -551,13 +551,13 @@ export default function SightingsPage() {
                               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button
                                   onClick={() => startEdit(s)}
-                                  className="flex items-center gap-1 text-white/30 hover:text-[#ff7a00] text-[11px] transition px-2 py-1.5 rounded hover:bg-white/5"
+                                  className="flex items-center gap-1 text-white/60 hover:text-[#ff7a00] text-[11px] transition px-2 py-1.5 rounded hover:bg-white/5"
                                 >
                                   <Edit2 className="w-3 h-3" /> Edit
                                 </button>
                                 <button
                                   onClick={() => handleDelete(s._id)}
-                                  className="flex items-center gap-1 text-white/30 hover:text-red-400 text-[11px] transition px-2 py-1.5 rounded hover:bg-white/5"
+                                  className="flex items-center gap-1 text-white/60 hover:text-red-400 text-[11px] transition px-2 py-1.5 rounded hover:bg-white/5"
                                 >
                                   <Trash2 className="w-3 h-3" /> Delete
                                 </button>
@@ -580,7 +580,7 @@ export default function SightingsPage() {
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="flex items-center gap-1.5 text-white/50 hover:text-white disabled:text-white/15 transition text-sm px-4 py-2.5 rounded-xl hover:bg-white/5 disabled:hover:bg-transparent font-medium"
+              className="flex items-center gap-1.5 text-white/70 hover:text-white disabled:text-white/15 transition text-sm px-4 py-2.5 rounded-xl hover:bg-white/5 disabled:hover:bg-transparent font-medium"
             >
               <ChevronLeft className="w-4 h-4" /> Previous
             </button>
@@ -601,7 +601,7 @@ export default function SightingsPage() {
                     key={pageNum}
                     onClick={() => setPage(pageNum)}
                     className={`w-9 h-9 rounded-lg text-sm font-medium transition ${
-                      page === pageNum ? 'bg-[#ff7a00] text-white' : 'text-white/40 hover:text-white hover:bg-white/5'
+                      page === pageNum ? 'bg-[#ff7a00] text-white' : 'text-white/70 hover:text-white hover:bg-white/5'
                     }`}
                   >
                     {pageNum}
@@ -612,7 +612,7 @@ export default function SightingsPage() {
             <button
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="flex items-center gap-1.5 text-white/50 hover:text-white disabled:text-white/15 transition text-sm px-4 py-2.5 rounded-xl hover:bg-white/5 disabled:hover:bg-transparent font-medium"
+              className="flex items-center gap-1.5 text-white/70 hover:text-white disabled:text-white/15 transition text-sm px-4 py-2.5 rounded-xl hover:bg-white/5 disabled:hover:bg-transparent font-medium"
             >
               Next <ChevronRight className="w-4 h-4" />
             </button>
@@ -629,7 +629,7 @@ export default function SightingsPage() {
                 <Train className="w-5 h-5 text-[#ff7a00]" />
                 {editingId ? 'Edit Sighting' : 'Log Train Sighting'}
               </h2>
-              <button onClick={() => setShowForm(false)} className="text-white/40 hover:text-white transition p-1 rounded-lg hover:bg-white/10">
+              <button onClick={() => setShowForm(false)} className="text-white/70 hover:text-white transition p-1 rounded-lg hover:bg-white/10">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -637,7 +637,7 @@ export default function SightingsPage() {
             <form onSubmit={handleSubmit} className="p-4 space-y-4">
               {/* Image Upload */}
               <div>
-                <label className="block text-white/70 text-sm mb-1.5 font-medium">Snapshot (optional)</label>
+                <label htmlFor="sighting-img" className="block text-white/70 text-sm mb-1.5 font-medium">Snapshot (optional)</label>
                 {imagePreview ? (
                   <div className="relative rounded-xl overflow-hidden border border-white/10">
                     <img src={imagePreview} alt="Snapshot preview" className="w-full aspect-video object-cover" />
@@ -655,8 +655,8 @@ export default function SightingsPage() {
                     onClick={() => fileInputRef.current?.click()}
                     className="w-full h-24 border-2 border-dashed border-white/10 hover:border-[#ff7a00]/30 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors group"
                   >
-                    <Upload className="w-5 h-5 text-white/20 group-hover:text-[#ff7a00]/50 transition" />
-                    <span className="text-white/30 text-xs group-hover:text-white/50 transition">Click to upload a snapshot</span>
+                    <Upload className="w-5 h-5 text-white/60 group-hover:text-[#ff7a00]/50 transition" />
+                    <span className="text-white/60 text-xs group-hover:text-white/70 transition">Click to upload a snapshot</span>
                   </button>
                 )}
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
@@ -664,12 +664,12 @@ export default function SightingsPage() {
 
               {/* Camera */}
               <div>
-                <label className="block text-white/70 text-sm mb-1.5 font-medium">Camera Location *</label>
+                <label htmlFor="sighting-cam" className="block text-white/70 text-sm mb-1.5 font-medium">Camera Location *</label>
                 <select
                   value={formData.camera_id}
                   onChange={e => setFormData(f => ({ ...f, camera_id: e.target.value }))}
                   required
-                  className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
+                  className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60"
                 >
                   <option value="">Select a camera...</option>
                   {cameras.map(c => (
@@ -680,25 +680,25 @@ export default function SightingsPage() {
 
               {/* Date/Time */}
               <div>
-                <label className="block text-white/70 text-sm mb-1.5 font-medium">Date & Time *</label>
+                <label htmlFor="sighting-dt" className="block text-white/70 text-sm mb-1.5 font-medium">Date & Time *</label>
                 <input
                   type="datetime-local"
                   value={formData.sighting_time}
                   onChange={e => setFormData(f => ({ ...f, sighting_time: e.target.value }))}
                   required
-                  className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
+                  className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60"
                 />
               </div>
 
               {/* Railroad + Train Type */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-white/70 text-sm mb-1.5 font-medium">Railroad *</label>
+                  <label htmlFor="form-railroad" className="block text-white/70 text-sm mb-1.5 font-medium">Railroad *</label>
                   <select
                     value={formData.railroad}
                     onChange={e => setFormData(f => ({ ...f, railroad: e.target.value }))}
                     required
-                    className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
+                    className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60"
                   >
                     <option value="">Select...</option>
                     {RAILROADS.map(r => (
@@ -707,11 +707,11 @@ export default function SightingsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-white/70 text-sm mb-1.5 font-medium">Train Type</label>
+                  <label htmlFor="form-traintype" className="block text-white/70 text-sm mb-1.5 font-medium">Train Type</label>
                   <select
                     value={formData.train_type}
                     onChange={e => setFormData(f => ({ ...f, train_type: e.target.value }))}
-                    className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
+                    className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60"
                   >
                     <option value="">Select...</option>
                     {TRAIN_TYPES.map(t => (
@@ -724,21 +724,21 @@ export default function SightingsPage() {
               {/* Train ID + Direction */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-white/70 text-sm mb-1.5 font-medium">Train ID / Symbol</label>
+                  <label htmlFor="form-trainid" className="block text-white/70 text-sm mb-1.5 font-medium">Train ID / Symbol</label>
                   <input
                     type="text"
                     value={formData.train_id}
                     onChange={e => setFormData(f => ({ ...f, train_id: e.target.value }))}
                     placeholder="e.g., Q335, N956"
-                    className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30 placeholder:text-white/20"
+                    className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60 placeholder:text-white/60"
                   />
                 </div>
                 <div>
-                  <label className="block text-white/70 text-sm mb-1.5 font-medium">Direction</label>
+                  <label htmlFor="form-direction" className="block text-white/70 text-sm mb-1.5 font-medium">Direction</label>
                   <select
                     value={formData.direction}
                     onChange={e => setFormData(f => ({ ...f, direction: e.target.value }))}
-                    className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
+                    className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60"
                   >
                     <option value="">Select...</option>
                     {DIRECTIONS.map(d => (
@@ -750,25 +750,25 @@ export default function SightingsPage() {
 
               {/* Locomotives */}
               <div>
-                <label className="block text-white/70 text-sm mb-1.5 font-medium">Locomotive(s)</label>
+                <label htmlFor="form-locos" className="block text-white/70 text-sm mb-1.5 font-medium">Locomotive(s)</label>
                 <input
                   type="text"
                   value={formData.locomotives}
                   onChange={e => setFormData(f => ({ ...f, locomotives: e.target.value }))}
                   placeholder="e.g., CSX 3194, CSX 812"
-                  className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30 placeholder:text-white/20"
+                  className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60 placeholder:text-white/60"
                 />
               </div>
 
               {/* Notes */}
               <div>
-                <label className="block text-white/70 text-sm mb-1.5 font-medium">Notes</label>
+                <label htmlFor="form-notes" className="block text-white/70 text-sm mb-1.5 font-medium">Notes</label>
                 <textarea
                   value={formData.notes}
                   onChange={e => setFormData(f => ({ ...f, notes: e.target.value }))}
                   placeholder="Horn, meets, rare power, DPU, etc."
                   rows={2}
-                  className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30 placeholder:text-white/20 resize-none"
+                  className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/60 placeholder:text-white/60 resize-none"
                 />
               </div>
 
