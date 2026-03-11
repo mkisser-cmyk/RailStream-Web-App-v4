@@ -826,6 +826,81 @@ async function handleRoute(request, { params }) {
       }
     }
 
+    // ── Stream Latency Calibration ──
+    // GET /api/stream/calibrate?cam=BIM_CAM02
+    // Measures actual stream latency by probing for the latest thumbnail
+    // Returns { latency_seconds, server_time, latest_content_time }
+    if (route === '/stream/calibrate' && method === 'GET') {
+      const url = new URL(request.url);
+      const cam = url.searchParams.get('cam');
+
+      if (!cam) {
+        return handleCORS(NextResponse.json({ error: 'cam parameter required' }, { status: 400 }));
+      }
+
+      const safeCam = cam.replace(/[^a-zA-Z0-9_-]/g, '');
+      const THUMB_BASE = process.env.THUMBNAIL_PATH || '/mnt/railstream-thumbs';
+      const serverTime = Math.floor(Date.now() / 1000);
+
+      try {
+        const fs = await import('fs/promises');
+        const path_mod = await import('path');
+        const camDir = path_mod.join(THUMB_BASE, safeCam);
+
+        // Verify directory exists
+        await fs.access(camDir);
+
+        // Probe for the latest thumbnail by checking timestamps from "now" backwards.
+        // Thumbnails are saved every ~2 seconds as {unix_timestamp}.jpg.
+        // Instead of listing millions of files, we probe specific timestamps.
+        // Start from "now" and go back in 2-second steps until we find one (max 5 minutes back).
+        const MAX_PROBE_SECONDS = 600; // Probe up to 10 minutes back
+        const STEP = 2; // Thumbnails are every 2 seconds
+
+        let latestTs = 0;
+        for (let offset = 0; offset <= MAX_PROBE_SECONDS; offset += STEP) {
+          const probeTs = serverTime - offset;
+          const probePath = path_mod.join(camDir, `${probeTs}.jpg`);
+          try {
+            await fs.access(probePath);
+            latestTs = probeTs;
+            break; // Found the latest!
+          } catch {
+            continue; // File doesn't exist at this timestamp
+          }
+        }
+
+        if (latestTs === 0) {
+          // No thumbnails found in range — return default estimate
+          return handleCORS(NextResponse.json({
+            ok: true,
+            latency_seconds: 30,
+            server_time: serverTime,
+            latest_content_time: serverTime - 30,
+            source: 'default',
+          }));
+        }
+
+        const latency = serverTime - latestTs;
+        return handleCORS(NextResponse.json({
+          ok: true,
+          latency_seconds: Math.max(0, latency),
+          server_time: serverTime,
+          latest_content_time: latestTs,
+          source: 'thumbnails',
+        }));
+      } catch (error) {
+        // Directory doesn't exist or not accessible — return default
+        return handleCORS(NextResponse.json({
+          ok: true,
+          latency_seconds: 30,
+          server_time: serverTime,
+          latest_content_time: serverTime - 30,
+          source: 'default',
+        }));
+      }
+    }
+
     // ── Thumbnail Scrubbing ──
     // GET /api/thumbnails/scrub?cam=FOS_CAM01&ts=1710000000
     // Serves DVR thumbnail images from NFS mount for timeline scrubbing

@@ -315,6 +315,7 @@ export default function HlsPlayer({
   const thumbDebounceRef = useRef(null);
   const [dvrUrlOffset, setDvrUrlOffset] = useState(0); // DVR offset from URL for thumbnail timestamp calc
   const [hlsLatency, setHlsLatency] = useState(0); // HLS live edge latency in seconds
+  const [calibratedLatency, setCalibratedLatency] = useState(0); // Measured stream latency from thumbnail probe
   
   // Reference point for accurate timestamp calculation (calibrated when stream starts at live edge)
   const streamRefPoint = useRef(null); // { wallClock: Date.now(), seekEnd: seekableEnd }
@@ -688,6 +689,72 @@ export default function HlsPlayer({
     return () => clearInterval(interval);
   }, []);
 
+  // ── Calibrate actual stream latency using thumbnail server ──
+  // Strategy:
+  // 1. Try the server-side calibrate endpoint (fast, probes thumbnail directory directly)
+  // 2. If that returns 'default' (no thumbnails accessible on server), fall back to
+  //    client-side probing via the thumbnail scrub API (works from any environment)
+  const calibrationAttemptedRef = useRef(null); // Track which src was calibrated
+  useEffect(() => {
+    if (!src || !streamName || calibrationAttemptedRef.current === src) return;
+    // Only calibrate for live streams (not review ops archived footage)
+    if (dvrUrlOffset > 0) return;
+
+    calibrationAttemptedRef.current = src;
+
+    const doCalibration = async () => {
+      try {
+        // Step 1: Try server-side calibration
+        const res = await fetch(`/api/stream/calibrate?cam=${encodeURIComponent(streamName)}`);
+        const data = await res.json();
+
+        if (data.ok && data.source === 'thumbnails' && data.latency_seconds > 0) {
+          // Got real measurement from thumbnails
+          const latency = Math.min(data.latency_seconds, 600);
+          console.log(`[HlsPlayer] Stream latency calibrated: ${latency}s (source: thumbnails)`);
+          setCalibratedLatency(latency);
+          return;
+        }
+
+        // Step 2: Server-side returned default — try client-side probe via scrub API
+        // Binary search: probe from "now" backwards in 10s steps, then refine
+        const nowSec = Math.floor(Date.now() / 1000);
+        let found = false;
+
+        // Coarse scan: 10-second steps, up to 600s (10 minutes) back
+        for (let offset = 0; offset <= 600; offset += 10) {
+          const probeTs = nowSec - offset;
+          try {
+            const thumbRes = await fetch(`/api/thumbnails/scrub?cam=${encodeURIComponent(streamName)}&ts=${probeTs}`);
+            if (thumbRes.ok && thumbRes.status === 200) {
+              // Found a thumbnail! The actual latency is approximately this offset
+              // (thumbnail ±6s fuzzy matching, so offset could be slightly off)
+              const latency = Math.max(0, offset);
+              console.log(`[HlsPlayer] Stream latency calibrated: ${latency}s (source: client-probe, ts=${probeTs})`);
+              setCalibratedLatency(latency);
+              found = true;
+              break;
+            }
+          } catch {
+            // Network error — skip
+          }
+        }
+
+        if (!found) {
+          // No thumbnails found — use server's default
+          if (data.ok && data.latency_seconds > 0) {
+            setCalibratedLatency(data.latency_seconds);
+          }
+          console.log('[HlsPlayer] Stream latency calibration: no thumbnails found, using default');
+        }
+      } catch (err) {
+        console.log('[HlsPlayer] Stream latency calibration failed:', err.message);
+      }
+    };
+
+    doCalibration();
+  }, [src, streamName, dvrUrlOffset]);
+
   // ── Auto-hide controls ──
   const resetControlsTimer = useCallback(() => {
     setShowControls(true);
@@ -802,14 +869,14 @@ export default function HlsPlayer({
   }, []);
 
   // Compute the wall-clock unix time that corresponds to seekableEnd
-  // For live (dvrUrlOffset=0): seekableEnd ≈ now → streamEndUnixTime = Date.now()/1000
-  // For historical DVR: URL has playlist_dvr_timeshift-{offset}-{window}
-  //   seekableEnd ≈ now - offset (the newest point in the window)
-  // Note: hlsLatency is typically 0 because these streams lack EXT-X-PROGRAM-DATE-TIME tags.
+  // The best available latency estimate: calibratedLatency (from thumbnail probe) > hlsLatency > 0
+  // For live (dvrUrlOffset=0): content at seekableEnd was captured at now - totalLatency
+  // For historical DVR: content at seekableEnd was captured at now - dvrUrlOffset - totalLatency
   // We include seekableEnd as a dependency so Date.now() stays fresh as the timeline advances.
+  const effectiveLatency = calibratedLatency || hlsLatency || 0;
   const streamEndUnixTime = useMemo(() => {
-    return Math.floor(Date.now() / 1000) - dvrUrlOffset - hlsLatency;
-  }, [dvrUrlOffset, hlsLatency, seekableEnd]);
+    return Math.floor(Date.now() / 1000) - dvrUrlOffset - effectiveLatency;
+  }, [dvrUrlOffset, effectiveLatency, seekableEnd]);
 
   // Calculate thumbnail timestamp for current hover position
   const thumbTimestamp = useMemo(() => {
@@ -1248,19 +1315,22 @@ export default function HlsPlayer({
                     ctx.textAlign = 'left';
                     ctx.fillText(cameraName || 'RailStream', 12, canvas.height - 12);
                     const imageData = canvas.toDataURL('image/jpeg', 0.92);
-                    // Calculate accurate sighting timestamp using the same method as thumbnail scrubbing.
-                    // The wall-clock time at seekableEnd ≈ Date.now()/1000 - dvrUrlOffset
-                    // (dvrUrlOffset is 0 for live, >0 for Review Ops archived footage)
-                    // The wall-clock time at currentTime = streamEnd - (seekableEnd - currentTime)
+                    // Calculate accurate sighting timestamp.
+                    // effectiveLatency = calibrated pipeline latency (from thumbnail probe)
+                    // dvrUrlOffset = DVR timeshift offset (0 for live, >0 for Review Ops)
+                    // Wall-clock time at seekableEnd ≈ Date.now()/1000 - dvrUrlOffset - effectiveLatency
+                    // Wall-clock time at currentTime = streamEnd - (seekableEnd - currentTime)
                     const v = videoRef.current;
                     const nowSec = Math.floor(Date.now() / 1000);
-                    const streamEndWallClock = nowSec - dvrUrlOffset; // Wall-clock time at live edge of this stream
+                    const latency = calibratedLatency || hlsLatency || 0;
+                    const streamEndWallClock = nowSec - dvrUrlOffset - latency;
                     let sightingTime;
                     if (v.seekable && v.seekable.length > 0) {
                       const seekEnd = v.seekable.end(v.seekable.length - 1);
                       const offsetFromEnd = Math.max(0, seekEnd - v.currentTime);
                       const sightingUnix = streamEndWallClock - Math.floor(offsetFromEnd);
                       sightingTime = new Date(sightingUnix * 1000).toISOString();
+                      console.log(`[HlsPlayer] Sighting time: latency=${latency}s, dvrOffset=${dvrUrlOffset}s, behindLive=${Math.floor(offsetFromEnd)}s → ${sightingTime}`);
                     } else {
                       // Fallback: use streamEndWallClock directly (at live edge)
                       sightingTime = new Date(streamEndWallClock * 1000).toISOString();
