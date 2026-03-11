@@ -1180,7 +1180,9 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
                       const isSelected = selectedCameras.some(c => c?._id === camera._id);
                       const hasAccess = canAccess(userTier, camera.min_tier);
                       const isStatusCamera = camera.status === 'offline' || camera.status === 'coming_soon';
-                      const isClickable = hasAccess || isStatusCamera;
+                      // Locked cameras should be clickable for logged-out users (to show sign-in prompt)
+                      // and for logged-in users who don't have access (to show upgrade prompt in player)
+                      const isClickable = hasAccess || isStatusCamera || true; // Always clickable
                       const isFavorite = favorites.includes(camera._id);
                       
                       return (
@@ -1189,10 +1191,9 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
                             isSelected ? 'bg-[#ff7a00]/20 ring-1 ring-[#ff7a00]' : isClickable ? 'hover:bg-white/5' : 'opacity-50'
                           }`}>
                             <button
-                              onClick={() => isClickable && onSelect(camera)}
-                              disabled={!isClickable}
+                              onClick={() => onSelect(camera)}
                               className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                              aria-label={`${isStatusCamera ? camera.status === 'offline' ? 'Offline' : 'Coming soon' : hasAccess ? 'Select' : 'Locked'} ${camera.name}`}
+                              aria-label={`${isStatusCamera ? camera.status === 'offline' ? 'Offline' : 'Coming soon' : hasAccess ? 'Select' : !userTier ? 'Sign in required' : 'Upgrade required'} ${camera.name}`}
                             >
                               <div className="relative w-16 h-10 rounded overflow-hidden flex-shrink-0">
                                 {thumbnailMap?.[camera._id] ? (
@@ -1842,8 +1843,14 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
     const enabledPrerolls = ads.filter(a => a.type === 'preroll' && a.enabled);
     if (enabledPrerolls.length === 0) return;
     
-    // Check if a camera just started playing in any slot
-    const playingSlots = selectedCameras.filter(c => c !== null);
+    // Check if a camera just started PLAYING (has a stream, not just selected)
+    // Don't trigger pre-roll for upgrade/sign-in prompts or errors
+    const playingSlots = selectedCameras.filter((c, i) => {
+      if (!c) return false;
+      const state = playbackStates[i];
+      // Only count as "playing" if it has actual stream data (not upgrade/error/loading)
+      return state?.data?.hls_url;
+    });
     const sessionKey = playingSlots.map(c => c?._id).join(',');
     
     if (sessionKey && sessionKey !== prerollSessionId && playingSlots.length > 0) {
@@ -1853,7 +1860,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
       setPrerollActive(true);
       setPrerollSessionId(sessionKey);
     }
-  }, [user, ads, selectedCameras, prerollSessionId]);
+  }, [user, ads, selectedCameras, prerollSessionId, playbackStates]);
 
   // Pre-roll countdown timer
   useEffect(() => {
@@ -2372,19 +2379,41 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                             {!isCompact && (
                               <>
                                 <p className="text-white text-lg font-bold mb-1">{camera.name}</p>
-                                <p className="text-white/60 text-sm mb-3">
-                                  This camera requires <span className="text-[#ff7a00] font-semibold capitalize">{state.upgrade.required_tier}</span> access
-                                </p>
-                                <a
-                                  href={state.upgrade.upgrade_url || '/join'}
-                                  className="inline-block px-5 py-2 bg-[#ff7a00] hover:bg-[#ff8c1a] text-white font-semibold rounded-lg text-sm transition"
-                                >
-                                  Upgrade Now
-                                </a>
+                                {state.upgrade.needsSignIn ? (
+                                  <>
+                                    <p className="text-white/60 text-sm mb-3">
+                                      Sign in to access <span className="text-[#ff7a00] font-semibold capitalize">{state.upgrade.required_tier}</span> cameras
+                                    </p>
+                                    <button
+                                      onClick={() => setLoginOpen(true)}
+                                      className="inline-block px-5 py-2 bg-[#ff7a00] hover:bg-[#ff8c1a] text-white font-semibold rounded-lg text-sm transition mr-2"
+                                    >
+                                      Sign In
+                                    </button>
+                                    <a
+                                      href="/join"
+                                      className="inline-block px-5 py-2 border border-[#ff7a00] text-[#ff7a00] hover:bg-[#ff7a00]/10 font-semibold rounded-lg text-sm transition"
+                                    >
+                                      Join Now
+                                    </a>
+                                  </>
+                                ) : (
+                                  <>
+                                    <p className="text-white/60 text-sm mb-3">
+                                      This camera requires <span className="text-[#ff7a00] font-semibold capitalize">{state.upgrade.required_tier}</span> access
+                                    </p>
+                                    <a
+                                      href={state.upgrade.upgrade_url || '/join'}
+                                      className="inline-block px-5 py-2 bg-[#ff7a00] hover:bg-[#ff8c1a] text-white font-semibold rounded-lg text-sm transition"
+                                    >
+                                      Upgrade Now
+                                    </a>
+                                  </>
+                                )}
                               </>
                             )}
                             {isCompact && (
-                              <p className="text-white/60 text-[10px]">Upgrade to watch</p>
+                              <p className="text-white/60 text-[10px]">{state.upgrade.needsSignIn ? 'Sign in to watch' : 'Upgrade to watch'}</p>
                             )}
                           </div>
                         </div>
@@ -2953,15 +2982,13 @@ function CamerasPage({ cameras, user, onSelectCamera }) {
                   const isOffline = camera.status === 'offline';
                   const isStatusCamera = isComingSoon || isOffline;
                   const hasAccess = !isComingSoon && canAccess(user?.membership_tier, camera.min_tier);
-                  const isClickable = hasAccess || isStatusCamera;
                   
                   return (
                     <button
                       key={camera._id}
-                      onClick={() => isClickable && onSelectCamera(camera)}
-                      disabled={!isClickable}
-                      className={`group relative rounded-xl overflow-hidden bg-zinc-900 text-left transition-all ${isClickable ? 'hover:scale-[1.02] cursor-pointer' : ''} ${!isClickable ? 'opacity-70' : ''}`}
-                      aria-label={`${camera.name} - ${isComingSoon ? 'Coming soon' : isOffline ? 'Offline' : hasAccess ? 'Click to watch' : 'Upgrade required'}`}
+                      onClick={() => onSelectCamera(camera)}
+                      className={`group relative rounded-xl overflow-hidden bg-zinc-900 text-left transition-all hover:scale-[1.02] cursor-pointer ${!hasAccess && !isStatusCamera ? 'opacity-80' : ''}`}
+                      aria-label={`${camera.name} - ${isComingSoon ? 'Coming soon' : isOffline ? 'Offline' : hasAccess ? 'Click to watch' : !user ? 'Sign in to watch' : 'Upgrade required'}`}
                     >
                       <div className="aspect-video relative">
                         <img src={camera.thumbnail_path || 'https://images.unsplash.com/photo-1474487548417-781cb71495f3?w=400&h=225&fit=crop'} alt="" className={`w-full h-full object-cover ${isComingSoon ? 'opacity-50' : ''}`} />
@@ -3580,6 +3607,26 @@ export default function App() {
     setSelectedCameras(newCameras);
     setPlaybackStates(prev => ({ ...prev, [slotIndex]: { loading: true, data: null, error: null } }));
     
+    // If user is not logged in and camera requires a tier above free, show sign-in prompt
+    const token = auth.getToken();
+    if (!token && camera.min_tier && camera.min_tier.toLowerCase() !== 'fireman') {
+      setPlaybackStates(prev => ({
+        ...prev,
+        [slotIndex]: {
+          loading: false,
+          data: null,
+          error: null,
+          upgrade: {
+            required_tier: camera.min_tier,
+            user_tier: 'none',
+            upgrade_url: '/join',
+            needsSignIn: true,
+          },
+        },
+      }));
+      return;
+    }
+    
     // Stop any existing session in this slot
     const oldSession = activeSessionsRef.current[slotIndex];
     if (oldSession) {
@@ -3734,6 +3781,15 @@ export default function App() {
     }
     auth.clear();
     setUser(null);
+    // Clear all user-specific state and localStorage on logout
+    setFavorites([]);
+    setPresets([]);
+    storage.setFavorites([]);
+    storage.setPresets([]);
+    // Reset view to single mode and clear selected cameras
+    setViewMode('single');
+    setSelectedCameras([null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]);
+    setReplaySeekOffset(0);
     clientApi.logout();
     toast.success('Signed out');
   };
