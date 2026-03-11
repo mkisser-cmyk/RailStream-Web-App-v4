@@ -21,7 +21,7 @@ const INFRA_FEATURES = [
   },
   {
     icon: 'gpu',
-    title: '7 NVIDIA Tesla GPUs',
+    title: '14 NVIDIA Tesla GPUs',
     description: 'Hardware-accelerated H.265 transcoding generates ~375 adaptive bitrate streams from ~40 primary cameras — from 270p to 4K — in real time.',
   },
   {
