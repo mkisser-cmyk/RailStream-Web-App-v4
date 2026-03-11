@@ -1094,14 +1094,14 @@ function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCame
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-2 w-72 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+        <div className="absolute top-full left-0 mt-2 w-80 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
           {/* Header */}
           <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
             <h3 className="text-white font-bold text-sm">My Layouts</h3>
             {!saving && activeCams > 0 && (
               <button
                 onClick={() => setSaving(true)}
-                className="text-xs bg-[#ff7a00] hover:bg-[#ff8c20] text-white px-3 py-1 rounded-full font-medium transition"
+                className="text-xs bg-[#ff7a00] hover:bg-[#ff8c20] text-white px-3 py-1 rounded-full font-medium transition flex-shrink-0"
               >
                 + Save Current
               </button>
@@ -1111,8 +1111,8 @@ function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCame
           {/* Save Form */}
           {saving && (
             <div className="px-4 py-3 border-b border-white/10 bg-white/5">
-              <p className="text-white/50 text-xs mb-2">
-                Saving {activeCams} cameras in {VIEW_LABELS[viewMode] || '1'}-view layout
+              <p className="text-white/80 text-xs mb-2">
+                Saving {activeCams} camera{activeCams !== 1 ? 's' : ''} in {VIEW_LABELS[viewMode] || '1'}-view layout
               </p>
               <div className="flex gap-2">
                 <input
@@ -1120,15 +1120,15 @@ function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCame
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Layout name (e.g. All Ohio)"
-                  className="flex-1 bg-black/50 border border-white/10 text-white text-sm rounded-lg px-3 py-2 focus:border-[#ff7a00] focus:outline-none"
+                  className="flex-1 min-w-0 bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2 focus:border-[#ff7a00] focus:outline-none placeholder:text-white/40"
                   autoFocus
                   onKeyDown={(e) => e.key === 'Enter' && handleSave()}
                 />
-                <button onClick={handleSave} className="bg-[#ff7a00] hover:bg-[#ff8c20] text-white px-3 py-2 rounded-lg text-sm font-bold transition">
+                <button onClick={handleSave} className="bg-[#ff7a00] hover:bg-[#ff8c20] text-white px-4 py-2 rounded-lg text-sm font-bold transition flex-shrink-0">
                   Save
                 </button>
               </div>
-              <button onClick={() => { setSaving(false); setName(''); }} className="text-white/40 text-xs mt-2 hover:text-white/60">
+              <button onClick={() => { setSaving(false); setName(''); }} className="text-white/70 text-xs mt-2 hover:text-white">
                 Cancel
               </button>
             </div>
@@ -1138,9 +1138,9 @@ function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCame
           <div className="max-h-64 overflow-y-auto">
             {presets.length === 0 ? (
               <div className="px-4 py-8 text-center">
-                <Bookmark className="w-8 h-8 text-white/30 mx-auto mb-2" />
-                <p className="text-white/40 text-sm">No layouts saved yet</p>
-                <p className="text-white/50 text-xs mt-1">Set up your cameras and click "Save Current"</p>
+                <Bookmark className="w-8 h-8 text-white/50 mx-auto mb-2" />
+                <p className="text-white/70 text-sm">No layouts saved yet</p>
+                <p className="text-white/60 text-xs mt-1">Set up your cameras and click &quot;Save Current&quot;</p>
               </div>
             ) : (
               presets.map((preset, i) => (
@@ -1154,13 +1154,13 @@ function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCame
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-white text-sm font-medium truncate">{preset.name}</p>
-                    <p className="text-white/40 text-xs">
-                      {preset.cameras?.filter(Boolean).length || 0} cameras • {VIEW_LABELS[preset.viewMode] || '1'}-view
+                    <p className="text-white/60 text-xs">
+                      {preset.cameras?.filter(Boolean).length || 0} cameras &bull; {VIEW_LABELS[preset.viewMode] || '1'}-view
                     </p>
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); onDelete(i); toast.success('Layout deleted'); }}
-                    className="p-1 text-white/20 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
+                    className="p-1 text-white/30 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
                     aria-label={`Delete ${preset.name}`}
                   >
                     <X className="w-3.5 h-3.5" />
@@ -1618,25 +1618,25 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                         <img 
                           src="https://railstream.net/images/Homepage/WebsiteLogo.png" 
                           alt="RailStream" 
-                          className={`${isCompact ? 'h-6' : 'h-10'} mx-auto mb-2 opacity-20`}
+                          className={`${isCompact ? 'h-6' : 'h-10'} mx-auto mb-2 opacity-30`}
                         />
                         {!isCompact && (
                           <>
                             {targetSlot === i ? (
                               <>
-                                <p className="text-[#ff7a00] text-sm font-medium mb-1">Slot {i + 1} Selected</p>
-                                <p className="text-white/50 text-xs">Now pick a camera from the sidebar</p>
+                                <p className="text-[#ff7a00] text-sm font-semibold mb-1">Slot {i + 1} Selected</p>
+                                <p className="text-white/70 text-xs">Now pick a camera from the sidebar</p>
                               </>
                             ) : (
                               <>
-                                <p className="text-white/70 text-sm font-medium mb-1">Slot {i + 1}</p>
-                                <p className="text-white/50 text-xs">Click to add a camera here</p>
+                                <p className="text-white text-sm font-medium mb-1">Slot {i + 1}</p>
+                                <p className="text-white/70 text-xs">Click to add a camera here</p>
                               </>
                             )}
                           </>
                         )}
                         {isCompact && (
-                          <p className={`text-[10px] ${targetSlot === i ? 'text-[#ff7a00] font-semibold' : 'text-white/50'}`}>
+                          <p className={`text-[10px] font-medium ${targetSlot === i ? 'text-[#ff7a00] font-semibold' : 'text-white/70'}`}>
                             {targetSlot === i ? `Slot ${i + 1} ✓` : `+ Slot ${i + 1}`}
                           </p>
                         )}
