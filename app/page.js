@@ -2736,9 +2736,9 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
           {!user && !chatOpen && (
             <div className="mt-2">
               <GptAdSlot
-                adUnitPath="/8176806/1"
+                adUnitPath="/6355419/Travel/Europe/France/Paris"
                 sizes={[[300, 250]]}
-                divId="div-gpt-ad-8176806-1"
+                divId="div-gpt-ad-sidebar-test"
                 className="rounded-lg overflow-hidden"
               />
             </div>
