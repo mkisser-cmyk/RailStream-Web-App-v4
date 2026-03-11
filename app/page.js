@@ -1519,6 +1519,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                         poster={camera.thumbnail_path || null}
                         openReviewOps={reviewOpsCounter}
                         hideReviewButton={true}
+                        onLogSighting={user ? (data) => handleLogSighting(selectedCameras[focusedSlot], data) : undefined}
                       />
                     ) : state.loading ? (
                       <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="w-10 h-10 text-[#ff7a00] animate-spin" /></div>
@@ -1628,6 +1629,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                           poster={camera.thumbnail_path || null}
                           openReviewOps={viewMode === 'single' && i === 0 ? reviewOpsCounter : 0}
                           hideReviewButton={true}
+                          onLogSighting={user && !isCompact ? (data) => handleLogSighting(selectedCameras[i], data) : undefined}
                         />
                       ) : null}
                       
@@ -1743,6 +1745,155 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
           )}
         </div>
       </div>
+
+      {/* Train Sighting Modal */}
+      {sightingForm && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setSightingForm(null)}>
+          <div className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-white/10 sticky top-0 bg-zinc-900 z-10 rounded-t-2xl">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Train className="w-5 h-5 text-[#ff7a00]" />
+                Log Train Sighting
+              </h2>
+              <button onClick={() => setSightingForm(null)} className="text-white/40 hover:text-white transition p-1 rounded-lg hover:bg-white/10">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={submitSighting} className="p-4 space-y-4">
+              {/* Snapshot Preview */}
+              {sightingForm.imageData && (
+                <div className="relative rounded-xl overflow-hidden border border-white/10">
+                  <img src={sightingForm.imageData} alt="Sighting snapshot" className="w-full aspect-video object-cover" />
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-3 py-2">
+                    <p className="text-white text-xs font-medium">{sightingForm.cameraName}</p>
+                    <p className="text-white/60 text-[11px]">
+                      {new Date(sightingForm.sightingTime).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Pre-filled info */}
+              <div className="bg-white/5 rounded-lg p-3 flex items-center gap-3">
+                <MapPin className="w-4 h-4 text-[#ff7a00] flex-shrink-0" />
+                <div>
+                  <p className="text-white text-sm font-medium">{sightingForm.cameraName}</p>
+                  <p className="text-white/50 text-xs">{sightingForm.cameraLocation}</p>
+                </div>
+                <div className="ml-auto text-right">
+                  <p className="text-white/70 text-xs flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {new Date(sightingForm.sightingTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                  </p>
+                </div>
+              </div>
+
+              {/* Railroad + Train Type row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-white/70 text-sm mb-1 font-medium">Railroad *</label>
+                  <select
+                    value={sightingData.railroad}
+                    onChange={e => setSightingData(f => ({ ...f, railroad: e.target.value }))}
+                    required
+                    className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
+                  >
+                    <option value="">Select...</option>
+                    {RAILROADS.map(r => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-white/70 text-sm mb-1 font-medium">Train Type</label>
+                  <select
+                    value={sightingData.train_type}
+                    onChange={e => setSightingData(f => ({ ...f, train_type: e.target.value }))}
+                    className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
+                  >
+                    <option value="">Select...</option>
+                    {TRAIN_TYPES.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Train ID + Direction row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-white/70 text-sm mb-1 font-medium">Train ID / Symbol</label>
+                  <input
+                    type="text"
+                    value={sightingData.train_id}
+                    onChange={e => setSightingData(f => ({ ...f, train_id: e.target.value }))}
+                    placeholder="e.g., Q335, N956"
+                    className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30 placeholder:text-white/30"
+                  />
+                </div>
+                <div>
+                  <label className="block text-white/70 text-sm mb-1 font-medium">Direction</label>
+                  <select
+                    value={sightingData.direction}
+                    onChange={e => setSightingData(f => ({ ...f, direction: e.target.value }))}
+                    className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
+                  >
+                    <option value="">Select...</option>
+                    {DIRECTIONS.map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Locomotives */}
+              <div>
+                <label className="block text-white/70 text-sm mb-1 font-medium">Locomotive(s)</label>
+                <input
+                  type="text"
+                  value={sightingData.locomotives}
+                  onChange={e => setSightingData(f => ({ ...f, locomotives: e.target.value }))}
+                  placeholder="e.g., CSX 3194, CSX 812"
+                  className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30 placeholder:text-white/30"
+                />
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-white/70 text-sm mb-1 font-medium">Notes</label>
+                <textarea
+                  value={sightingData.notes}
+                  onChange={e => setSightingData(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="Horn, meets, rare power, DPU, etc."
+                  rows={2}
+                  className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30 placeholder:text-white/30 resize-none"
+                />
+              </div>
+
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={sightingSubmitting || !sightingData.railroad}
+                className="w-full bg-[#ff7a00] hover:bg-[#ff8c20] disabled:bg-[#ff7a00]/40 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl transition text-sm flex items-center justify-center gap-2"
+              >
+                {sightingSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Logging...
+                  </>
+                ) : (
+                  <>
+                    <Train className="w-4 h-4" />
+                    Log Sighting
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

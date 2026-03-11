@@ -1,17 +1,29 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { Train, Calendar, MapPin, Clock, Plus, Search, ChevronLeft, ChevronRight, Play, Edit2, Trash2, X, Filter } from 'lucide-react';
+import SiteHeader from '@/components/SiteHeader';
+import {
+  Train, Calendar, MapPin, Clock, Plus, Search, ChevronLeft, ChevronRight,
+  Play, Edit2, Trash2, X, Filter, Camera, ArrowUpRight, Eye, Image,
+  TrendingUp, Award, BarChart3, ChevronDown, Upload
+} from 'lucide-react';
 
 const RAILROADS = ['CSX', 'NS', 'UP', 'BNSF', 'CN', 'CP', 'KCS', 'Amtrak', 'Other'];
 const TRAIN_TYPES = ['Intermodal', 'Manifest', 'Coal', 'Grain', 'Auto', 'Passenger', 'Local', 'Work Train', 'Light Power', 'Other'];
 const DIRECTIONS = ['Eastbound', 'Westbound', 'Northbound', 'Southbound'];
 
-// Railroad brand colors
+// Railroad brand colors with text contrast
 const RR_COLORS = {
-  CSX: '#0033A0', NS: '#000000', UP: '#FFD100', BNSF: '#FF6600',
-  CN: '#E21836', CP: '#E21836', KCS: '#006747', Amtrak: '#1B3A6B', Other: '#666',
+  CSX: { bg: '#0033A0', text: '#fff' },
+  NS: { bg: '#1a1a1a', text: '#fff', border: '#444' },
+  UP: { bg: '#FFD100', text: '#000' },
+  BNSF: { bg: '#FF6600', text: '#fff' },
+  CN: { bg: '#E21836', text: '#fff' },
+  CP: { bg: '#E21836', text: '#fff' },
+  KCS: { bg: '#006747', text: '#fff' },
+  Amtrak: { bg: '#1B3A6B', text: '#fff' },
+  Other: { bg: '#444', text: '#fff' },
 };
 
 export default function SightingsPage() {
@@ -28,6 +40,7 @@ export default function SightingsPage() {
   const [filterCamera, setFilterCamera] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterRailroad, setFilterRailroad] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // New sighting form
   const [showForm, setShowForm] = useState(false);
@@ -36,9 +49,15 @@ export default function SightingsPage() {
     direction: '', locomotives: '', train_type: '', notes: '',
   });
   const [submitting, setSubmitting] = useState(false);
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const fileInputRef = useRef(null);
 
   // Editing
   const [editingId, setEditingId] = useState(null);
+
+  // Expanded image
+  const [expandedImage, setExpandedImage] = useState(null);
 
   // Check auth
   useEffect(() => {
@@ -67,7 +86,7 @@ export default function SightingsPage() {
   // Fetch sightings
   const fetchSightings = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams({ page: page.toString(), limit: '25' });
+    const params = new URLSearchParams({ page: page.toString(), limit: '20' });
     if (filterCamera) params.set('camera_id', filterCamera);
     if (filterDate) params.set('date', filterDate);
     if (filterRailroad) params.set('railroad', filterRailroad);
@@ -96,6 +115,20 @@ export default function SightingsPage() {
       .catch(() => {});
   }, []);
 
+  // Handle image file selection
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image must be under 5MB');
+      return;
+    }
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setImagePreview(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
   // Submit sighting
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -119,9 +152,23 @@ export default function SightingsPage() {
       });
       const data = await res.json();
       if (data.ok) {
+        // Upload image if we have one and this is a new sighting
+        if (imagePreview && data.sighting?._id) {
+          try {
+            await fetch('/api/sightings/upload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ image_data: imagePreview, sighting_id: data.sighting._id }),
+            });
+          } catch (uploadErr) {
+            console.error('Image upload failed:', uploadErr);
+          }
+        }
         setShowForm(false);
         setEditingId(null);
         setFormData({ camera_id: '', sighting_time: '', railroad: '', train_id: '', direction: '', locomotives: '', train_type: '', notes: '' });
+        setImageFile(null);
+        setImagePreview(null);
         fetchSightings();
       } else {
         alert(data.error || 'Failed to save sighting');
@@ -157,6 +204,8 @@ export default function SightingsPage() {
       locomotives: s.locomotives, train_type: s.train_type, notes: s.notes,
     });
     setEditingId(s._id);
+    setImageFile(null);
+    setImagePreview(null);
     setShowForm(true);
   };
 
@@ -165,222 +214,351 @@ export default function SightingsPage() {
     const sightingTs = new Date(s.sighting_time).getTime() / 1000;
     const now = Date.now() / 1000;
     const secsAgo = Math.floor(now - sightingTs);
-    // DVR window is typically 2 hours (7200s)
     if (secsAgo > 7200) return null;
     return `/?watch=${s.camera_id}&seek=${secsAgo}`;
   };
 
   const isPaidMember = user && ['conductor', 'engineer', 'fireman', 'development', 'admin'].includes(user.tier || user.membership_tier);
+  const activeFilters = [filterCamera, filterDate, filterRailroad].filter(Boolean).length;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white">
-      {/* Header */}
-      <header className="bg-[#111] border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-2">
-              <img src="https://railstream.net/images/Homepage/WebsiteLogo.png" alt="RailStream" className="h-8" />
-            </Link>
-            <span className="text-white/30 text-lg">/</span>
-            <div className="flex items-center gap-2">
-              <Train className="w-5 h-5 text-[#ff7a00]" />
-              <h1 className="text-xl font-bold">Train Sightings Log</h1>
+    <div className="min-h-screen bg-black text-white">
+      <SiteHeader currentPage="sightings" user={user} />
+
+      {/* Hero Section */}
+      <div className="pt-16">
+        <div className="relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#ff7a00]/10 via-black to-black" />
+          <div className="relative max-w-7xl mx-auto px-4 py-10 md:py-14">
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+              <div>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#ff7a00]/20 flex items-center justify-center">
+                    <Train className="w-5 h-5 text-[#ff7a00]" />
+                  </div>
+                  <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Train Sightings</h1>
+                </div>
+                <p className="text-white/50 text-base md:text-lg max-w-xl">
+                  Community-driven train log. Spot something? Log it for the community.
+                </p>
+              </div>
+              {isPaidMember && (
+                <button
+                  onClick={() => {
+                    setShowForm(true);
+                    setEditingId(null);
+                    setFormData({ camera_id: '', sighting_time: new Date().toISOString().slice(0, 16), railroad: '', train_id: '', direction: '', locomotives: '', train_type: '', notes: '' });
+                    setImageFile(null);
+                    setImagePreview(null);
+                  }}
+                  className="flex items-center gap-2 bg-[#ff7a00] hover:bg-[#ff8c20] text-white px-5 py-3 rounded-xl font-bold text-sm transition-all hover:scale-[1.02] shadow-lg shadow-orange-500/20 self-start md:self-auto"
+                >
+                  <Plus className="w-4 h-4" /> Log Sighting
+                </button>
+              )}
             </div>
           </div>
-          {isPaidMember && (
-            <button
-              onClick={() => { setShowForm(true); setEditingId(null); setFormData({ camera_id: '', sighting_time: new Date().toISOString().slice(0, 16), railroad: '', train_id: '', direction: '', locomotives: '', train_type: '', notes: '' }); }}
-              className="flex items-center gap-2 bg-[#ff7a00] hover:bg-[#ff8c20] text-white px-4 py-2 rounded-lg font-semibold text-sm transition"
-            >
-              <Plus className="w-4 h-4" /> Log Sighting
-            </button>
-          )}
         </div>
-      </header>
+      </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-4 pb-12">
         {/* Stats Cards */}
         {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-[#1a1a1a] border border-white/10 rounded-xl p-4">
-              <p className="text-white/50 text-xs uppercase tracking-wide">Total Sightings</p>
-              <p className="text-3xl font-bold text-white mt-1">{stats.total?.toLocaleString()}</p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
+            <div className="bg-zinc-900/80 border border-white/[0.06] rounded-xl p-4 md:p-5 hover:border-white/10 transition">
+              <div className="flex items-center gap-2 mb-2">
+                <BarChart3 className="w-4 h-4 text-white/30" />
+                <p className="text-white/40 text-xs uppercase tracking-wider font-medium">Total Sightings</p>
+              </div>
+              <p className="text-3xl md:text-4xl font-bold text-white tabular-nums">{stats.total?.toLocaleString() || '0'}</p>
             </div>
-            <div className="bg-[#1a1a1a] border border-white/10 rounded-xl p-4">
-              <p className="text-white/50 text-xs uppercase tracking-wide">Today</p>
-              <p className="text-3xl font-bold text-[#ff7a00] mt-1">{stats.today?.toLocaleString()}</p>
+            <div className="bg-zinc-900/80 border border-white/[0.06] rounded-xl p-4 md:p-5 hover:border-white/10 transition">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp className="w-4 h-4 text-[#ff7a00]/50" />
+                <p className="text-white/40 text-xs uppercase tracking-wider font-medium">Today</p>
+              </div>
+              <p className="text-3xl md:text-4xl font-bold text-[#ff7a00] tabular-nums">{stats.today?.toLocaleString() || '0'}</p>
             </div>
-            <div className="bg-[#1a1a1a] border border-white/10 rounded-xl p-4">
-              <p className="text-white/50 text-xs uppercase tracking-wide">Top Railroad</p>
-              <p className="text-2xl font-bold text-white mt-1">{stats.top_railroads?.[0]?.name || '—'}</p>
-              {stats.top_railroads?.[0] && <p className="text-white/40 text-xs">{stats.top_railroads[0].count} sightings</p>}
+            <div className="bg-zinc-900/80 border border-white/[0.06] rounded-xl p-4 md:p-5 hover:border-white/10 transition">
+              <div className="flex items-center gap-2 mb-2">
+                <Award className="w-4 h-4 text-white/30" />
+                <p className="text-white/40 text-xs uppercase tracking-wider font-medium">Top Railroad</p>
+              </div>
+              <p className="text-2xl md:text-3xl font-bold text-white">{stats.top_railroads?.[0]?.name || '—'}</p>
+              {stats.top_railroads?.[0] && <p className="text-white/30 text-xs mt-1">{stats.top_railroads[0].count} sightings</p>}
             </div>
-            <div className="bg-[#1a1a1a] border border-white/10 rounded-xl p-4">
-              <p className="text-white/50 text-xs uppercase tracking-wide">Top Location</p>
-              <p className="text-lg font-bold text-white mt-1 truncate">{stats.top_locations?.[0]?.name || '—'}</p>
-              {stats.top_locations?.[0] && <p className="text-white/40 text-xs">{stats.top_locations[0].count} sightings</p>}
+            <div className="bg-zinc-900/80 border border-white/[0.06] rounded-xl p-4 md:p-5 hover:border-white/10 transition">
+              <div className="flex items-center gap-2 mb-2">
+                <MapPin className="w-4 h-4 text-white/30" />
+                <p className="text-white/40 text-xs uppercase tracking-wider font-medium">Top Location</p>
+              </div>
+              <p className="text-lg md:text-xl font-bold text-white truncate">{stats.top_locations?.[0]?.name || '—'}</p>
+              {stats.top_locations?.[0] && <p className="text-white/30 text-xs mt-1">{stats.top_locations[0].count} sightings</p>}
             </div>
           </div>
         )}
 
-        {/* Filters */}
-        <div className="bg-[#1a1a1a] border border-white/10 rounded-xl p-4 mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Filter className="w-4 h-4 text-white/50" />
-            <span className="text-white/70 text-sm font-medium">Filters</span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <select
-              value={filterCamera}
-              onChange={(e) => { setFilterCamera(e.target.value); setPage(1); }}
-              className="bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2 focus:border-[#ff7a00] focus:outline-none"
-            >
-              <option value="">All Locations</option>
-              {cameras.map(c => (
-                <option key={c._id} value={c._id}>{c.name}</option>
-              ))}
-            </select>
-            <input
-              type="date"
-              value={filterDate}
-              onChange={(e) => { setFilterDate(e.target.value); setPage(1); }}
-              className="bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2 focus:border-[#ff7a00] focus:outline-none"
-            />
-            <select
-              value={filterRailroad}
-              onChange={(e) => { setFilterRailroad(e.target.value); setPage(1); }}
-              className="bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2 focus:border-[#ff7a00] focus:outline-none"
-            >
-              <option value="">All Railroads</option>
-              {RAILROADS.map(r => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
-            <button
-              onClick={() => { setFilterCamera(''); setFilterDate(''); setFilterRailroad(''); setPage(1); }}
-              className="text-white/50 hover:text-white text-sm font-medium transition"
-            >
-              Clear Filters
-            </button>
-          </div>
+        {/* Filters Bar */}
+        <div className="mb-6">
+          <button
+            onClick={() => setFiltersOpen(!filtersOpen)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              filtersOpen || activeFilters > 0
+                ? 'bg-[#ff7a00]/10 text-[#ff7a00] border border-[#ff7a00]/20'
+                : 'bg-zinc-900/80 text-white/60 hover:text-white border border-white/[0.06] hover:border-white/10'
+            }`}
+          >
+            <Filter className="w-4 h-4" />
+            Filters
+            {activeFilters > 0 && (
+              <span className="w-5 h-5 rounded-full bg-[#ff7a00] text-white text-xs flex items-center justify-center font-bold">{activeFilters}</span>
+            )}
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {filtersOpen && (
+            <div className="mt-3 bg-zinc-900/80 border border-white/[0.06] rounded-xl p-4 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <select
+                  value={filterCamera}
+                  onChange={(e) => { setFilterCamera(e.target.value); setPage(1); }}
+                  className="bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
+                >
+                  <option value="">All Locations</option>
+                  {cameras.map(c => (
+                    <option key={c._id} value={c._id}>{c.name}</option>
+                  ))}
+                </select>
+                <input
+                  type="date"
+                  value={filterDate}
+                  onChange={(e) => { setFilterDate(e.target.value); setPage(1); }}
+                  className="bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
+                />
+                <select
+                  value={filterRailroad}
+                  onChange={(e) => { setFilterRailroad(e.target.value); setPage(1); }}
+                  className="bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
+                >
+                  <option value="">All Railroads</option>
+                  {RAILROADS.map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+                {activeFilters > 0 && (
+                  <button
+                    onClick={() => { setFilterCamera(''); setFilterDate(''); setFilterRailroad(''); setPage(1); }}
+                    className="text-[#ff7a00] hover:text-[#ff8c20] text-sm font-medium transition flex items-center gap-1.5 justify-center"
+                  >
+                    <X className="w-3.5 h-3.5" /> Clear All
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Sightings List */}
-        <div className="space-y-3">
-          {loading ? (
-            <div className="text-center py-12">
-              <div className="w-8 h-8 border-2 border-[#ff7a00]/30 border-t-[#ff7a00] rounded-full animate-spin mx-auto" />
-              <p className="text-white/50 mt-3">Loading sightings...</p>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="w-10 h-10 border-2 border-[#ff7a00]/20 border-t-[#ff7a00] rounded-full animate-spin" />
+            <p className="text-white/40 mt-4 text-sm">Loading sightings...</p>
+          </div>
+        ) : sightings.length === 0 ? (
+          <div className="text-center py-24 bg-zinc-900/50 border border-white/[0.06] rounded-2xl">
+            <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mx-auto mb-4">
+              <Train className="w-8 h-8 text-white/15" />
             </div>
-          ) : sightings.length === 0 ? (
-            <div className="text-center py-16 bg-[#1a1a1a] border border-white/10 rounded-xl">
-              <Train className="w-12 h-12 text-white/20 mx-auto mb-3" />
-              <p className="text-white/50 text-lg">No sightings yet</p>
-              <p className="text-white/30 text-sm mt-1">Be the first to log a train sighting!</p>
+            <p className="text-white/50 text-lg font-medium">No sightings found</p>
+            <p className="text-white/25 text-sm mt-1.5 max-w-md mx-auto">
+              {activeFilters > 0 ? 'Try adjusting your filters.' : 'Be the first to log a train sighting!'}
+            </p>
+            {isPaidMember && activeFilters === 0 && (
+              <button
+                onClick={() => {
+                  setShowForm(true);
+                  setEditingId(null);
+                  setFormData({ camera_id: '', sighting_time: new Date().toISOString().slice(0, 16), railroad: '', train_id: '', direction: '', locomotives: '', train_type: '', notes: '' });
+                }}
+                className="mt-6 inline-flex items-center gap-2 bg-[#ff7a00] hover:bg-[#ff8c20] text-white px-5 py-2.5 rounded-xl font-bold text-sm transition"
+              >
+                <Plus className="w-4 h-4" /> Log First Sighting
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-white/30 text-sm">
+                {total} sighting{total !== 1 ? 's' : ''} {activeFilters > 0 ? 'matched' : 'total'}
+              </p>
             </div>
-          ) : (
-            <>
-              <p className="text-white/40 text-sm mb-2">{total} sighting{total !== 1 ? 's' : ''} found</p>
+
+            <div className="space-y-3">
               {sightings.map(s => {
                 const replayUrl = getReplayUrl(s);
                 const isOwn = user && (s.user === user.username || s.user === user.name);
                 const sightDate = new Date(s.sighting_time);
+                const rrStyle = RR_COLORS[s.railroad] || RR_COLORS.Other;
+                const hasImage = s.image_url || s.imageUrl;
+
                 return (
-                  <div key={s._id} className="bg-[#1a1a1a] border border-white/10 rounded-xl p-4 hover:border-white/20 transition group">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        {/* Top row: Railroad badge + Train ID */}
-                        <div className="flex items-center gap-3 mb-2">
-                          <span
-                            className="px-2.5 py-1 rounded-md text-white text-xs font-bold uppercase tracking-wide"
-                            style={{ background: RR_COLORS[s.railroad] || '#666' }}
-                          >
-                            {s.railroad}
-                          </span>
-                          {s.train_id && (
-                            <span className="text-white font-semibold">{s.train_id}</span>
-                          )}
-                          {s.train_type && (
-                            <span className="text-white/40 text-sm">({s.train_type})</span>
-                          )}
-                          {s.direction && (
-                            <span className="text-white/50 text-xs bg-white/10 px-2 py-0.5 rounded">{s.direction}</span>
-                          )}
+                  <div key={s._id} className="group bg-zinc-900/60 border border-white/[0.06] rounded-xl hover:border-white/10 transition-all">
+                    <div className="flex">
+                      {/* Snapshot Image */}
+                      {hasImage && (
+                        <div
+                          className="w-40 md:w-52 flex-shrink-0 relative cursor-pointer overflow-hidden rounded-l-xl"
+                          onClick={() => setExpandedImage(hasImage)}
+                        >
+                          <img
+                            src={hasImage}
+                            alt={`${s.railroad} ${s.train_id || 'train'}`}
+                            className="w-full h-full object-cover min-h-[120px] hover:scale-105 transition-transform duration-300"
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/20" />
+                          <div className="absolute bottom-2 left-2 p-1 rounded bg-black/60 backdrop-blur-sm">
+                            <Eye className="w-3 h-3 text-white/70" />
+                          </div>
                         </div>
+                      )}
 
-                        {/* Location + Time */}
-                        <div className="flex items-center gap-4 text-sm text-white/60 mb-1">
-                          <span className="flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5" />
-                            {s.camera_name || s.location || 'Unknown'}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" />
-                            {sightDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            {' '}
-                            {sightDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
-                          </span>
+                      {/* Content */}
+                      <div className="flex-1 p-4 min-w-0">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            {/* Top row: Railroad badge + Train ID + Direction */}
+                            <div className="flex items-center gap-2 flex-wrap mb-2">
+                              <span
+                                className="inline-flex px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider"
+                                style={{
+                                  background: rrStyle.bg,
+                                  color: rrStyle.text,
+                                  border: rrStyle.border ? `1px solid ${rrStyle.border}` : 'none',
+                                }}
+                              >
+                                {s.railroad}
+                              </span>
+                              {s.train_id && (
+                                <span className="text-white font-semibold text-sm">{s.train_id}</span>
+                              )}
+                              {s.train_type && (
+                                <span className="text-white/35 text-xs">• {s.train_type}</span>
+                              )}
+                              {s.direction && (
+                                <span className="text-white/50 text-xs bg-white/[0.06] px-2 py-0.5 rounded-md font-medium">{s.direction}</span>
+                              )}
+                            </div>
+
+                            {/* Location + Time */}
+                            <div className="flex items-center gap-4 text-xs text-white/40 mb-2">
+                              <span className="flex items-center gap-1.5">
+                                <MapPin className="w-3 h-3" />
+                                <span className="text-white/60">{s.camera_name || s.location || 'Unknown'}</span>
+                              </span>
+                              <span className="flex items-center gap-1.5">
+                                <Clock className="w-3 h-3" />
+                                <span>{sightDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                <span className="text-white/25">at</span>
+                                <span>{sightDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+                              </span>
+                            </div>
+
+                            {/* Locomotives */}
+                            {s.locomotives && (
+                              <p className="text-white/50 text-xs mb-1">
+                                <span className="text-white/25 font-medium">Locos:</span>{' '}
+                                <span className="text-white/70 font-mono text-[11px]">{s.locomotives}</span>
+                              </p>
+                            )}
+
+                            {/* Notes */}
+                            {s.notes && (
+                              <p className="text-white/40 text-xs mt-1.5 italic leading-relaxed line-clamp-2">{s.notes}</p>
+                            )}
+
+                            {/* Posted by */}
+                            <p className="text-white/20 text-[11px] mt-2.5">by {s.user}</p>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex flex-col gap-1.5 flex-shrink-0">
+                            {replayUrl && (
+                              <Link
+                                href={replayUrl}
+                                className="flex items-center gap-1.5 bg-[#ff7a00]/90 hover:bg-[#ff7a00] text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all hover:scale-[1.02]"
+                                title="Watch replay at this time"
+                              >
+                                <Play className="w-3 h-3" fill="white" /> Replay
+                              </Link>
+                            )}
+                            {isOwn && (
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={() => startEdit(s)}
+                                  className="flex items-center gap-1 text-white/30 hover:text-[#ff7a00] text-[11px] transition px-2 py-1.5 rounded hover:bg-white/5"
+                                >
+                                  <Edit2 className="w-3 h-3" /> Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(s._id)}
+                                  className="flex items-center gap-1 text-white/30 hover:text-red-400 text-[11px] transition px-2 py-1.5 rounded hover:bg-white/5"
+                                >
+                                  <Trash2 className="w-3 h-3" /> Delete
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-
-                        {/* Locomotives */}
-                        {s.locomotives && (
-                          <p className="text-white/70 text-sm"><span className="text-white/40">Locos:</span> {s.locomotives}</p>
-                        )}
-
-                        {/* Notes */}
-                        {s.notes && (
-                          <p className="text-white/50 text-sm mt-1 italic">{s.notes}</p>
-                        )}
-
-                        {/* Posted by */}
-                        <p className="text-white/30 text-xs mt-2">Logged by {s.user}</p>
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex flex-col gap-2 flex-shrink-0">
-                        {replayUrl && (
-                          <Link
-                            href={replayUrl}
-                            className="flex items-center gap-1.5 bg-[#ff7a00] hover:bg-[#ff8c20] text-white text-xs font-semibold px-3 py-2 rounded-lg transition"
-                            title="Watch replay at this time"
-                          >
-                            <Play className="w-3.5 h-3.5" /> Replay
-                          </Link>
-                        )}
-                        {isOwn && (
-                          <>
-                            <button onClick={() => startEdit(s)} className="flex items-center gap-1 text-white/30 hover:text-white text-xs transition opacity-0 group-hover:opacity-100">
-                              <Edit2 className="w-3 h-3" /> Edit
-                            </button>
-                            <button onClick={() => handleDelete(s._id)} className="flex items-center gap-1 text-white/30 hover:text-red-400 text-xs transition opacity-0 group-hover:opacity-100">
-                              <Trash2 className="w-3 h-3" /> Delete
-                            </button>
-                          </>
-                        )}
                       </div>
                     </div>
                   </div>
                 );
               })}
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-4 mt-6">
+          <div className="flex items-center justify-center gap-2 mt-8">
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="flex items-center gap-1 text-white/60 hover:text-white disabled:text-white/20 transition text-sm"
+              className="flex items-center gap-1.5 text-white/50 hover:text-white disabled:text-white/15 transition text-sm px-4 py-2.5 rounded-xl hover:bg-white/5 disabled:hover:bg-transparent font-medium"
             >
               <ChevronLeft className="w-4 h-4" /> Previous
             </button>
-            <span className="text-white/50 text-sm">Page {page} of {totalPages}</span>
+            <div className="flex items-center gap-1 px-3">
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (page <= 3) {
+                  pageNum = i + 1;
+                } else if (page >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = page - 2 + i;
+                }
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setPage(pageNum)}
+                    className={`w-9 h-9 rounded-lg text-sm font-medium transition ${
+                      page === pageNum ? 'bg-[#ff7a00] text-white' : 'text-white/40 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
             <button
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="flex items-center gap-1 text-white/60 hover:text-white disabled:text-white/20 transition text-sm"
+              className="flex items-center gap-1.5 text-white/50 hover:text-white disabled:text-white/15 transition text-sm px-4 py-2.5 rounded-xl hover:bg-white/5 disabled:hover:bg-transparent font-medium"
             >
               Next <ChevronRight className="w-4 h-4" />
             </button>
@@ -390,27 +568,54 @@ export default function SightingsPage() {
 
       {/* New/Edit Sighting Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowForm(false)}>
-          <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-4 border-b border-white/10">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowForm(false)}>
+          <div className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-white/10 sticky top-0 bg-zinc-900 z-10 rounded-t-2xl">
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
                 <Train className="w-5 h-5 text-[#ff7a00]" />
                 {editingId ? 'Edit Sighting' : 'Log Train Sighting'}
               </h2>
-              <button onClick={() => setShowForm(false)} className="text-white/40 hover:text-white transition">
+              <button onClick={() => setShowForm(false)} className="text-white/40 hover:text-white transition p-1 rounded-lg hover:bg-white/10">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleSubmit} className="p-4 space-y-4">
+              {/* Image Upload */}
+              <div>
+                <label className="block text-white/70 text-sm mb-1.5 font-medium">Snapshot (optional)</label>
+                {imagePreview ? (
+                  <div className="relative rounded-xl overflow-hidden border border-white/10">
+                    <img src={imagePreview} alt="Snapshot preview" className="w-full aspect-video object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => { setImageFile(null); setImagePreview(null); }}
+                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/70 text-white/70 hover:text-white transition"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full h-24 border-2 border-dashed border-white/10 hover:border-[#ff7a00]/30 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors group"
+                  >
+                    <Upload className="w-5 h-5 text-white/20 group-hover:text-[#ff7a00]/50 transition" />
+                    <span className="text-white/30 text-xs group-hover:text-white/50 transition">Click to upload a snapshot</span>
+                  </button>
+                )}
+                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
+              </div>
+
               {/* Camera */}
               <div>
-                <label className="block text-white/70 text-sm mb-1">Camera Location *</label>
+                <label className="block text-white/70 text-sm mb-1.5 font-medium">Camera Location *</label>
                 <select
                   value={formData.camera_id}
                   onChange={e => setFormData(f => ({ ...f, camera_id: e.target.value }))}
                   required
-                  className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none"
+                  className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
                 >
                   <option value="">Select a camera...</option>
                   {cameras.map(c => (
@@ -421,25 +626,25 @@ export default function SightingsPage() {
 
               {/* Date/Time */}
               <div>
-                <label className="block text-white/70 text-sm mb-1">Date & Time of Sighting *</label>
+                <label className="block text-white/70 text-sm mb-1.5 font-medium">Date & Time *</label>
                 <input
                   type="datetime-local"
                   value={formData.sighting_time}
                   onChange={e => setFormData(f => ({ ...f, sighting_time: e.target.value }))}
                   required
-                  className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none"
+                  className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
                 />
               </div>
 
               {/* Railroad + Train Type */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-white/70 text-sm mb-1">Railroad *</label>
+                  <label className="block text-white/70 text-sm mb-1.5 font-medium">Railroad *</label>
                   <select
                     value={formData.railroad}
                     onChange={e => setFormData(f => ({ ...f, railroad: e.target.value }))}
                     required
-                    className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none"
+                    className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
                   >
                     <option value="">Select...</option>
                     {RAILROADS.map(r => (
@@ -448,11 +653,11 @@ export default function SightingsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-white/70 text-sm mb-1">Train Type</label>
+                  <label className="block text-white/70 text-sm mb-1.5 font-medium">Train Type</label>
                   <select
                     value={formData.train_type}
                     onChange={e => setFormData(f => ({ ...f, train_type: e.target.value }))}
-                    className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none"
+                    className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
                   >
                     <option value="">Select...</option>
                     {TRAIN_TYPES.map(t => (
@@ -465,21 +670,21 @@ export default function SightingsPage() {
               {/* Train ID + Direction */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-white/70 text-sm mb-1">Train ID / Symbol</label>
+                  <label className="block text-white/70 text-sm mb-1.5 font-medium">Train ID / Symbol</label>
                   <input
                     type="text"
                     value={formData.train_id}
                     onChange={e => setFormData(f => ({ ...f, train_id: e.target.value }))}
                     placeholder="e.g., Q335, N956"
-                    className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none placeholder:text-white/30"
+                    className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30 placeholder:text-white/20"
                   />
                 </div>
                 <div>
-                  <label className="block text-white/70 text-sm mb-1">Direction</label>
+                  <label className="block text-white/70 text-sm mb-1.5 font-medium">Direction</label>
                   <select
                     value={formData.direction}
                     onChange={e => setFormData(f => ({ ...f, direction: e.target.value }))}
-                    className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none"
+                    className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30"
                   >
                     <option value="">Select...</option>
                     {DIRECTIONS.map(d => (
@@ -491,25 +696,25 @@ export default function SightingsPage() {
 
               {/* Locomotives */}
               <div>
-                <label className="block text-white/70 text-sm mb-1">Locomotive(s)</label>
+                <label className="block text-white/70 text-sm mb-1.5 font-medium">Locomotive(s)</label>
                 <input
                   type="text"
                   value={formData.locomotives}
                   onChange={e => setFormData(f => ({ ...f, locomotives: e.target.value }))}
                   placeholder="e.g., CSX 3194, CSX 812"
-                  className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none placeholder:text-white/30"
+                  className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30 placeholder:text-white/20"
                 />
               </div>
 
               {/* Notes */}
               <div>
-                <label className="block text-white/70 text-sm mb-1">Notes</label>
+                <label className="block text-white/70 text-sm mb-1.5 font-medium">Notes</label>
                 <textarea
                   value={formData.notes}
                   onChange={e => setFormData(f => ({ ...f, notes: e.target.value }))}
                   placeholder="Horn, meets, rare power, DPU, etc."
-                  rows={3}
-                  className="w-full bg-black/50 border border-white/20 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none placeholder:text-white/30 resize-none"
+                  rows={2}
+                  className="w-full bg-black/60 border border-white/10 text-white text-sm rounded-lg px-3 py-2.5 focus:border-[#ff7a00] focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/30 placeholder:text-white/20 resize-none"
                 />
               </div>
 
@@ -517,11 +722,31 @@ export default function SightingsPage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full bg-[#ff7a00] hover:bg-[#ff8c20] disabled:bg-[#ff7a00]/50 text-white font-bold py-3 rounded-lg transition text-sm"
+                className="w-full bg-[#ff7a00] hover:bg-[#ff8c20] disabled:bg-[#ff7a00]/40 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl transition text-sm flex items-center justify-center gap-2"
               >
                 {submitting ? 'Saving...' : editingId ? 'Update Sighting' : 'Log Sighting'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Expanded Image Lightbox */}
+      {expandedImage && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4 cursor-pointer" onClick={() => setExpandedImage(null)}>
+          <div className="relative max-w-4xl w-full">
+            <img
+              src={expandedImage}
+              alt="Sighting snapshot"
+              className="w-full rounded-xl shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            />
+            <button
+              onClick={() => setExpandedImage(null)}
+              className="absolute top-3 right-3 p-2 rounded-xl bg-black/70 text-white/70 hover:text-white transition backdrop-blur-sm"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
         </div>
       )}
