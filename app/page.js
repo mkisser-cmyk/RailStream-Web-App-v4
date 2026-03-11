@@ -59,6 +59,18 @@ import YardChat from '@/components/YardChat';
 // ============================================
 // CONSTANTS & HELPERS
 // ============================================
+
+// Persistent device ID — unique per browser, stored in localStorage
+function getDeviceId() {
+  if (typeof window === 'undefined') return 'server';
+  let id = localStorage.getItem('railstream_device_id');
+  if (!id) {
+    id = 'web-' + crypto.randomUUID();
+    localStorage.setItem('railstream_device_id', id);
+  }
+  return id;
+}
+
 const TIERS = {
   fireman: { label: 'Fireman', icon: Zap, color: 'from-orange-600 to-orange-500', price: 'FREE', level: 1 },
   conductor: { label: 'Conductor', icon: Shield, color: 'from-blue-600 to-blue-500', price: '$8.95/mo', level: 2 },
@@ -261,7 +273,7 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
         const res = await fetch('/api/playback/authorize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ camera_id: cam._id, device_id: `hero-${Date.now()}`, platform: 'web' }),
+          body: JSON.stringify({ camera_id: cam._id, device_id: getDeviceId(), platform: 'web' }),
         });
         const data = await res.json();
         if (data.ok && data.hls_url) {
@@ -2195,7 +2207,7 @@ export default function App() {
         },
         body: JSON.stringify({
           camera_id: camera._id,
-          device_id: `web-${Date.now()}`,
+          device_id: getDeviceId(),
           platform: 'web',
         }),
       });
