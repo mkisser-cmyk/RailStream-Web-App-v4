@@ -2260,7 +2260,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                       
                       {/* Camera label + expand button (multi-view only) */}
                       {viewMode !== 'single' && camera && (
-                        <div className={`absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity ${isCompact ? 'p-1.5' : 'p-2.5'}`}>
+                        <div className={`absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-[5] ${isCompact ? 'p-1.5 pt-6' : 'p-2.5 pt-10'}`}>
                           <div className="flex items-center justify-between">
                             <div className="min-w-0">
                               <p className={`text-white font-medium truncate ${isCompact ? 'text-xs' : 'text-sm'}`}>{camera.name}</p>
