@@ -6,7 +6,7 @@ import SiteHeader from '@/components/SiteHeader';
 import { 
   Camera, MapPin, Search, Filter, Train, Lock, Crown, 
   Shield, Star, Radio, ChevronDown, X, Loader2, AlertCircle,
-  Clock, Zap, Grid, List
+  Clock, Zap, Grid, List, CameraOff, Sparkles, Globe, Facebook
 } from 'lucide-react';
 
 // Tier configuration
@@ -67,15 +67,17 @@ function CameraCard({ camera, onSelect }) {
   const tierConfig = TIERS[tier] || TIERS.fireman;
   const isOnline = camera.status === 'online';
   const isComingSoon = camera.status === 'coming_soon';
+  const isOffline = camera.status === 'offline';
+  const isClickable = isOnline || isComingSoon || isOffline;
 
   return (
     <div
       className={`group relative overflow-hidden rounded-2xl transition-all duration-300 ${
-        isOnline 
+        isClickable 
           ? 'bg-gradient-to-b from-gray-800/80 to-gray-900/80 hover:from-gray-800 hover:to-gray-900 cursor-pointer' 
           : 'bg-gray-900/50 opacity-75'
       } border border-gray-700/50 hover:border-orange-500/50`}
-      onClick={() => isOnline && onSelect(camera)}
+      onClick={() => isClickable && onSelect(camera)}
     >
       {/* Thumbnail */}
       <div className="relative aspect-video overflow-hidden">
@@ -209,6 +211,11 @@ function TierSection({ tier, cameras, onSelect, isExpanded, onToggle }) {
           {comingSoonCameras.map(camera => (
             <CameraCard key={camera._id} camera={camera} onSelect={onSelect} />
           ))}
+
+          {/* Offline cameras */}
+          {offlineCameras.map(camera => (
+            <CameraCard key={camera._id} camera={camera} onSelect={onSelect} />
+          ))}
         </div>
       )}
     </section>
@@ -220,6 +227,7 @@ export default function CamerasPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusModal, setStatusModal] = useState(null);
   const [expandedTiers, setExpandedTiers] = useState({
     engineer: true,
     conductor: true,
@@ -265,6 +273,11 @@ export default function CamerasPage() {
 
   // Handle camera selection
   const handleSelectCamera = (camera) => {
+    // Show status modal for offline/coming_soon cameras
+    if (camera.status === 'offline' || camera.status === 'coming_soon') {
+      setStatusModal(camera);
+      return;
+    }
     // Navigate to watch page with camera
     window.location.href = `/?camera=${camera.short_code || camera._id}`;
   };
@@ -409,6 +422,91 @@ export default function CamerasPage() {
           <p className="text-gray-500 text-sm">© 2010-2025 RailStream. Celebrating 15 years.</p>
         </div>
       </footer>
+
+      {/* Full-screen Camera Status Modal (Offline / Coming Soon) */}
+      {statusModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => setStatusModal(null)}>
+          <div 
+            className="relative w-full max-w-lg mx-4 rounded-2xl overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {statusModal.status === 'offline' ? (
+              <div className="bg-gradient-to-b from-zinc-900 to-black border border-zinc-800 rounded-2xl">
+                <button onClick={() => setStatusModal(null)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors z-10" aria-label="Close">
+                  <X className="w-4 h-4 text-white" />
+                </button>
+                <div className="px-8 pt-10 pb-8 text-center">
+                  <div className="w-20 h-20 rounded-full bg-red-500/10 border-2 border-red-500/30 flex items-center justify-center mx-auto mb-6">
+                    <CameraOff className="w-10 h-10 text-red-400" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white mb-2">Camera Offline</h2>
+                  <p className="text-lg font-semibold text-white/90 mb-1">{statusModal.name}</p>
+                  <p className="text-orange-400 font-medium mb-6">
+                    <MapPin className="w-4 h-4 inline-block mr-1 -mt-0.5" />
+                    {statusModal.location}
+                  </p>
+                  <p className="text-white/60 text-sm leading-relaxed mb-8 max-w-sm mx-auto">
+                    This camera is currently offline due to service interruption, maintenance, or site conditions. Please check back soon.
+                  </p>
+                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-full mb-6">
+                    <span className="w-2.5 h-2.5 bg-red-500 rounded-full" />
+                    <span className="text-red-400 text-sm font-semibold uppercase tracking-wider">Offline</span>
+                  </div>
+                </div>
+                <div className="px-8 pb-8">
+                  <button onClick={() => setStatusModal(null)} className="w-full py-3 px-6 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-semibold rounded-xl transition-colors">
+                    Go Back
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-gradient-to-b from-zinc-900 to-black border border-zinc-800 rounded-2xl">
+                <button onClick={() => setStatusModal(null)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors z-10" aria-label="Close">
+                  <X className="w-4 h-4 text-white" />
+                </button>
+                <div className="px-8 pt-10 pb-8 text-center">
+                  <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 rounded-full mb-6 shadow-lg shadow-orange-500/20">
+                    <Sparkles className="w-5 h-5 text-white" />
+                    <span className="text-white text-sm font-bold uppercase tracking-wider">Coming Soon</span>
+                  </div>
+                  <h2 className="text-2xl font-bold text-white mb-2">{statusModal.name}</h2>
+                  <p className="text-orange-400 font-medium mb-4">
+                    <MapPin className="w-4 h-4 inline-block mr-1 -mt-0.5" />
+                    {statusModal.location}
+                  </p>
+                  {statusModal.description && (
+                    <p className="text-white/70 text-sm mb-4 max-w-sm mx-auto italic">
+                      "{statusModal.description}"
+                    </p>
+                  )}
+                  <p className="text-white/60 text-sm leading-relaxed mb-8 max-w-sm mx-auto">
+                    This camera is a future release. We're working hard to bring you this view soon!
+                  </p>
+                  <button className="w-full py-3.5 px-6 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white font-bold rounded-xl transition-all shadow-lg shadow-orange-500/25 mb-4" onClick={() => window.open('https://www.facebook.com/RailstreamLLC', '_blank')}>
+                    Get Notified When Live
+                  </button>
+                  <p className="text-white/40 text-xs mb-3">Follow us for updates</p>
+                  <div className="flex items-center justify-center gap-4">
+                    <a href="https://www.facebook.com/RailstreamLLC" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-[#1877F2]/10 hover:bg-[#1877F2]/20 border border-[#1877F2]/30 rounded-lg text-[#1877F2] text-sm font-medium transition-colors">
+                      <Facebook className="w-4 h-4" />
+                      Facebook
+                    </a>
+                    <a href="https://railstream.net" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white/80 text-sm font-medium transition-colors">
+                      <Globe className="w-4 h-4" />
+                      Website
+                    </a>
+                  </div>
+                </div>
+                <div className="px-8 pb-8 pt-4">
+                  <button onClick={() => setStatusModal(null)} className="w-full py-3 px-6 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-semibold rounded-xl transition-colors">
+                    Go Back
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }

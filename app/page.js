@@ -58,6 +58,9 @@ import {
   ImageIcon,
   Video,
   Plus,
+  CameraOff,
+  Sparkles,
+  Facebook,
 } from 'lucide-react';
 import { clientApi } from '@/lib/api';
 import { auth } from '@/lib/auth';
@@ -1173,18 +1176,20 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
                     {cams.map(camera => {
                       const isSelected = selectedCameras.some(c => c?._id === camera._id);
                       const hasAccess = canAccess(userTier, camera.min_tier);
+                      const isStatusCamera = camera.status === 'offline' || camera.status === 'coming_soon';
+                      const isClickable = hasAccess || isStatusCamera;
                       const isFavorite = favorites.includes(camera._id);
                       
                       return (
                         <li key={camera._id}>
                           <div className={`relative flex items-center gap-3 p-2 rounded-lg transition-all ${
-                            isSelected ? 'bg-[#ff7a00]/20 ring-1 ring-[#ff7a00]' : hasAccess ? 'hover:bg-white/5' : 'opacity-50'
+                            isSelected ? 'bg-[#ff7a00]/20 ring-1 ring-[#ff7a00]' : isClickable ? 'hover:bg-white/5' : 'opacity-50'
                           }`}>
                             <button
-                              onClick={() => hasAccess && onSelect(camera)}
-                              disabled={!hasAccess}
+                              onClick={() => isClickable && onSelect(camera)}
+                              disabled={!isClickable}
                               className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                              aria-label={`${hasAccess ? 'Select' : 'Locked'} ${camera.name}`}
+                              aria-label={`${isStatusCamera ? camera.status === 'offline' ? 'Offline' : 'Coming soon' : hasAccess ? 'Select' : 'Locked'} ${camera.name}`}
                             >
                               <div className="relative w-16 h-10 rounded overflow-hidden flex-shrink-0">
                                 {thumbnailMap?.[camera._id] ? (
@@ -1782,7 +1787,7 @@ function CompanionAdPanel({ ads }) {
 
 // WATCH PAGE
 // ============================================
-function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera, removeCamera, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp, replaySeekOffset = 0, clearReplaySeek, playerStatsRef }) {
+function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera, removeCamera, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp, replaySeekOffset = 0, clearReplaySeek, playerStatsRef, onStatusCamera }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
@@ -1958,29 +1963,9 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   }, [focusedSlot]);
 
   const handleSelectCamera = (camera) => {
-    // For offline/coming_soon cameras, place in slot but with special state (no stream auth needed)
+    // For offline/coming_soon cameras, show full-screen modal instead of placing in slot
     if (camera.status === 'offline' || camera.status === 'coming_soon') {
-      let slotIndex = 0;
-      if (viewMode === 'single') {
-        slotIndex = 0;
-      } else if (targetSlot !== null && targetSlot < slots) {
-        slotIndex = targetSlot;
-        setTargetSlot(null);
-      } else {
-        const emptySlot = selectedCameras.slice(0, slots).findIndex(c => !c);
-        slotIndex = emptySlot === -1 ? 0 : emptySlot;
-      }
-      const newCameras = [...selectedCameras];
-      newCameras[slotIndex] = camera;
-      setSelectedCameras(newCameras);
-      setPlaybackStates(prev => ({
-        ...prev,
-        [slotIndex]: {
-          loading: false,
-          data: null,
-          error: camera.status === 'offline' ? 'Camera is currently offline' : 'Coming soon',
-        },
-      }));
+      onStatusCamera(camera);
       return;
     }
 
@@ -2810,15 +2795,18 @@ function CamerasPage({ cameras, user, onSelectCamera }) {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {group.cameras.map(camera => {
                   const isComingSoon = camera.status === 'coming_soon';
+                  const isOffline = camera.status === 'offline';
+                  const isStatusCamera = isComingSoon || isOffline;
                   const hasAccess = !isComingSoon && canAccess(user?.membership_tier, camera.min_tier);
+                  const isClickable = hasAccess || isStatusCamera;
                   
                   return (
                     <button
                       key={camera._id}
-                      onClick={() => hasAccess && onSelectCamera(camera)}
-                      disabled={!hasAccess || isComingSoon}
-                      className={`group relative rounded-xl overflow-hidden bg-zinc-900 text-left transition-all ${hasAccess ? 'hover:scale-[1.02]' : ''} ${!hasAccess && !isComingSoon ? 'opacity-70' : ''}`}
-                      aria-label={`${camera.name} - ${isComingSoon ? 'Coming soon' : hasAccess ? 'Click to watch' : 'Upgrade required'}`}
+                      onClick={() => isClickable && onSelectCamera(camera)}
+                      disabled={!isClickable}
+                      className={`group relative rounded-xl overflow-hidden bg-zinc-900 text-left transition-all ${isClickable ? 'hover:scale-[1.02] cursor-pointer' : ''} ${!isClickable ? 'opacity-70' : ''}`}
+                      aria-label={`${camera.name} - ${isComingSoon ? 'Coming soon' : isOffline ? 'Offline' : hasAccess ? 'Click to watch' : 'Upgrade required'}`}
                     >
                       <div className="aspect-video relative">
                         <img src={camera.thumbnail_path || 'https://images.unsplash.com/photo-1474487548417-781cb71495f3?w=400&h=225&fit=crop'} alt="" className={`w-full h-full object-cover ${isComingSoon ? 'opacity-50' : ''}`} />
@@ -3152,6 +3140,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState('home');
   const [loginOpen, setLoginOpen] = useState(false);
+  const [statusModal, setStatusModal] = useState(null); // camera object for offline/coming_soon modal
   
   const [viewMode, setViewMode] = useState('single');
   const [selectedCameras, setSelectedCameras] = useState([null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]);
@@ -3569,6 +3558,10 @@ export default function App() {
   };
 
   const handleSelectCameraFromPage = (camera) => {
+    if (camera.status === 'offline' || camera.status === 'coming_soon') {
+      setStatusModal(camera);
+      return;
+    }
     setCurrentPage('watch');
     setTimeout(() => loadCamera(camera, 0), 100);
   };
@@ -3641,6 +3634,7 @@ export default function App() {
             replaySeekOffset={replaySeekOffset}
             clearReplaySeek={() => setReplaySeekOffset(0)}
             playerStatsRef={playerStatsRef}
+            onStatusCamera={setStatusModal}
           />
         )}
 
@@ -3651,6 +3645,154 @@ export default function App() {
       </div>
 
       <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onSuccess={(u) => { setUser(u); loadServerPrefs(); }} />
+
+      {/* Full-screen Camera Status Modal (Offline / Coming Soon) */}
+      {statusModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => setStatusModal(null)}>
+          <div 
+            className="relative w-full max-w-lg mx-4 rounded-2xl overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {statusModal.status === 'offline' ? (
+              /* ──────── OFFLINE MODAL ──────── */
+              <div className="bg-gradient-to-b from-zinc-900 to-black border border-zinc-800 rounded-2xl">
+                {/* Close button */}
+                <button 
+                  onClick={() => setStatusModal(null)} 
+                  className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors z-10"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4 text-white" />
+                </button>
+
+                <div className="px-8 pt-10 pb-8 text-center">
+                  {/* Icon */}
+                  <div className="w-20 h-20 rounded-full bg-red-500/10 border-2 border-red-500/30 flex items-center justify-center mx-auto mb-6">
+                    <CameraOff className="w-10 h-10 text-red-400" />
+                  </div>
+
+                  {/* Heading */}
+                  <h2 className="text-2xl font-bold text-white mb-2">Camera Offline</h2>
+
+                  {/* Camera Name */}
+                  <p className="text-lg font-semibold text-white/90 mb-1">{statusModal.name}</p>
+                  
+                  {/* Location in orange */}
+                  <p className="text-[#ff7a00] font-medium mb-6">
+                    <MapPin className="w-4 h-4 inline-block mr-1 -mt-0.5" />
+                    {statusModal.location}
+                  </p>
+
+                  {/* Description */}
+                  <p className="text-white/60 text-sm leading-relaxed mb-8 max-w-sm mx-auto">
+                    This camera is currently offline due to service interruption, maintenance, or site conditions. Please check back soon.
+                  </p>
+
+                  {/* Status badge */}
+                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-full mb-6">
+                    <span className="w-2.5 h-2.5 bg-red-500 rounded-full" />
+                    <span className="text-red-400 text-sm font-semibold uppercase tracking-wider">Offline</span>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-8 pb-8">
+                  <button
+                    onClick={() => setStatusModal(null)}
+                    className="w-full py-3 px-6 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-semibold rounded-xl transition-colors"
+                  >
+                    Go Back
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* ──────── COMING SOON MODAL ──────── */
+              <div className="bg-gradient-to-b from-zinc-900 to-black border border-zinc-800 rounded-2xl">
+                {/* Close button */}
+                <button 
+                  onClick={() => setStatusModal(null)} 
+                  className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors z-10"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4 text-white" />
+                </button>
+
+                <div className="px-8 pt-10 pb-8 text-center">
+                  {/* Coming Soon Badge with sparkle */}
+                  <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#ff7a00] to-amber-500 rounded-full mb-6 shadow-lg shadow-[#ff7a00]/20">
+                    <Sparkles className="w-5 h-5 text-white" />
+                    <span className="text-white text-sm font-bold uppercase tracking-wider">Coming Soon</span>
+                  </div>
+
+                  {/* Camera Name (large) */}
+                  <h2 className="text-2xl font-bold text-white mb-2">{statusModal.name}</h2>
+
+                  {/* Location */}
+                  <p className="text-[#ff7a00] font-medium mb-4">
+                    <MapPin className="w-4 h-4 inline-block mr-1 -mt-0.5" />
+                    {statusModal.location}
+                  </p>
+
+                  {/* Description from API */}
+                  {statusModal.description && (
+                    <p className="text-white/70 text-sm mb-4 max-w-sm mx-auto italic">
+                      "{statusModal.description}"
+                    </p>
+                  )}
+
+                  {/* Message */}
+                  <p className="text-white/60 text-sm leading-relaxed mb-8 max-w-sm mx-auto">
+                    This camera is a future release. We're working hard to bring you this view soon!
+                  </p>
+
+                  {/* Get Notified button */}
+                  <button
+                    className="w-full py-3.5 px-6 bg-gradient-to-r from-[#ff7a00] to-amber-500 hover:from-[#ff8c1a] hover:to-amber-400 text-white font-bold rounded-xl transition-all shadow-lg shadow-[#ff7a00]/25 mb-4"
+                    onClick={() => {
+                      window.open('https://www.facebook.com/RailstreamLLC', '_blank');
+                    }}
+                  >
+                    Get Notified When Live
+                  </button>
+
+                  {/* Follow links */}
+                  <p className="text-white/40 text-xs mb-3">Follow us for updates</p>
+                  <div className="flex items-center justify-center gap-4">
+                    <a 
+                      href="https://www.facebook.com/RailstreamLLC" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 px-4 py-2 bg-[#1877F2]/10 hover:bg-[#1877F2]/20 border border-[#1877F2]/30 rounded-lg text-[#1877F2] text-sm font-medium transition-colors"
+                    >
+                      <Facebook className="w-4 h-4" />
+                      Facebook
+                    </a>
+                    <a 
+                      href="https://railstream.net" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white/80 text-sm font-medium transition-colors"
+                    >
+                      <Globe className="w-4 h-4" />
+                      Website
+                    </a>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-8 pb-8 pt-4">
+                  <button
+                    onClick={() => setStatusModal(null)}
+                    className="w-full py-3 px-6 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-semibold rounded-xl transition-colors"
+                  >
+                    Go Back
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

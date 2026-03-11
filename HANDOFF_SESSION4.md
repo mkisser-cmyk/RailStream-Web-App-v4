@@ -36,10 +36,10 @@
 ## TODO LIST (Priority Order)
 
 ### P0 — Immediate
-- [ ] **Offline/Coming Soon Modal** — When clicking offline or coming_soon camera, show a MODAL popup (not in-slot display) matching the app design:
-  - **Offline:** Camera-off icon, "Camera Offline" heading, location in orange, "This camera is currently offline due to service interruption, maintenance, or site conditions. Please check back soon.", "Report Issue" button
+- [x] **Offline/Coming Soon Modal** — When clicking offline or coming_soon camera, show a MODAL popup (not in-slot display) matching the app design:
+  - **Offline:** Camera-off icon, "Camera Offline" heading, location in orange, "This camera is currently offline due to service interruption, maintenance, or site conditions. Please check back soon.", "Go Back" button
   - **Coming Soon:** "COMING SOON" badge with sparkle, camera name large, location, description from API, "This camera is a future release. We're working hard to bring you this view soon!", "Get Notified When Live" orange button, "Follow us for updates" with Facebook + Website links
-  - Reference: App screenshots provided by user
+  - Works from Watch page sidebar picker AND standalone /cameras page
 
 ### P1 — High Priority
 - [ ] **Mid-Roll Ad Display** — Build the timed overlay banner that shows during viewing every X minutes (admin configures interval). DB schema ready, admin UI ready, just needs the player-side rendering.
