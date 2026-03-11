@@ -1827,6 +1827,12 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   const [prerollCountdown, setPrerollCountdown] = useState(0);
   const [prerollSessionId, setPrerollSessionId] = useState(null); // track which camera load triggered it
 
+  // Mid-roll ad state
+  const [midrollActive, setMidrollActive] = useState(false);
+  const [midrollAd, setMidrollAd] = useState(null);
+  const [midrollCountdown, setMidrollCountdown] = useState(0);
+  const midrollTimerRef = useRef(null);
+
   // Show pre-roll when a camera loads (for free users)
   useEffect(() => {
     if (user) return; // Paid users skip ads
@@ -1856,6 +1862,66 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   const skipPreroll = () => {
     setPrerollActive(false);
     setPrerollAd(null);
+  };
+
+  // Mid-roll timer: triggers every `interval` minutes for free users watching a stream
+  useEffect(() => {
+    // Clear any existing timer when dependencies change
+    if (midrollTimerRef.current) {
+      clearInterval(midrollTimerRef.current);
+      midrollTimerRef.current = null;
+    }
+
+    if (user) return; // Paid users skip ads
+    if (midrollActive) return; // Don't start new timer while mid-roll is showing
+
+    const enabledMidrolls = ads.filter(a => a.type === 'midroll' && a.enabled);
+    if (enabledMidrolls.length === 0) return;
+
+    // Check if user is actually watching something
+    const hasActiveStream = selectedCameras.some((c, i) => c && playbackStates[i]?.data?.hls_url);
+    if (!hasActiveStream) return;
+
+    // Use the interval from the first midroll ad config (in minutes), default 15 min
+    const intervalMinutes = enabledMidrolls[0]?.interval || 15;
+    const intervalMs = intervalMinutes * 60 * 1000;
+    // First midroll after 2 minutes, then every intervalMs after
+    const initialDelayMs = 2 * 60 * 1000;
+
+    const triggerMidroll = () => {
+      // Pick a random enabled midroll ad
+      const ad = enabledMidrolls[Math.floor(Math.random() * enabledMidrolls.length)];
+      setMidrollAd(ad);
+      setMidrollCountdown(ad.skipAfter || 5);
+      setMidrollActive(true);
+    };
+
+    // Fire first midroll after initial delay
+    const initialTimer = setTimeout(() => {
+      triggerMidroll();
+      // Then set up recurring interval
+      midrollTimerRef.current = setInterval(triggerMidroll, intervalMs);
+    }, initialDelayMs);
+
+    return () => {
+      clearTimeout(initialTimer);
+      if (midrollTimerRef.current) {
+        clearInterval(midrollTimerRef.current);
+        midrollTimerRef.current = null;
+      }
+    };
+  }, [user, ads, selectedCameras, playbackStates, midrollActive]);
+
+  // Mid-roll countdown timer
+  useEffect(() => {
+    if (!midrollActive || midrollCountdown <= 0) return;
+    const timer = setTimeout(() => setMidrollCountdown(prev => prev - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [midrollActive, midrollCountdown]);
+
+  const skipMidroll = () => {
+    setMidrollActive(false);
+    setMidrollAd(null);
   };
 
   const RAILROADS = ['CSX', 'NS', 'UP', 'BNSF', 'CN', 'CP', 'KCS', 'Amtrak', 'Other'];
@@ -1917,6 +1983,8 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
 
   // Per-slot mute: check if a slot is muted
   const isSlotMuted = (slotIndex) => {
+    // Mute during mid-roll ad (camera plays muted, ad plays with sound)
+    if (midrollActive) return true;
     // Global mute overrides everything
     if (isMuted) return true;
     // Per-slot mute state (default: slot 0 unmuted, others muted)
@@ -2168,7 +2236,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
         </div>
 
         {/* Pre-Roll Ad Overlay (free users only) */}
-        <div className="flex-1 flex min-h-0 relative">
+        <div className={`flex-1 flex min-h-0 relative ${midrollActive ? 'flex-row' : ''}`}>
         {prerollActive && prerollAd && (
           <div className="absolute inset-0 z-50 bg-black flex items-center justify-center">
             <div className="relative w-full h-full flex flex-col items-center justify-center">
@@ -2229,6 +2297,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
         )}
 
         {/* Video Grid */}
+          <div className={`transition-all duration-700 ease-in-out ${midrollActive ? 'w-[35%] flex-shrink-0' : 'flex-1'} min-w-0 flex`}>
           {/* Focused single-camera fullscreen view */}
           {focusedSlot !== null && selectedCameras[focusedSlot] ? (
             <div className="flex-1 relative bg-black">
@@ -2531,9 +2600,92 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
             })}
           </div>
           )}
+          </div>
+          {/* End video grid wrapper */}
+
+          {/* Mid-Roll Split-Screen Ad Panel (free users only) */}
+          {midrollActive && midrollAd && (
+            <div className="flex-1 flex-shrink-0 transition-all duration-700 ease-in-out bg-black border-l border-white/10 flex flex-col relative overflow-hidden">
+              {/* Ad Header Bar */}
+              <div className="flex items-center justify-between px-4 py-2 bg-zinc-900/80 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 bg-[#ff7a00] rounded-full animate-pulse" />
+                  <span className="text-white/50 text-xs uppercase tracking-widest font-semibold">Advertisement</span>
+                </div>
+                <a href="/join" className="text-[#ff7a00] text-xs font-medium hover:underline">
+                  Go Ad-Free →
+                </a>
+              </div>
+
+              {/* Ad Content */}
+              <div className="flex-1 flex items-center justify-center p-6">
+                {midrollAd.videoUrl ? (
+                  <video
+                    src={midrollAd.videoUrl}
+                    autoPlay
+                    muted={false}
+                    controls={false}
+                    className="max-w-full max-h-full rounded-xl shadow-2xl"
+                    onEnded={skipMidroll}
+                  />
+                ) : midrollAd.imageUrl ? (
+                  <a
+                    href={midrollAd.clickUrl || '#'}
+                    target={midrollAd.clickUrl ? '_blank' : undefined}
+                    rel="noopener noreferrer sponsored"
+                    className="block max-w-full max-h-full"
+                  >
+                    <img
+                      src={midrollAd.imageUrl}
+                      alt={midrollAd.title || 'Advertisement'}
+                      className="max-w-full max-h-[50vh] object-contain rounded-xl shadow-2xl"
+                    />
+                  </a>
+                ) : (
+                  <div className="text-center p-8">
+                    <p className="text-white text-xl font-bold">{midrollAd.title}</p>
+                    {midrollAd.clickUrl && (
+                      <a href={midrollAd.clickUrl} target="_blank" rel="noopener noreferrer" className="text-[#ff7a00] underline mt-4 inline-block text-sm">
+                        Learn More
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Ad Title (if present) */}
+              {midrollAd.title && (midrollAd.imageUrl || midrollAd.videoUrl) && (
+                <div className="px-6 pb-2 text-center">
+                  <p className="text-white/70 text-sm font-medium">{midrollAd.title}</p>
+                  {midrollAd.clickUrl && (
+                    <a href={midrollAd.clickUrl} target="_blank" rel="noopener noreferrer" className="text-[#ff7a00] text-xs hover:underline mt-1 inline-block">
+                      Learn More →
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {/* Bottom Bar: Skip button */}
+              <div className="flex items-center justify-between px-4 py-3 bg-zinc-900/80 border-t border-white/10">
+                <span className="text-white/30 text-xs">Stream is still live →</span>
+                {midrollCountdown > 0 ? (
+                  <div className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm font-medium">
+                    Skip in {midrollCountdown}s
+                  </div>
+                ) : (
+                  <button
+                    onClick={skipMidroll}
+                    className="px-5 py-2 bg-[#ff7a00] hover:bg-[#ff8c1a] text-white text-sm font-bold rounded-lg transition shadow-lg shadow-[#ff7a00]/20"
+                  >
+                    Skip Ad →
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Chat Panel */}
-          {chatOpen && (
+          {chatOpen && !midrollActive && (
             <div className="w-80 flex-shrink-0 border-l border-white/10">
               <YardChat 
                 user={user}
@@ -2542,8 +2694,8 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
             </div>
           )}
 
-          {/* Companion Ad Sidebar (free/non-signed-in users only) */}
-          {showCompanionAds && !chatOpen && (
+          {/* Companion Ad Sidebar (free/non-signed-in users only, hidden during midroll) */}
+          {showCompanionAds && !chatOpen && !midrollActive && (
             <CompanionAdPanel ads={ads} />
           )}
         </div>

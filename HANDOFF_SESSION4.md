@@ -42,7 +42,7 @@
   - Works from Watch page sidebar picker AND standalone /cameras page
 
 ### P1 — High Priority
-- [ ] **Mid-Roll Ad Display** — Build the timed overlay banner that shows during viewing every X minutes (admin configures interval). DB schema ready, admin UI ready, just needs the player-side rendering.
+- [x] **Mid-Roll Ad Display** — YouTube-style split-screen: camera shrinks to ~35% left (muted), ad panel takes ~65% right (with sound). First midroll after 2 min, then every `interval` min (admin configurable). Skip countdown + "Skip Ad →" button. Companion sidebar hides during midroll. Chat hidden during midroll. "Go Ad-Free" + "Stream is still live" labels.
 - [ ] **Pre-fill Train Numbers in Sighting Form** — For certain locations, pre-populate a dropdown with known train numbers (e.g., "Amtrak 20, Amtrak 21" for Atlanta). Requires adding schedule data to camera info.
 - [ ] **VAST Tag Integration** — Camera objects have `vast_tag_url` field. Wire this into the pre-roll ad system so camera-specific VAST ads can play.
 
