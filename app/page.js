@@ -1805,6 +1805,43 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   }, []);
 
   const showCompanionAds = !user && ads.some(a => a.type === 'companion' && a.enabled);
+  
+  // Pre-roll ad state (for non-signed-in users)
+  const [prerollActive, setPrerollActive] = useState(false);
+  const [prerollAd, setPrerollAd] = useState(null);
+  const [prerollCountdown, setPrerollCountdown] = useState(0);
+  const [prerollSessionId, setPrerollSessionId] = useState(null); // track which camera load triggered it
+
+  // Show pre-roll when a camera loads (for free users)
+  useEffect(() => {
+    if (user) return; // Paid users skip ads
+    const enabledPrerolls = ads.filter(a => a.type === 'preroll' && a.enabled);
+    if (enabledPrerolls.length === 0) return;
+    
+    // Check if a camera just started playing in any slot
+    const playingSlots = selectedCameras.filter(c => c !== null);
+    const sessionKey = playingSlots.map(c => c?._id).join(',');
+    
+    if (sessionKey && sessionKey !== prerollSessionId && playingSlots.length > 0) {
+      const ad = enabledPrerolls[Math.floor(Math.random() * enabledPrerolls.length)];
+      setPrerollAd(ad);
+      setPrerollCountdown(ad.skipAfter || 5);
+      setPrerollActive(true);
+      setPrerollSessionId(sessionKey);
+    }
+  }, [user, ads, selectedCameras, prerollSessionId]);
+
+  // Pre-roll countdown timer
+  useEffect(() => {
+    if (!prerollActive || prerollCountdown <= 0) return;
+    const timer = setTimeout(() => setPrerollCountdown(prev => prev - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [prerollActive, prerollCountdown]);
+
+  const skipPreroll = () => {
+    setPrerollActive(false);
+    setPrerollAd(null);
+  };
 
   const RAILROADS = ['CSX', 'NS', 'UP', 'BNSF', 'CN', 'CP', 'KCS', 'Amtrak', 'Other'];
   const TRAIN_TYPES = ['Intermodal', 'Manifest', 'Coal', 'Grain', 'Auto', 'Passenger', 'Local', 'Work Train', 'Light Power', 'Other'];
@@ -2097,8 +2134,68 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
           </div>
         </div>
 
+        {/* Pre-Roll Ad Overlay (free users only) */}
+        <div className="flex-1 flex min-h-0 relative">
+        {prerollActive && prerollAd && (
+          <div className="absolute inset-0 z-50 bg-black flex items-center justify-center">
+            <div className="relative w-full h-full flex flex-col items-center justify-center">
+              {/* Ad content */}
+              {prerollAd.imageUrl && (
+                <a
+                  href={prerollAd.clickUrl || '#'}
+                  target={prerollAd.clickUrl ? '_blank' : undefined}
+                  rel="noopener noreferrer sponsored"
+                  className="block max-w-2xl max-h-[60vh]"
+                >
+                  <img src={prerollAd.imageUrl} alt={prerollAd.title || 'Advertisement'} className="max-w-full max-h-[60vh] object-contain rounded-xl" />
+                </a>
+              )}
+              {prerollAd.videoUrl && (
+                <video
+                  src={prerollAd.videoUrl}
+                  autoPlay
+                  muted={false}
+                  className="max-w-3xl max-h-[60vh] rounded-xl"
+                  onEnded={skipPreroll}
+                />
+              )}
+              {prerollAd.title && !prerollAd.imageUrl && !prerollAd.videoUrl && (
+                <div className="text-center p-8">
+                  <p className="text-white text-xl font-bold">{prerollAd.title}</p>
+                  {prerollAd.clickUrl && (
+                    <a href={prerollAd.clickUrl} target="_blank" rel="noopener noreferrer" className="text-[#ff7a00] underline mt-2 inline-block">Learn More</a>
+                  )}
+                </div>
+              )}
+
+              {/* Bottom bar: skip button + label */}
+              <div className="absolute bottom-6 right-6 flex items-center gap-4">
+                <span className="text-white/40 text-xs uppercase tracking-wider">Advertisement</span>
+                {prerollCountdown > 0 ? (
+                  <div className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm font-medium">
+                    Skip in {prerollCountdown}s
+                  </div>
+                ) : (
+                  <button
+                    onClick={skipPreroll}
+                    className="px-4 py-2 bg-white/20 hover:bg-white/30 border border-white/30 rounded-lg text-white text-sm font-semibold transition"
+                  >
+                    Skip Ad →
+                  </button>
+                )}
+              </div>
+
+              {/* Go ad-free link */}
+              <div className="absolute bottom-6 left-6">
+                <a href="/join" className="text-[#ff7a00] text-xs font-medium hover:underline">
+                  Go Ad-Free with RailStream Premium →
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Video Grid */}
-        <div className="flex-1 flex min-h-0">
           {/* Focused single-camera fullscreen view */}
           {focusedSlot !== null && selectedCameras[focusedSlot] ? (
             <div className="flex-1 relative bg-black">

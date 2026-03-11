@@ -24,14 +24,29 @@ export function buildStreamUrl(baseUrl, dvrOffset = 0, windowSec = 7200) {
   return `${base}playlist_dvr_timeshift-${dvrOffset}-${windowSec}.m3u8`;
 }
 
-// ── Quality mapping for multi-view ──
-const QUALITY_CAP = {
-  single: -1,   // No cap — auto (up to 1080p)
-  dual: 1,      // Cap at 720p (level index 1)
-  quad: 1,      // Cap at 720p
-  nine: 2,      // Cap at 540p (level index 2)
-  sixteen: 3,   // Cap at 360p (level index 3, lowest)
+// ── Quality targets for multi-view (max height in pixels) ──
+const QUALITY_TARGET = {
+  single: -1,     // Auto ABR (no cap)
+  dual: 720,      // Max 720p
+  quad: 540,      // Max 540p
+  nine: 360,      // Max 360p
+  sixteen: 360,   // Max 360p
 };
+
+// Find the HLS level index whose height best matches a max target
+function findLevelForMaxHeight(hls, maxHeight) {
+  if (!hls?.levels?.length || maxHeight <= 0) return -1;
+  let bestIdx = -1;
+  let bestHeight = 0;
+  hls.levels.forEach((level, idx) => {
+    // Only consider video levels (skip audio-only)
+    if (level.height > 0 && level.height <= maxHeight && level.height > bestHeight) {
+      bestIdx = idx;
+      bestHeight = level.height;
+    }
+  });
+  return bestIdx;
+}
 
 // ── Block sizes for Review Ops ──
 const BLOCK_SIZES = [
@@ -383,7 +398,7 @@ export default function HlsPlayer({
     if (Hls.isSupported()) {
       destroyHls();
 
-      const qualityCap = QUALITY_CAP[viewMode] ?? -1;
+      const qualityTarget = QUALITY_TARGET[viewMode] ?? -1;
 
       const hls = new Hls({
         maxBufferLength: 30,
@@ -395,7 +410,7 @@ export default function HlsPlayer({
         enableWorker: true,
         lowLatencyMode: false,
         startLevel: -1,
-        autoLevelCapping: qualityCap,
+        // Don't use autoLevelCapping with fixed indices - we'll cap by resolution after manifest loads
         fragLoadingTimeOut: 20000,
         manifestLoadingTimeOut: 15000,
       });
@@ -411,6 +426,14 @@ export default function HlsPlayer({
         // Audio tracks
         if (data.audioTracks && data.audioTracks.length > 0) {
           setAudioTracks(data.audioTracks.map((t, i) => ({ id: i, name: t.name || `Track ${i + 1}` })));
+        }
+        // Apply resolution-based quality cap for multi-view
+        if (qualityTarget > 0 && hls.levels && hls.levels.length > 0) {
+          const capIdx = findLevelForMaxHeight(hls, qualityTarget);
+          if (capIdx >= 0) {
+            hls.currentLevel = capIdx;
+            console.log(`[HlsPlayer] Quality capped to ${hls.levels[capIdx].height}p (level ${capIdx}) for ${viewMode} mode`);
+          }
         }
         if (autoPlay) {
           video.play().catch(() => setIsPlaying(false));
@@ -488,11 +511,21 @@ export default function HlsPlayer({
     return () => destroyHls();
   }, [src, loadSource, destroyHls]);
 
-  // Quality cap on viewMode change
+  // Quality cap on viewMode change — find level by resolution, not index
   useEffect(() => {
-    if (hlsRef.current) {
-      const cap = QUALITY_CAP[viewMode] ?? -1;
-      hlsRef.current.autoLevelCapping = cap;
+    if (hlsRef.current && hlsRef.current.levels && hlsRef.current.levels.length > 0) {
+      const target = QUALITY_TARGET[viewMode] ?? -1;
+      if (target <= 0) {
+        // Single view: auto ABR, no cap
+        hlsRef.current.currentLevel = -1;
+        console.log(`[HlsPlayer] Quality: auto ABR (single view)`);
+      } else {
+        const capIdx = findLevelForMaxHeight(hlsRef.current, target);
+        if (capIdx >= 0) {
+          hlsRef.current.currentLevel = capIdx;
+          console.log(`[HlsPlayer] Quality capped to ${hlsRef.current.levels[capIdx].height}p (level ${capIdx}) for ${viewMode} mode`);
+        }
+      }
     }
   }, [viewMode]);
 
