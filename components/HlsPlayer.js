@@ -1033,7 +1033,7 @@ export default function HlsPlayer({
           )}
 
           {/* Controls Row */}
-          <div className="relative px-4 py-2.5 flex items-center gap-2">
+          <div className="relative px-4 py-2.5 flex items-center gap-2 overflow-hidden">
             {/* Play/Pause */}
             <button onClick={togglePlay} className="p-2 rounded-lg hover:bg-white/10 text-white transition-colors" aria-label={isPlaying ? 'Pause' : 'Play'}>
               {isPlaying ? (
@@ -1160,7 +1160,7 @@ export default function HlsPlayer({
             )}
 
             {/* Volume — always visible */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-shrink-0">
               <button onClick={toggleMute} className="p-2 rounded-lg hover:bg-white/10 text-white transition-colors" aria-label={isMuted ? 'Unmute' : 'Mute'} title={isMuted ? 'Unmute' : 'Mute'}>
                 {isMuted || volume === 0 ? (
                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1177,14 +1177,15 @@ export default function HlsPlayer({
                 type="range" min="0" max="1" step="0.05"
                 value={isMuted ? 0 : volume}
                 onChange={handleVolumeChange}
-                className="w-24 h-1.5 appearance-none bg-white/30 rounded-full cursor-pointer
+                className={`${viewMode === 'single' ? 'w-24' : 'w-16'} h-1.5 appearance-none bg-white/30 rounded-full cursor-pointer
                   [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#ff7a00]
-                  [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#ff7a00] [&::-moz-range-thumb]:border-0"
+                  [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#ff7a00] [&::-moz-range-thumb]:border-0`}
                 aria-label="Volume"
               />
             </div>
 
-            {/* Snapshot */}
+            {/* Snapshot (hidden in multi-view) */}
+            {viewMode === 'single' && (
             <button
               onClick={() => {
                 if (!videoRef.current) return;
@@ -1221,9 +1222,10 @@ export default function HlsPlayer({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
               </svg>
             </button>
+            )}
 
-            {/* Log Train Sighting (captures snapshot + opens form) */}
-            {onLogSighting && (
+            {/* Log Train Sighting (hidden in multi-view) */}
+            {onLogSighting && viewMode === 'single' && (
               <button
                 onClick={() => {
                   if (!videoRef.current) return;
