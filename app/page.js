@@ -168,6 +168,7 @@ function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
     { id: '15years', label: '🎉 15 Years', href: '/15years' },
     { id: 'watch', label: 'Watch', href: null },
     { id: 'cameras', label: 'Cameras', href: '/cameras' },
+    { id: 'sightings', label: 'Train Log', href: '/sightings' },
     { id: 'status', label: 'Status', href: '/network-status' },
     { id: 'host', label: 'Host', href: '/host' },
     { id: 'about', label: 'About', href: null },
