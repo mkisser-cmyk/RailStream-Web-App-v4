@@ -9,7 +9,7 @@ import Hls from 'hls.js';
  * Features:
  * - HLS.js for Chrome/Firefox/Edge, native for Safari
  * - Audio track switching (No Radio, Radio, Radio Only)
- * - DVR timeline scrubber with rewind
+ * - DVR timeline scrubber with rewind + thumbnail preview
  * - Review Ops mode (7-day archive)
  * - Quality level capping for multi-view
  * - Custom dark UI with orange accents
@@ -64,6 +64,111 @@ function formatTimeAgo(seconds) {
   return `-${h}h${m > 0 ? m + 'm' : ''}`;
 }
 
+// ── Extract stream name from HLS URL ──
+function extractStreamName(hlsUrl) {
+  if (!hlsUrl) return null;
+  // Match /Live_Mobile/CAM_NAME/ or /Live/CAM_NAME/ patterns
+  const match = hlsUrl.match(/\/Live(?:_Mobile)?\/([^/]+)\//);
+  return match ? match[1] : null;
+}
+
+// ── Thumbnail scrub timestamp calculator ──
+function calcThumbTimestamp(hoverPct, seekableStart, seekableEnd) {
+  // Map hover percentage to a position in the seekable range
+  const seekRange = seekableEnd - seekableStart;
+  const posInStream = seekableStart + hoverPct * seekRange;
+  // seekableEnd ≈ "now", so unix timestamp = now - (seekableEnd - posInStream)
+  const nowUnix = Math.floor(Date.now() / 1000);
+  const offsetFromLive = seekableEnd - posInStream;
+  const ts = nowUnix - Math.floor(offsetFromLive);
+  // Round to nearest 2-second boundary
+  return Math.round(ts / 2) * 2;
+}
+
+// ── Thumbnail Preview Component ──
+function ThumbnailPreview({ visible, x, containerWidth, timestamp, streamName, timeLabel }) {
+  const [currentSrc, setCurrentSrc] = useState(null);
+  const [loadedSrc, setLoadedSrc] = useState(null);
+  const preloadRef = useRef(null);
+  const lastGoodSrcRef = useRef(null);
+
+  // Preload the thumbnail image before showing
+  useEffect(() => {
+    if (!visible || !streamName || !timestamp) return;
+    const src = `/api/thumbnails/scrub?cam=${encodeURIComponent(streamName)}&ts=${timestamp}`;
+    if (src === currentSrc) return;
+    setCurrentSrc(src);
+
+    // Cancel previous preload
+    if (preloadRef.current) {
+      preloadRef.current.onload = null;
+      preloadRef.current.onerror = null;
+    }
+
+    const img = new Image();
+    preloadRef.current = img;
+    img.onload = () => {
+      setLoadedSrc(src);
+      lastGoodSrcRef.current = src;
+    };
+    img.onerror = () => {
+      // Keep showing last good image (don't flutter)
+    };
+    img.src = src;
+
+    return () => {
+      img.onload = null;
+      img.onerror = null;
+    };
+  }, [visible, streamName, timestamp, currentSrc]);
+
+  if (!visible) return null;
+
+  const thumbW = 160;
+  const thumbH = 90;
+  // Clamp position so tooltip doesn't go off-screen
+  const halfW = thumbW / 2;
+  const clampedX = Math.max(halfW + 4, Math.min(containerWidth - halfW - 4, x));
+  const displaySrc = loadedSrc || lastGoodSrcRef.current;
+
+  return (
+    <div
+      className="absolute bottom-full mb-3 pointer-events-none z-50 transition-opacity duration-150"
+      style={{
+        left: `${clampedX}px`,
+        transform: 'translateX(-50%)',
+        opacity: displaySrc ? 1 : 0.5,
+      }}
+    >
+      <div className="rounded-lg overflow-hidden shadow-2xl border border-white/20 bg-black">
+        {displaySrc ? (
+          <img
+            src={displaySrc}
+            alt="Thumbnail preview"
+            className="block"
+            style={{ width: thumbW, height: thumbH, objectFit: 'cover' }}
+            draggable={false}
+          />
+        ) : (
+          <div
+            className="flex items-center justify-center bg-[#111]"
+            style={{ width: thumbW, height: thumbH }}
+          >
+            <div className="w-5 h-5 border-2 border-[#ff7a00]/50 border-t-[#ff7a00] rounded-full animate-spin" />
+          </div>
+        )}
+        {timeLabel && (
+          <div className="bg-black/90 text-center py-1 px-2">
+            <span className="text-white text-[11px] font-mono font-medium">{timeLabel}</span>
+          </div>
+        )}
+      </div>
+      {/* Arrow */}
+      <div className="absolute left-1/2 -translate-x-1/2 -bottom-1.5 w-3 h-3 bg-black border-r border-b border-white/20 rotate-45" />
+    </div>
+  );
+}
+
 export default function HlsPlayer({
   src,
   baseStreamUrl = null,
@@ -108,6 +213,13 @@ export default function HlsPlayer({
   const [seekableEnd, setSeekableEnd] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+
+  // Thumbnail scrubbing
+  const [thumbHover, setThumbHover] = useState(false);
+  const [thumbX, setThumbX] = useState(0);
+  const [thumbPct, setThumbPct] = useState(0);
+  const [thumbContainerW, setThumbContainerW] = useState(0);
+  const thumbDebounceRef = useRef(null);
 
   // Review Ops
   const [showReviewOps, setShowReviewOps] = useState(false);
@@ -432,6 +544,42 @@ export default function HlsPlayer({
     v.currentTime = targetTime;
   };
 
+  // ── Thumbnail hover on seek bar ──
+  const handleSeekHover = useCallback((e) => {
+    if (!seekBarRef.current) return;
+    const rect = seekBarRef.current.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    setThumbX(e.clientX - rect.left);
+    setThumbPct(pct);
+    setThumbContainerW(rect.width);
+    if (!thumbHover) setThumbHover(true);
+  }, [thumbHover]);
+
+  const handleSeekHoverEnd = useCallback(() => {
+    setThumbHover(false);
+  }, []);
+
+  // Calculate stream name from src URL for thumbnail lookups
+  const streamName = useMemo(() => extractStreamName(src), [src]);
+
+  // Calculate thumbnail timestamp for current hover position
+  const thumbTimestamp = useMemo(() => {
+    if (!thumbHover || seekableEnd <= seekableStart) return null;
+    return calcThumbTimestamp(thumbPct, seekableStart, seekableEnd);
+  }, [thumbHover, thumbPct, seekableStart, seekableEnd]);
+
+  // Calculate time label for thumbnail hover
+  const thumbTimeLabel = useMemo(() => {
+    if (!thumbHover || seekableEnd <= seekableStart) return '';
+    const seekRange = seekableEnd - seekableStart;
+    const posInStream = seekableStart + thumbPct * seekRange;
+    const offsetFromLive = seekableEnd - posInStream;
+    if (offsetFromLive < 5) return 'LIVE';
+    // Show as HH:MM:SS timestamp
+    const ts = new Date((Date.now() / 1000 - offsetFromLive) * 1000);
+    return ts.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  }, [thumbHover, thumbPct, seekableStart, seekableEnd]);
+
   // ── Review Ops ──
   const startReviewOps = () => {
     if (!streamBase) return;
@@ -566,7 +714,25 @@ export default function HlsPlayer({
                 ref={seekBarRef}
                 className="relative h-6 flex items-center cursor-pointer group/seek"
                 onClick={handleSeek}
+                onMouseMove={handleSeekHover}
+                onMouseLeave={handleSeekHoverEnd}
               >
+                {/* Thumbnail Preview Tooltip */}
+                <ThumbnailPreview
+                  visible={thumbHover && !!streamName}
+                  x={thumbX}
+                  containerWidth={thumbContainerW}
+                  timestamp={thumbTimestamp}
+                  streamName={streamName}
+                  timeLabel={thumbTimeLabel}
+                />
+                {/* Hover position indicator line */}
+                {thumbHover && (
+                  <div
+                    className="absolute top-0 bottom-0 w-px bg-white/40 pointer-events-none z-10"
+                    style={{ left: `${thumbX}px` }}
+                  />
+                )}
                 {/* Track background */}
                 <div className="absolute left-0 right-0 h-1 bg-white/20 rounded-full group-hover/seek:h-1.5 transition-all" />
                 {/* Buffered / seekable range */}

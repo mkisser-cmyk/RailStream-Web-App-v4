@@ -710,6 +710,82 @@ async function handleRoute(request, { params }) {
       }
     }
 
+    // ── Thumbnail Scrubbing ──
+    // GET /api/thumbnails/scrub?cam=FOS_CAM01&ts=1710000000
+    // Serves DVR thumbnail images from NFS mount for timeline scrubbing
+    if (route === '/thumbnails/scrub' && method === 'GET') {
+      const url = new URL(request.url);
+      const cam = url.searchParams.get('cam');
+      const ts = url.searchParams.get('ts');
+
+      if (!cam || !ts) {
+        return handleCORS(NextResponse.json({ error: 'cam and ts parameters required' }, { status: 400 }));
+      }
+
+      // Sanitize cam name to prevent directory traversal
+      const safeCam = cam.replace(/[^a-zA-Z0-9_-]/g, '');
+      const timestamp = parseInt(ts, 10);
+      if (isNaN(timestamp)) {
+        return handleCORS(NextResponse.json({ error: 'Invalid timestamp' }, { status: 400 }));
+      }
+
+      const THUMB_BASE = process.env.THUMBNAIL_PATH || '/mnt/railstream-thumbs';
+
+      try {
+        const fs = await import('fs/promises');
+        const path_mod = await import('path');
+
+        // Try exact timestamp first, then nearby timestamps (±2s, ±4s, ±6s, ±8s, ±10s)
+        const offsets = [0, -2, 2, -4, 4, -6, 6, -8, 8, -10, 10];
+        let foundPath = null;
+
+        for (const offset of offsets) {
+          const tryTs = timestamp + offset;
+          const filePath = path_mod.join(THUMB_BASE, safeCam, `${tryTs}.jpg`);
+          try {
+            await fs.access(filePath);
+            foundPath = filePath;
+            break;
+          } catch {
+            // File doesn't exist, try next offset
+          }
+        }
+
+        if (foundPath) {
+          const imageData = await fs.readFile(foundPath);
+          return new Response(imageData, {
+            status: 200,
+            headers: {
+              'Content-Type': 'image/jpeg',
+              'Cache-Control': 'public, max-age=86400, immutable',
+              'Access-Control-Allow-Origin': '*',
+            },
+          });
+        }
+
+        // No thumbnail found — return a 1x1 transparent pixel with 204
+        // This prevents the UI from showing broken images
+        return new Response(null, {
+          status: 204,
+          headers: {
+            'Cache-Control': 'public, max-age=60',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+
+      } catch (error) {
+        console.error('Thumbnail scrub error:', error);
+        // NFS not mounted or other filesystem error — return 204 silently
+        return new Response(null, {
+          status: 204,
+          headers: {
+            'Cache-Control': 'public, max-age=10',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+      }
+    }
+
     // Route not found
     return handleCORS(NextResponse.json({ error: `Route ${route} not found` }, { status: 404 }));
 
