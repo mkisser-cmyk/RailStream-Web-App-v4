@@ -10,7 +10,7 @@ import sys
 from typing import Dict, Any
 
 # Load environment variables
-NEXT_PUBLIC_BASE_URL = "https://hls-timestamp-fix.preview.emergentagent.com"  # From .env
+NEXT_PUBLIC_BASE_URL = "https://video-stream-web.preview.emergentagent.com"  # From .env
 BASE_URL = f"{NEXT_PUBLIC_BASE_URL}/api"
 
 class StudioAPITester:

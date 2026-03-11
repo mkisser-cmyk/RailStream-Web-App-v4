@@ -1,61 +1,59 @@
 <analysis>
 
 **original_problem_statement**:
-The user wants to build a Next.js web application, RailStream, to replace an existing Joomla/WordPress site. This application will serve as a modern, premium presentation layer for an existing infrastructure, which includes an API at  and a video player at .
+The user is building a Next.js web application, RailStream, as a modern frontend for their existing video streaming infrastructure.
 
-**PRODUCT REQUIREMENTS (Evolved during session):**
--   **Core Pages:** Home (featured cam), Camera Directory, Camera Detail (player), About, Hosts, Join, Account/Login.
--   **New Pages:** 15 Year Anniversary, Host a Camera, a public Status page, and a new Train Log (Sightings) page.
--   **Authentication & Device Management:** JWT-based login/logout via the API. The app must be tier-aware. It needs a robust session and device management system to enforce stream/device limits, including heartbeats, remote sign-out (kick detection), and device registration/listing/deletion. Web devices (Chrome on macOS) must be identifiable in the user's admin panel.
--   **Player:** A completely new, robust video player built from scratch using .
-    -   Must work on all platforms and support DVR (7-day rewind).
-    -   **Thumbnail Scrubbing:** Show a thumbnail preview when hovering over the DVR seek bar. This must work for both live and historical (Review Ops) footage, showing the correct timestamped image. Thumbnails must be clamped to stay within the viewport and resize for smaller multi-view windows.
-    -   Support for multiple audio tracks and dynamic stream quality.
-    -   **Review Ops:** A modal to select a historical date/time to start a 1-hour playback window.
--   **Multi-view:** Allow users to view 1, 2, 4, 9, and 16 cameras simultaneously.
--   **Train Logging (Sightings):**
-    -   A new page () where users can view a log of trains.
-    -   A Log Sighting button in the player toolbar opens a modal to create a log entry, pre-filled with camera/timestamp and an attached snapshot.
-    -   A Replay button on each sighting that jumps the player to the exact moment of the event, even from days ago.
-    -   **Gamification:** A leaderboard on the sightings page to rank users by the number of logs submitted, with points and badges.
--   **Favorites:** A fully API-driven system to add, remove, and reorder favorite cameras, replacing the previous local-storage implementation.
--   **UI/UX & Accessibility:**
-    -   A premium, dark, control-room look and feel.
-    -   High-contrast, readable text, larger fonts, and visible focus indicators to meet accessibility standards.
-    -   All interactive elements must have proper labels for screen readers.
+The project has evolved to include:
+- Core pages (Home, Camera Directory, Player) and new static pages (Our Technology, Host a Camera, etc.).
+- A robust, custom  video player with DVR, thumbnail scrubbing, and multi-view capabilities.
+- A Train Log (Sightings) feature with a public log, a logging modal in the player, and a Replay function.
+- A complete, API-driven system for user authentication, device management (including registration and remote sign-out), and favorite cameras.
+- An advertising system for non-authenticated users, including companion ads, pre-roll ads, and an admin management interface.
+- UI/UX enhancements including a navigation redesign, improved accessibility, and handling for different camera statuses (online, offline, coming_soon).
 
 **User's preferred language**: English
 
 **what currently exists?**
-The application is a highly functional and feature-rich video streaming platform.
--   **Core Features:** A custom  player with advanced, stable DVR and thumbnail scrubbing. Full user authentication is integrated with a complete, API-driven device and session management system (including registration, heartbeats with QoE, and remote kick detection).
--   **Train Log (Sightings):** The feature is fully implemented. This includes the  page with filtering, a leaderboard with user points, and a Log Sighting modal integrated into the player that allows for snapshot attachments. The Replay feature correctly navigates to the watch page and seeks to the historical moment, even for sightings several days old, by generating the appropriate timeshift URL.
--   **Favorites System:** The initial local storage-based system has been completely replaced with a fully integrated API backend for adding, removing, and syncing favorite cameras.
--   **UI/UX and Accessibility:** A major accessibility pass has been completed. This improved text contrast across the application, increased font sizes, added visible focus rings to all interactive elements, and ensured form inputs are correctly labeled for screen readers. The camera list has been redesigned to be grouped alphabetically by state for better usability.
+The application is a mature MVP with a wide range of features.
+- **Core Functionality:** User authentication, camera browsing, and video playback are stable. The custom  player includes advanced DVR, thumbnail scrubbing, and robust, resolution-aware adaptive bitrate (ABR) quality capping for multi-view layouts.
+- **Feature: Ad System:** A complete advertising system has been implemented. This includes backend CRUD API endpoints (admin-protected) for managing ads, a companion ad sidebar that displays for non-logged-in users, a pre-roll video ad overlay, and an admin modal to manage ad content.
+- **Feature: Sighting & Favorites:** The Train Log (Sightings) feature is fully functional. The Favorites system is API-driven.
+- **UI/UX & Content:**
+    - The main navigation has been redesigned, grouping secondary pages under an About dropdown for a cleaner look. This change is consistent across all pages.
+    - A new Our Technology page has been created to showcase the company's technical infrastructure, using content and images from a provided case study.
+    - The login modal has been redesigned for better aesthetics.
+    - A cookie consent banner has been implemented with options for the user to manage their preferences.
+- **Bug Fixes & Polish:**
+    - A critical bug causing timestamp inaccuracies in logging and DVR thumbnails has been fixed by incorporating HLS latency into calculations.
+    - The logout process now correctly un-registers the device from the user's account.
+    - My Layouts feature is now disabled with a lock icon for non-logged-in users.
+    - UI inconsistencies (user badges, tier colors) across different pages have been resolved.
+    - Camera statuses (, ) are now displayed with badges in the camera lists.
 
 **Last working item**:
--   Last item agent was working: The user reported that the thumbnail and logger timestamps seem to be ahead of the actual video by 20-30 seconds. The agent was about to begin debugging this timing inaccuracy.
--   Status: NOT STARTED
--   Agent Testing Done: N
--   Which testing method agent to use? both
--   User Testing Done: N
+- Last item agent was working: The user specified that clicking on an 'offline' or 'coming_soon' camera should trigger a full-screen modal/takeover explaining the status, similar to their mobile apps. The agent had implemented badges and an in-player message but had not yet built the full-screen modal.
+- Status: IN PROGRESS
+- Agent Testing Done: N
+- Which testing method agent to use? screenshot tool
+- User Testing Done: N
 
 **All Pending/In progress Issue list**:
--   Issue 1: Timestamp Accuracy for Logging and Thumbnails (P0)
+-   Issue 1: Implement Full-Screen Modal for Offline/Coming Soon Cameras (P0)
 
 **Issues Detail**:
--   **Issue 1: Timestamp Accuracy for Logging and Thumbnails (P0)**
-    -   **Description:** The user reported that when they log a sighting or scrub the timeline, the timestamp captured is 20-30 seconds ahead of the action in the video. The goal is to tighten this latency to be as close to real-time as possible.
-    -   **Attempted fixes:** None yet.
+-   **Issue 1: Implement Full-Screen Modal for Offline/Coming Soon Cameras (P0)**
+    -   **Description:** When a user clicks a camera marked as 'offline' or 'coming_soon', the application should display a full-screen modal or page takeover that clearly communicates the camera's status. The current implementation only shows a small message within the player grid, which does not meet the user's requirement for a more prominent notification matching their other apps.
+    -   **Attempted fixes:** The agent has added logic to  to detect these statuses and display a message inside the player component, but this is not the desired user experience.
     -   **Next debug checklist:**
-        1.  Investigate . The discrepancy likely comes from the difference between the player's reported  and the actual content time at the live edge of the HLS stream.
-        2.  Check the  or other HLS.js properties that describe the position relative to the live point.
-        3.  When capturing a snapshot or timestamp, the value should be calculated relative to a more accurate wall clock time. The  tag in the HLS manifest might be necessary.
-        4.  In  and the  snapshot handler, adjust the timestamp calculation to account for the typical HLS live latency. This might involve subtracting a small, calibrated offset or using a more precise timing source from HLS.js.
-    -   **Why fix this issue and what will be achieved with the fix?** This will make the core logging and replay features much more accurate and satisfying for users. A log entry will correspond to the exact moment the user sees an event, not 20 seconds later.
-    -   **Status:** NOT STARTED
+        1.  Open .
+        2.  Create a new state to manage the modal, e.g., .
+        3.  In the  function (around line 1950), modify the logic. Instead of just setting a state on the  array for 'offline' or 'coming_soon' cameras, call  to trigger the modal.
+        4.  Create a new modal component within . This component should render conditionally based on the  state.
+        5.  The modal should be styled as a full-screen takeover, displaying the , , and a user-friendly message (e.g., This camera is temporarily offline for maintenance. or Coming Soon!). It should include a Close button that sets .
+    -   **Why fix this issue and what will be achieved with the fix?** This will align the web application's user experience with the existing mobile apps, providing clear and prominent feedback to users about camera availability.
+    -   **Status:** IN PROGRESS
     -   **Is recurring issue?** N
-    -   **Should Test frontend/backend/both after fix?** Both
+    -   **Should Test frontend/backend/both after fix?** Frontend
     -   **Blocked on other issue:** None
 
 **In progress Task List**:
@@ -63,130 +61,113 @@ The application is a highly functional and feature-rich video streaming platform
 
 **Upcoming and Future Tasks**
 -   **Upcoming Tasks:**
-    -   **(P1) Pre-fill Train Numbers in Sighting Form:** As suggested by the user, for certain locations, pre-populate a dropdown in the Log Sighting modal with known train numbers that pass through (e.g., Amtrak 20, Amtrak 21 for Atlanta). This would require adding schedule data to the camera information.
+    -   **(P1) Implement Mid-roll Ads:** The ad system foundation is built (pre-roll, companion). The next step is to integrate mid-roll ad playback into the video stream, likely using the  from the camera API and HLS.js ad integration points.
 -   **Future Tasks:**
-    -   **(P2) Device Management UI:** Create a new page in the user account area to  and display a list of registered devices, with a button to  and  to rename them.
-    -   **(P3) Admin Panel**: Build a simple admin interface for managing ad content and editing static page text.
-    -   **(P4) Player Stats for Nerds**: Add an overlay showing player stats (buffer health, resolution, bitrate).
-    -   **(P5) Store Sighting Video Clips**: Investigate saving short video clips of sightings.
+    -   **(P2) Enhance Admin Panel:** The current ad management is a standalone modal. This should be integrated into a more comprehensive admin section within the user's account page.
+    -   **(P3) Functional Cookie Consent:** The cookie consent UI is built, but the toggles for Functional and Analytics cookies are not yet wired to any actual scripts or services. This would involve integrating an analytics library and conditionally loading it based on user consent stored in localStorage.
 
 **Completed work in this session**
--   **Feature: Log Sighting from Player**: Completed the full workflow, including the modal UI, snapshot capture, image upload, and form submission.
--   **Feature: Sightings Leaderboard & Gamification**: Implemented a new API endpoint and UI on the  page to display a Top Spotters leaderboard with points and medal emojis.
--   **Feature: Full API-driven Favorites**: Replaced the entire local storage-based favorites system with backend API calls for GET, POST, DELETE, and PUT (for re-ordering).
--   **Feature: Complete Device & Session Management**:
-    -   Implemented the  flow, ensuring web app sessions are correctly registered in the user's admin panel.
-    -   Implemented kick detection to automatically log out a user if their device is removed remotely.
-    -   Enhanced heartbeats () to include detailed QoE metrics and player state.
--   **Bugfix & Feature: Sighting Replay**: Fixed and robustly implemented the Replay button. It now correctly generates a timeshift DVR URL for older sightings, navigates to the player, and seeks to the precise, centered moment.
--   **Bugfix & UX: Thumbnail Scrubbing**:
-    -   Fixed a bug where the thumbnail preview would render outside the viewport.
-    -   Fixed a critical bug where historical DVR playback showed thumbnails from the live stream.
-    -   Fixed a bug where broken or non-existent thumbnails would display as a white box.
-    -   Implemented responsive thumbnail sizing for multi-view modes.
--   **Major Accessibility & UX Overhaul**:
-    -   Systematically increased text contrast and font sizes across the application for better readability.
-    -   Added visible focus rings () to all interactive elements.
-    -   Correctly linked all form labels to inputs using /uid=0(root) gid=0(root) groups=0(root) for screen reader compatibility.
-    -   Added  attributes to all icon-only buttons.
--   **Multiple Bugfixes**:
-    -   Fixed inconsistent authentication state across different pages by centralizing auth logic in .
-    -   Fixed the Review Ops modal: added error validation for future dates and set a smarter default time.
-    -   Fixed the Review Ops panel from opening unexpectedly when switching cameras.
-    -   Added the Train Log link to the main navigation header.
-    -   Redesigned the camera list to be grouped alphabetically by state.
+-   **Bugfix: P0 Timestamp Accuracy:** Fixed the 20-30 second timestamp discrepancy for DVR thumbnails and sighting logs by using .
+-   **Feature: Complete Ad System:**
+    -   Backend: Created admin-only CRUD API endpoints ().
+    -   Frontend: Implemented a companion ad sidebar for guests, a pre-roll ad overlay, and an admin modal for managing ad content.
+-   **Feature: UI/UX Overhaul:**
+    -   Redesigned the main navigation with a clean About dropdown.
+    -   Created a new, polished Our Technology page.
+    -   Redesigned the login modal for a more professional look.
+    -   Added a comprehensive cookie consent banner.
+-   **Feature: Camera Status Handling:** Implemented UI badges for  and  cameras in all camera lists.
+-   **Bugfix: Quality Capping (ABR):** Replaced a flawed, index-based quality capping system with a robust, resolution-aware logic that correctly limits stream quality in multi-view modes.
+-   **Bugfix: Logout Device Un-registration:** Fixed the logout flow to correctly send a  request to unregister the device from the user's account.
+-   **Bugfix: Navigation & UI Consistency:** Resolved inconsistencies in user badges and navigation links between the main watch page and other site-wide pages.
+-   **Polish:**
+    -   Locked the My Layouts feature for non-logged-in users.
+    -   Moved camera info to the top of player tiles in multi-view.
+    -   Added seconds to all sighting timestamps for better precision.
+    -   Removed internal metrics (CPU, Bitrate) from the public network status page.
 
 **Earlier issues found/mentioned but not fixed**
--   None. The agent has been diligent in addressing all user-reported issues.
+-   None.
 
 **Known issue recurrence from previous fork**
--   **Issue:** The Replay feature from the sightings page was a recurring problem. The initial fix only handled seeking within the live DVR window and failed for older sightings.
--   **Resolution:** The issue was resolved in a second, more robust fix that detects if a sighting is old and constructs a proper timeshift DVR URL instead of just seeking. The current implementation is stable.
--   **Status:** RESOLVED
+-   None.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
 -   **Frontend:** Next.js 14 (App Router), React, Tailwind CSS, shadcn/ui.
--   **State Management:** Heavy reliance on , , and  within large React components.  for auth.
--   **Video Streaming:**  with advanced configuration for DVR, live sync, QoE stats reporting, and dynamic timeshift URL generation.
--   **Backend (BFF):** Next.js API Routes acting as a proxy to the main  and providing direct MongoDB CRUD for the  feature.
--   **Database:** MongoDB.
--   **Accessibility:** ARIA attributes (), semantic HTML (), high-contrast text, and visible focus indicators are now implemented.
+-   **Video Streaming:**  with advanced, resolution-aware ABR logic and latency-compensated timestamping.
+-   **Backend (BFF):** Next.js API Routes proxying to the main API and providing new endpoints for Ads and Sightings.
+-   **State Management:** Heavy use of , , and  in .  is used for auth tokens, device ID, and cookie consent.
+-   **Advertising:** A full system with backend CRUD, admin UI, and frontend rendering for companion and pre-roll ads based on user authentication state.
+-   **Cookie Management:** A client-side banner and preference system using .
 
 **key DB schema**
--   **sightings**: 
+-   **sightings**:  (Unchanged)
+-   **ads**: 
 
 **changes in tech stack**
 -   None.
 
 **All files of reference**
--   : The main application god-component. Manages auth, camera selection, multi-view layout, favorites, and the sighting modal. Needs refactoring.
--   : The custom video player. Contains all logic for playback, DVR, thumbnail scrubbing, stats reporting, and accessibility.
--   : The train log page. Contains the UI for the log list, filters, and the new leaderboard.
--   : The main API proxy. Contains all new backend logic for sightings, devices, and favorites.
--   : Client-side API helper functions. Contains the logic for login, device registration, and favorites.
--   : The main navigation component, now with self-contained authentication logic.
+-   : The central component for the main watch page. It has grown significantly and now contains logic for the player layout, all modals (login, log sighting, ad manager), the ad system, camera status handling, and more.
+-   : The core video player component. Contains critical logic for playback, DVR, and the recently fixed quality capping.
+-   : The main API router. Contains the new backend logic for the ad system.
+-   : The new static page showcasing the company.
+-   : The global navigation header.
+-   : The new, self-contained cookie banner component.
 
 **Areas that need refactoring**:
--   ** is critically oversized and complex.** It has grown even larger and now manages state for authentication, camera data, favorites, multi-view layout, player stats, and the sighting modal. It urgently needs to be broken down into smaller components and custom hooks (e.g., , , ) to be maintainable.
+-   ** is more critical than ever to refactor.** It has absorbed the logic for the ad system (fetching, rendering, admin modal state), camera status handling, and the redesigned navigation component. Its responsibilities are far too broad, making it difficult to maintain. It should be broken down into smaller components and custom hooks (e.g., , , ).
 
 **key api endpoints**
--   : (GET, POST, PUT, DELETE) CRUD for train log entries.
--   : (GET) New endpoint for leaderboard and statistics.
--   : (POST) Image uploads for sightings.
--   : (GET) List a user's registered devices.
--   : (POST) Register a new device after login.
--   : (DELETE, PATCH) Remove or rename a device.
--   : (GET, PUT) Get or bulk-replace a user's favorites.
--   : (POST, DELETE) Add or remove a single favorite.
--   : (POST) Sends enhanced session heartbeat with QoE metrics.
+-   : (GET, POST, PUT, DELETE) New admin-only CRUD endpoints for managing ads. Public GET returns only enabled ads.
+-   (Existing endpoints for sightings, devices, favorites, etc., are still in use).
 
 **Critical Info for New Agent**
--   **The highest priority (P0) is to fix the timestamp accuracy bug.** The user reports a 20-30 second delay between the video and the timestamps used for logging/thumbnails. The investigation should start in  and focus on HLS live latency.
--   ** is a god component.** Be extremely careful when editing it. The long-term health of the project depends on refactoring this file into smaller, more manageable hooks and components.
--   **User-provided API docs are the source of truth.** The user has provided detailed documentation for the , , and  APIs. Refer to the chat history for these specs before making changes.
--   **Replay logic is complex.** The Replay feature uses two different methods: simple  for recent events and generating a full  URL for older events. This logic is primarily in  () and .
+-   **The immediate P0 task is to implement the full-screen modal for 'offline' and 'coming_soon' cameras.** The current implementation is incomplete and doesn't meet user requirements. The next steps are clearly defined in the Issues Detail section above.
+-   ** is a god component.** Be extremely careful when editing it. The new ad system logic, status handling, and multiple modals are all intertwined within this single file.
+-   **The Ad System is ready for user testing.** The backend is confirmed working via , and the frontend components for free users are visibly correct in screenshots. The admin modal should be functional but needs manual verification by logging in as an admin user ( or ).
 
 **documents created in this job**
 -   None.
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User (Msg 645):** SUMMARY OF WHAT WE NEED TO DO LIST fork hand off... (PENDING) - This is the request for the current summary.
-2.  **User (Msg 642):** **BUG REPORT** - Thumbnails and logger timestamps are off by 20-30 seconds, they are ahead of the video. (NOT STARTED)
-3.  **User (Msg 579):** **PRIORITY SETTING** - Asks to fix the archive replay centering/offset (P0) and accessibility/readability (P1). (DONE)
-4.  **User (Msg 576):** **ACCESSIBILITY/UX FEEDBACK** - Text is too hard to read, asks about accessibility compliance. (DONE)
-5.  **User (Msg 529):** **BUG & FEATURE LIST** - Reported 3 issues: inconsistent auth state, broken replay, and requested full API for Favorites. (DONE)
-6.  **User (Msg 518):** **BUG REPORT** - Review Ops panel opens on every camera switch. (DONE)
-7.  **User (Msg 467):** **API DOCS** - Provided detailed specs for Playback/Radio Heartbeat and Stop Session endpoints. (DONE)
-8.  **User (Msg 434):** **API DOCS** - Provided detailed specs for the entire Device Registration API flow. (DONE)
-9.  **User (Msg 391):** **BUG REPORT** - Still doesn't see the web app device registered after logging out and back in. (DONE)
-10. **User (Msg 364):** **BUG REPORT** - the web app YOU are not showing up as a device registered. (DONE)
+1.  **User (Msg 559):** update to do list and give it to me (PENDING) - The request for this summary.
+2.  **User (Msg 556):** UPDATE TODO LIST TO GIVE TO FORK (PENDING) - An earlier request for the summary.
+3.  **User (Msg 553):** **FEEDBACK** - Clarified that offline/coming soon cameras should trigger a full-screen pop-up, not just a small in-player message. (IN PROGRESS)
+4.  **User (Msg 515):** **FEATURE REQUEST** - Asked to handle 'offline' and 'coming_soon' cameras, providing screenshots and API details. (PARTIALLY DONE)
+5.  **User (Msg 496):** **FEATURE REQUEST** - Requested a redesign of the login modal and a cookie consent banner. (DONE)
+6.  **User (Msg 481):** **FEATURE REQUEST** - Stated that multi-view layouts should be locked out for free users. (DONE)
+7.  **User (Msg 411):** **QUESTION/REQUEST** - Asked for pre-roll ads to be implemented and inquired about the ABR quality capping logic. (DONE)
+8.  **User (Msg 406):** **QUESTION** - Asked if the ad system will work once they input Ad URLs. (DONE)
+9.  **User (Msg 402):** **BUG REPORT** - Pointed out a z-index/stacking issue with the new camera labels in multi-view. (DONE)
+10. **User (Msg 351):** **FEATURE REQUEST** - Requested moving camera details to the top of the player and adding seconds to timestamps. (DONE)
 
 **Project Health Check:**
 -   **Broken:**
-    -   Timestamp accuracy for logging and thumbnails is off by 20-30 seconds.
+    -   The user experience for selecting 'offline' or 'coming_soon' cameras is incorrect; it needs a full-screen modal instead of an in-player message.
 -   **Mocked:**
     -   None.
 -   **Working:**
-    -   Almost all features are functional, including video playback, advanced DVR/scrubbing, full device/session management, API-driven favorites, and the complete sightings/leaderboard feature. The UI is accessible and has high-contrast text.
+    -   The application is largely stable and feature-rich. All major features, including the new ad system, redesigned navigation, and core video playback with correct quality-capping, are functional.
 
 **3rd Party Integrations**
--   **RailStream API ():** Primary backend for catalog, user authentication, stream authorization, devices, and favorites.
--   **RailStream Studio API ():** For camera health data and live thumbnails.
--   ** library:** Client-side HLS video playback engine.
+-   **RailStream API ():** Primary backend for catalog, users, streams, devices, favorites.
+-   **RailStream Studio API ():** For camera health data and thumbnails.
+-   ** library:** Client-side video playback engine.
 
 **Testing status**
--   Testing agent used after significant changes: YES (Backend tests were run after initial sightings implementation).
+-   Testing agent used after significant changes: NO (Changes were mostly frontend UI/UX).
 -   Troubleshoot agent used after agent stuck in loop: NO
 -   Test files created: None.
 -   Known regressions: None.
 
 **Credentials to test flow:**
--   User test credentials:  /  or  / .
+-   Admin/Test credentials:  /  or  / .
 
 **What agent forgot to execute**
--   The agent was about to start work on the final user-reported bug (timestamp accuracy) before being asked to create this handover summary. Nothing was forgotten; work was paused pending handover.
+-   The agent was in the middle of addressing the user's feedback on the 'offline/coming_soon' feature (to make it a full-screen modal) when asked to create the handoff summary. The task is not forgotten, but paused.
 
 </analysis>
