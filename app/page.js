@@ -1791,7 +1791,7 @@ function CompanionAdPanel({ ads }) {
 
 // WATCH PAGE
 // ============================================
-function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera, removeCamera, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp, replaySeekOffset = 0, clearReplaySeek, playerStatsRef, onStatusCamera }) {
+function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera, removeCamera, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp, replaySeekOffset = 0, clearReplaySeek, playerStatsRef, onStatusCamera, onLogin }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
@@ -2385,7 +2385,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                                       Sign in to access <span className="text-[#ff7a00] font-semibold capitalize">{state.upgrade.required_tier}</span> cameras
                                     </p>
                                     <button
-                                      onClick={() => setLoginOpen(true)}
+                                      onClick={() => onLogin && onLogin()}
                                       className="inline-block px-5 py-2 bg-[#ff7a00] hover:bg-[#ff8c1a] text-white font-semibold rounded-lg text-sm transition mr-2"
                                     >
                                       Sign In
@@ -3846,6 +3846,7 @@ export default function App() {
             clearReplaySeek={() => setReplaySeekOffset(0)}
             playerStatsRef={playerStatsRef}
             onStatusCamera={setStatusModal}
+            onLogin={() => setLoginOpen(true)}
           />
         )}
 
@@ -3855,7 +3856,20 @@ export default function App() {
         {currentPage === 'faq' && <FAQPage />}
       </div>
 
-      <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onSuccess={(u) => { setUser(u); loadServerPrefs(); }} />
+      <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} onSuccess={(u) => {
+        setUser(u);
+        loadServerPrefs();
+        // After login, re-try loading any selected cameras that were locked (showing upgrade prompt)
+        selectedCameras.forEach((cam, idx) => {
+          if (cam) {
+            const state = playbackStates[idx];
+            if (state?.upgrade) {
+              // Camera was locked — now try loading it with the new auth
+              setTimeout(() => loadCamera(cam, idx), 300);
+            }
+          }
+        });
+      }} />
 
       {/* Full-screen Camera Status Modal (Offline / Coming Soon) */}
       {statusModal && (
