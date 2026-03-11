@@ -1692,19 +1692,27 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                       
                       {/* Camera label + expand button (multi-view only) */}
                       {viewMode !== 'single' && camera && (
-                        <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity ${isCompact ? 'p-1' : 'p-2'}`}>
+                        <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity ${isCompact ? 'p-1.5' : 'p-2.5'}`}>
                           <div className="flex items-center justify-between">
                             <div className="min-w-0">
-                              <p className={`text-white font-medium truncate ${isCompact ? 'text-[10px]' : 'text-sm'}`}>{camera.name}</p>
+                              <p className={`text-white font-medium truncate ${isCompact ? 'text-xs' : 'text-sm'}`}>{camera.name}</p>
                               {!isCompact && <p className="text-white/70 text-xs truncate">{camera.location}</p>}
                             </div>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleTileFocus(i); }}
-                              className={`flex-shrink-0 p-1 rounded bg-[#ff7a00]/80 hover:bg-[#ff7a00] text-white transition ${isCompact ? 'ml-1' : 'ml-2'}`}
-                              title="Expand to fullscreen"
-                            >
-                              <Monitor className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'}`} />
-                            </button>
+                            <div className="relative group/expand flex-shrink-0">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleTileFocus(i); }}
+                                className={`rounded-lg bg-[#ff7a00] hover:bg-[#ff8c20] text-white transition-all hover:scale-110 shadow-lg shadow-black/40 ${isCompact ? 'p-1.5 ml-1.5' : 'p-2.5 ml-2'}`}
+                                aria-label="Expand this camera to full view"
+                              >
+                                <Monitor className={`${isCompact ? 'w-4 h-4' : 'w-5 h-5'}`} />
+                              </button>
+                              <div className="absolute bottom-full right-0 mb-2 pointer-events-none opacity-0 group-hover/expand:opacity-100 transition-opacity whitespace-nowrap">
+                                <div className="bg-zinc-800 border border-white/10 text-white text-sm font-medium px-3 py-1.5 rounded-lg shadow-xl">
+                                  Expand to Full View
+                                  <div className="absolute top-full right-3 w-2.5 h-2.5 bg-zinc-800 border-r border-b border-white/10 transform rotate-45 -mt-1.5" />
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}
