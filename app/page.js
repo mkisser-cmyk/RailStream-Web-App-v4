@@ -800,12 +800,30 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
   
   const toggleFavorite = (cameraId, e) => {
     e.stopPropagation();
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('railstream_token') : null;
+    
     if (favorites.includes(cameraId)) {
-      setFavorites(favorites.filter(id => id !== cameraId));
+      const newFavs = favorites.filter(id => id !== cameraId);
+      setFavorites(newFavs);
       toast.success('Removed from favorites');
+      // Call DELETE API
+      if (token) {
+        fetch(`/api/favorites/${cameraId}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` },
+        }).catch(() => {});
+      }
     } else {
-      setFavorites([...favorites, cameraId]);
+      const newFavs = [...favorites, cameraId];
+      setFavorites(newFavs);
       toast.success('Added to favorites');
+      // Call POST API
+      if (token) {
+        fetch(`/api/favorites/${cameraId}`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+        }).catch(() => {});
+      }
     }
   };
   
@@ -2462,16 +2480,16 @@ export default function App() {
   // Sync preferences to server (debounced)
   const syncPrefsToServer = useCallback(async (newFavs, newPresets) => {
     const token = auth.getToken();
-    if (!token) return; // Only sync for logged-in users
+    if (!token) return;
     try {
-      const body = {};
-      if (newFavs !== undefined) body.favorites = newFavs;
-      if (newPresets !== undefined) body.presets = newPresets;
-      await fetch('/api/user/preferences', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(body),
-      });
+      // Sync presets via user/preferences (keep existing behavior)
+      if (newPresets !== undefined) {
+        await fetch('/api/user/preferences', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ presets: newPresets }),
+        });
+      }
     } catch (e) {
       console.log('Preference sync failed:', e);
     }
@@ -2482,31 +2500,45 @@ export default function App() {
     const token = auth.getToken();
     if (!token) return;
     try {
-      const res = await fetch('/api/user/preferences', {
+      // Load favorites from the favorites API
+      const favRes = await fetch('/api/favorites', {
         headers: { 'Authorization': `Bearer ${token}` },
       });
-      const data = await res.json();
-      if (data.ok) {
-        if (data.favorites?.length > 0) {
-          setFavorites(data.favorites);
-          storage.setFavorites(data.favorites);
-        }
-        if (data.presets?.length > 0) {
-          setPresets(data.presets);
-          storage.setPresets(data.presets);
-        }
+      const favData = await favRes.json();
+      if (favData.ok && favData.favorites?.length > 0) {
+        setFavorites(favData.favorites);
+        storage.setFavorites(favData.favorites);
+      }
+
+      // Load presets from user/preferences
+      const prefRes = await fetch('/api/user/preferences', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const prefData = await prefRes.json();
+      if (prefData.ok && prefData.presets?.length > 0) {
+        setPresets(prefData.presets);
+        storage.setPresets(prefData.presets);
       }
     } catch (e) {
       console.log('Failed to load server preferences:', e);
     }
   }, []);
 
-  // Update favorites — save to localStorage + server
+  // Update favorites — use the proper Favorites API
   const updateFavorites = useCallback((newFavs) => {
     setFavorites(newFavs);
     storage.setFavorites(newFavs);
-    syncPrefsToServer(newFavs, undefined);
-  }, [syncPrefsToServer]);
+    
+    const token = auth.getToken();
+    if (!token) return;
+
+    // Use PUT /api/favorites for bulk sync
+    fetch('/api/favorites', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ camera_ids: newFavs }),
+    }).catch(e => console.log('Favorites sync failed:', e));
+  }, []);
 
   // Update presets — save to localStorage + server
   const updatePresets = useCallback((newPresets) => {
@@ -2571,7 +2603,15 @@ export default function App() {
       if (camera) {
         console.log(`[Replay] Loading camera ${camera.name}, seek offset: ${seekSecs}s`);
         setCurrentPage('watch');
-        if (seekSecs > 0) setReplaySeekOffset(seekSecs);
+        
+        if (seekSecs > 300) {
+          // For sightings more than 5 minutes ago, store the DVR offset
+          // The player will build a timeshift URL from this
+          setReplaySeekOffset(seekSecs);
+        } else if (seekSecs > 0) {
+          setReplaySeekOffset(seekSecs);
+        }
+        
         setTimeout(() => loadCamera(camera, 0), 300);
       }
       // Clean URL params without reload

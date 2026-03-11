@@ -556,6 +556,19 @@ export default function HlsPlayer({
   const initialSeekAppliedRef = useRef(false);
   useEffect(() => {
     if (initialSeekAppliedRef.current || !initialSeekOffset || initialSeekOffset <= 0) return;
+    
+    // For large offsets (> 5 minutes), load a timeshift DVR URL instead of seeking
+    if (initialSeekOffset > 300 && streamBase) {
+      const windowSec = 3600; // 1-hour review window
+      const url = buildStreamUrl(streamBase, initialSeekOffset, windowSec);
+      console.log(`[HlsPlayer] Replay: loading timeshift URL, offset: ${initialSeekOffset}s, window: ${windowSec}s`);
+      setIsReviewMode(true);
+      initialSeekAppliedRef.current = true;
+      loadSource(url);
+      return;
+    }
+    
+    // For small offsets, seek within the current live stream
     if (seekableEnd <= seekableStart || seekableEnd === 0) return;
     const video = videoRef.current;
     if (!video) return;
@@ -567,7 +580,7 @@ export default function HlsPlayer({
       initialSeekAppliedRef.current = true;
       console.log(`[HlsPlayer] Applied initial seek: -${initialSeekOffset}s → time ${targetTime.toFixed(1)}`);
     }
-  }, [initialSeekOffset, seekableStart, seekableEnd]);
+  }, [initialSeekOffset, seekableStart, seekableEnd, streamBase]);
 
   // ── Report player stats to parent for heartbeat QoE metrics ──
   const bufferCountRef = useRef(0);

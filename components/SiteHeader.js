@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Menu, X, Crown, Shield, Zap, LogOut } from 'lucide-react';
 
@@ -21,8 +21,27 @@ const NAV_ITEMS = [
   { id: 'about', label: 'About', href: '/?page=about' },
 ];
 
-export default function SiteHeader({ currentPage = '', user = null, onLogin, onLogout }) {
+export default function SiteHeader({ currentPage = '', user: userProp = null, onLogin, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [autoUser, setAutoUser] = useState(null);
+
+  // Auto-detect logged-in user if no user prop is passed
+  useEffect(() => {
+    if (userProp) return; // Parent already provided user
+    try {
+      const token = localStorage.getItem('railstream_token');
+      if (token) {
+        fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            if (data && (data.username || data.name)) setAutoUser(data);
+          })
+          .catch(() => {});
+      }
+    } catch (e) {}
+  }, [userProp]);
+
+  const user = userProp || autoUser;
 
   // For standalone pages, determine active from href
   const activePage = currentPage || (typeof window !== 'undefined' ? window.location.pathname.replace('/', '') || 'home' : 'home');

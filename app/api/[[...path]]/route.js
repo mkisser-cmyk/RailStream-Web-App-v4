@@ -440,6 +440,58 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json(data));
     }
 
+    // ── Favorites API ──
+    // GET /api/favorites — List user's favorites
+    if (route === '/favorites' && method === 'GET') {
+      const token = getToken(request);
+      if (!token) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }));
+      const res = await fetch(`${API_BASE}/api/favorites`, {
+        headers: { 'X-API-Key': API_KEY, 'Authorization': `Bearer ${token}` },
+      });
+      const data = await res.json();
+      return handleCORS(NextResponse.json(data));
+    }
+
+    // POST /api/favorites/{camera_id} — Add to favorites
+    if (route.startsWith('/favorites/') && method === 'POST') {
+      const cameraId = route.replace('/favorites/', '');
+      const token = getToken(request);
+      if (!token) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }));
+      const res = await fetch(`${API_BASE}/api/favorites/${cameraId}`, {
+        method: 'POST',
+        headers: { 'X-API-Key': API_KEY, 'Authorization': `Bearer ${token}` },
+      });
+      const data = await res.json();
+      return handleCORS(NextResponse.json(data));
+    }
+
+    // DELETE /api/favorites/{camera_id} — Remove from favorites
+    if (route.startsWith('/favorites/') && method === 'DELETE') {
+      const cameraId = route.replace('/favorites/', '');
+      const token = getToken(request);
+      if (!token) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }));
+      const res = await fetch(`${API_BASE}/api/favorites/${cameraId}`, {
+        method: 'DELETE',
+        headers: { 'X-API-Key': API_KEY, 'Authorization': `Bearer ${token}` },
+      });
+      const data = await res.json();
+      return handleCORS(NextResponse.json(data));
+    }
+
+    // PUT /api/favorites — Bulk sync/replace all favorites
+    if (route === '/favorites' && method === 'PUT') {
+      const token = getToken(request);
+      if (!token) return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }));
+      const body = await request.json();
+      const res = await fetch(`${API_BASE}/api/favorites`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY, 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ camera_ids: body.camera_ids }),
+      });
+      const data = await res.json();
+      return handleCORS(NextResponse.json(data));
+    }
+
     // Devices: Register a device
     if (route === '/devices/register' && method === 'POST') {
       const body = await request.json();
