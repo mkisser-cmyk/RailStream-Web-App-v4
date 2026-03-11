@@ -280,13 +280,22 @@ export default function HlsPlayer({
   const thumbDebounceRef = useRef(null);
   const [dvrUrlOffset, setDvrUrlOffset] = useState(0); // DVR offset from URL for thumbnail timestamp calc
 
-  // Review Ops
+  // Review Ops — default to 1 hour ago
   const [showReviewOps, setShowReviewOps] = useState(false);
   const [isReviewMode, setIsReviewMode] = useState(false);
   const [reviewDay, setReviewDay] = useState(0); // 0 = today
-  const [reviewHour, setReviewHour] = useState(12);
+  const [reviewHour, setReviewHour] = useState(() => {
+    const h = new Date();
+    h.setHours(h.getHours() - 1);
+    const h12 = h.getHours() % 12 || 12;
+    return h12;
+  });
   const [reviewMinute, setReviewMinute] = useState(0);
-  const [reviewAmPm, setReviewAmPm] = useState('PM');
+  const [reviewAmPm, setReviewAmPm] = useState(() => {
+    const h = new Date();
+    h.setHours(h.getHours() - 1);
+    return h.getHours() >= 12 ? 'PM' : 'AM';
+  });
   const [reviewBlock, setReviewBlock] = useState(3600);
 
   const MAX_RETRIES = 3;
@@ -692,8 +701,14 @@ export default function HlsPlayer({
   }, [thumbHover, thumbPct, seekableStart, seekableEnd, dvrUrlOffset, streamEndUnixTime]);
 
   // ── Review Ops ──
+  const [reviewError, setReviewError] = useState('');
+
   const startReviewOps = () => {
-    if (!streamBase) return;
+    setReviewError('');
+    if (!streamBase) {
+      setReviewError('Stream not available. Please wait for the camera to load.');
+      return;
+    }
 
     // Calculate offset in seconds from now
     const now = new Date();
@@ -706,7 +721,10 @@ export default function HlsPlayer({
     target.setHours(hour24, reviewMinute, 0, 0);
 
     const offsetMs = now.getTime() - target.getTime();
-    if (offsetMs < 0) return; // Can't go to the future
+    if (offsetMs < 0) {
+      setReviewError('That time hasn\'t happened yet! Pick an earlier time or a previous day.');
+      return;
+    }
 
     const offsetSec = Math.floor(offsetMs / 1000);
     const url = buildStreamUrl(streamBase, offsetSec, reviewBlock);
@@ -1193,6 +1211,13 @@ export default function HlsPlayer({
             </div>
             <p className="text-white/50 text-xs mb-5">Total Timeline: {dvrDays}d 00h</p>
 
+            {/* Error message */}
+            {reviewError && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-medium">
+                {reviewError}
+              </div>
+            )}
+
             {/* Buttons */}
             <div className="flex gap-3">
               {isReviewMode && (
@@ -1200,7 +1225,7 @@ export default function HlsPlayer({
                   Back to Live Ops
                 </button>
               )}
-              <button onClick={() => setShowReviewOps(false)} className="flex-1 py-2.5 rounded-lg border border-white/10 text-white/70 hover:bg-white/5 font-medium transition-colors">
+              <button onClick={() => { setShowReviewOps(false); setReviewError(''); }} className="flex-1 py-2.5 rounded-lg border border-white/10 text-white/70 hover:bg-white/5 font-medium transition-colors">
                 Cancel
               </button>
               <button onClick={startReviewOps} className="flex-1 py-2.5 rounded-lg bg-[#ff7a00] hover:bg-[#ff8c20] text-white font-bold transition-colors">
