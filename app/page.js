@@ -1195,6 +1195,16 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
                                 {camera.status === 'online' && (
                                   <span className="absolute top-1 left-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" aria-label="Live" />
                                 )}
+                                {camera.status === 'offline' && (
+                                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                    <span className="bg-red-600 text-white text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Offline</span>
+                                  </div>
+                                )}
+                                {camera.status === 'coming_soon' && (
+                                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                    <span className="bg-[#ff7a00] text-white text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Coming Soon</span>
+                                  </div>
+                                )}
                                 {!hasAccess && (
                                   <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                                     <Lock className="w-3 h-3 text-white" aria-hidden="true" />
@@ -1948,6 +1958,32 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   }, [focusedSlot]);
 
   const handleSelectCamera = (camera) => {
+    // For offline/coming_soon cameras, place in slot but with special state (no stream auth needed)
+    if (camera.status === 'offline' || camera.status === 'coming_soon') {
+      let slotIndex = 0;
+      if (viewMode === 'single') {
+        slotIndex = 0;
+      } else if (targetSlot !== null && targetSlot < slots) {
+        slotIndex = targetSlot;
+        setTargetSlot(null);
+      } else {
+        const emptySlot = selectedCameras.slice(0, slots).findIndex(c => !c);
+        slotIndex = emptySlot === -1 ? 0 : emptySlot;
+      }
+      const newCameras = [...selectedCameras];
+      newCameras[slotIndex] = camera;
+      setSelectedCameras(newCameras);
+      setPlaybackStates(prev => ({
+        ...prev,
+        [slotIndex]: {
+          loading: false,
+          data: null,
+          error: camera.status === 'offline' ? 'Camera is currently offline' : 'Coming soon',
+        },
+      }));
+      return;
+    }
+
     // In single view, always replace slot 0
     if (viewMode === 'single') {
       loadCamera(camera, 0);
@@ -2318,6 +2354,60 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                             )}
                             {isCompact && (
                               <p className="text-red-400 text-[10px]">Limit reached</p>
+                            )}
+                          </div>
+                        </div>
+                      ) : state.error && camera.status === 'offline' ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black">
+                          <div className="text-center p-4 max-w-sm">
+                            {!isCompact ? (
+                              <>
+                                <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-4">
+                                  <Camera className="w-8 h-8 text-red-400" />
+                                </div>
+                                <p className="text-white text-xl font-bold mb-2">Camera Offline</p>
+                                <p className="text-white/80 font-medium mb-1">{camera.name}</p>
+                                <p className="text-white/50 text-sm mb-4">{camera.location}</p>
+                                <p className="text-white/40 text-sm mb-4">
+                                  {camera.description || 'This camera is temporarily unavailable. Please check back later.'}
+                                </p>
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-full text-red-400 text-xs font-semibold">
+                                  <span className="w-2 h-2 bg-red-500 rounded-full" />
+                                  OFFLINE
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <Camera className="w-6 h-6 text-red-400 mx-auto mb-1" />
+                                <p className="text-red-400 text-[10px] font-bold">OFFLINE</p>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ) : state.error && camera.status === 'coming_soon' ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black">
+                          <div className="text-center p-4 max-w-sm">
+                            {!isCompact ? (
+                              <>
+                                <div className="w-16 h-16 rounded-full bg-[#ff7a00]/10 border border-[#ff7a00]/20 flex items-center justify-center mx-auto mb-4">
+                                  <Camera className="w-8 h-8 text-[#ff7a00]" />
+                                </div>
+                                <p className="text-white text-xl font-bold mb-2">Coming Soon</p>
+                                <p className="text-white/80 font-medium mb-1">{camera.name}</p>
+                                <p className="text-white/50 text-sm mb-4">{camera.location}</p>
+                                <p className="text-white/40 text-sm mb-4">
+                                  {camera.description || 'This camera location is being set up and will be available soon.'}
+                                </p>
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#ff7a00]/10 border border-[#ff7a00]/20 rounded-full text-[#ff7a00] text-xs font-semibold">
+                                  <span className="w-2 h-2 bg-[#ff7a00] rounded-full animate-pulse" />
+                                  COMING SOON
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <Camera className="w-6 h-6 text-[#ff7a00] mx-auto mb-1" />
+                                <p className="text-[#ff7a00] text-[10px] font-bold">COMING SOON</p>
+                              </>
                             )}
                           </div>
                         </div>
