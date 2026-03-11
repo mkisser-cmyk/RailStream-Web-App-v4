@@ -105,7 +105,7 @@ function calcThumbTimestamp(hoverPct, seekableStart, seekableEnd) {
 // ── Thumbnail Preview Component — with aggressive caching for fast scrubbing ──
 const thumbCacheMap = new Map(); // Persistent cache across renders: timestamp -> src URL
 
-function ThumbnailPreview({ visible, screenX, screenY, timestamp, streamName, timeLabel }) {
+function ThumbnailPreview({ visible, screenX, screenY, timestamp, streamName, timeLabel, viewMode }) {
   const [displaySrc, setDisplaySrc] = useState(null);
   const loadingRef = useRef(null);
   const lastDirRef = useRef(0); // -1 = left, 1 = right
@@ -151,22 +151,38 @@ function ThumbnailPreview({ visible, screenX, screenY, timestamp, streamName, ti
 
   if (!visible) return null;
 
-  const thumbW = 240;
-  const thumbH = 135;
+  // Responsive thumbnail size based on view mode
+  const isCompact = viewMode === 'quad' || viewMode === 'nine' || viewMode === 'sixteen';
+  const thumbW = isCompact ? 160 : 240;
+  const thumbH = isCompact ? 90 : 135;
+  const gapAbove = isCompact ? 30 : 50;
+  const borderWidth = isCompact ? 2 : 3;
+  const labelFontSize = isCompact ? 11 : 13;
+
+  // Clamp horizontal position so the thumbnail never overflows the viewport
+  const halfW = thumbW / 2;
+  const viewportW = typeof window !== 'undefined' ? window.innerWidth : 1920;
+  const minLeft = halfW + 8; // 8px padding from left edge
+  const maxLeft = viewportW - halfW - 8; // 8px padding from right edge
+  const clampedX = Math.max(minLeft, Math.min(maxLeft, screenX));
+
+  // Clamp vertical: ensure thumbnail doesn't go above viewport top
+  const rawTop = screenY - thumbH - gapAbove;
+  const clampedTop = Math.max(8, rawTop);
 
   return (
     <div style={{
       position: 'fixed',
-      left: screenX,
-      top: screenY - thumbH - 50,
+      left: clampedX,
+      top: clampedTop,
       transform: 'translateX(-50%)',
       pointerEvents: 'none',
       zIndex: 99999,
       transition: 'left 0.06s linear',
     }}>
       <div style={{
-        width: thumbW, height: thumbH, borderRadius: 6, overflow: 'hidden',
-        border: '3px solid #ff7a00',
+        width: thumbW, height: thumbH, borderRadius: isCompact ? 4 : 6, overflow: 'hidden',
+        border: `${borderWidth}px solid #ff7a00`,
         boxShadow: '0 4px 24px rgba(0,0,0,0.7), 0 0 12px rgba(255,122,0,0.3)',
         background: '#000',
       }}>
@@ -174,15 +190,15 @@ function ThumbnailPreview({ visible, screenX, screenY, timestamp, streamName, ti
           <img src={displaySrc} alt="Preview" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} draggable={false} />
         ) : (
           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111' }}>
-            <div style={{ width: 24, height: 24, border: '3px solid rgba(255,122,0,0.4)', borderTopColor: '#ff7a00', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+            <div style={{ width: isCompact ? 18 : 24, height: isCompact ? 18 : 24, border: '3px solid rgba(255,122,0,0.4)', borderTopColor: '#ff7a00', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
           </div>
         )}
       </div>
       {timeLabel && (
-        <div style={{ textAlign: 'center', marginTop: 6 }}>
+        <div style={{ textAlign: 'center', marginTop: isCompact ? 4 : 6 }}>
           <span style={{
             display: 'inline-block', background: 'rgba(255,255,255,0.9)', color: '#111',
-            fontSize: 13, fontWeight: 700, fontFamily: 'monospace', padding: '3px 10px',
+            fontSize: labelFontSize, fontWeight: 700, fontFamily: 'monospace', padding: isCompact ? '2px 7px' : '3px 10px',
             borderRadius: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
           }}>{timeLabel}</span>
         </div>
@@ -774,6 +790,7 @@ export default function HlsPlayer({
                     timestamp={thumbTimestamp}
                     streamName={streamName}
                     timeLabel={thumbTimeLabel || 'Loading...'}
+                    viewMode={viewMode}
                   />
                 )}
                 {/* Hover position indicator line */}

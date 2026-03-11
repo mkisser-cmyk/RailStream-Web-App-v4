@@ -971,7 +971,7 @@ async function handleRoute(request, { params }) {
         const todayStart = today + 'T00:00:00Z';
         const todayEnd = today + 'T23:59:59Z';
 
-        const [totalAll, totalToday, topRailroads, topLocations] = await Promise.all([
+        const [totalAll, totalToday, topRailroads, topLocations, leaderboard] = await Promise.all([
           col.countDocuments({}),
           col.countDocuments({ sighting_time: { $gte: todayStart, $lte: todayEnd } }),
           col.aggregate([
@@ -984,7 +984,21 @@ async function handleRoute(request, { params }) {
             { $sort: { count: -1 } },
             { $limit: 10 },
           ]).toArray(),
+          col.aggregate([
+            { $group: { _id: '$user', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 20 },
+          ]).toArray(),
         ]);
+
+        // Points system: each sighting = 10 points, with image = 15 points
+        // For leaderboard, we'll calculate points (10 per sighting base)
+        const leaderboardWithPoints = leaderboard.map((u, idx) => ({
+          username: u._id,
+          sightings: u.count,
+          points: u.count * 10,
+          rank: idx + 1,
+        }));
 
         return handleCORS(NextResponse.json({
           ok: true,
@@ -992,6 +1006,7 @@ async function handleRoute(request, { params }) {
           today: totalToday,
           top_railroads: topRailroads.map(r => ({ name: r._id, count: r.count })),
           top_locations: topLocations.map(l => ({ name: l._id, count: l.count })),
+          leaderboard: leaderboardWithPoints,
         }));
       } catch (error) {
         console.error('Sightings stats error:', error);

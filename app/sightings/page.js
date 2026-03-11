@@ -298,6 +298,49 @@ export default function SightingsPage() {
           </div>
         )}
 
+        {/* Leaderboard */}
+        {stats?.leaderboard && stats.leaderboard.length > 0 && (
+          <div className="bg-zinc-900/80 border border-white/[0.06] rounded-xl mb-8 overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-white/[0.06] flex items-center gap-2.5">
+              <Award className="w-4 h-4 text-[#ff7a00]" />
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider">Top Spotters</h2>
+              <span className="text-white/25 text-xs ml-auto">10 pts per sighting</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 divide-x divide-white/[0.04]">
+              {stats.leaderboard.slice(0, 5).map((entry, idx) => {
+                const medals = ['#FFD700', '#C0C0C0', '#CD7F32']; // gold, silver, bronze
+                const isMe = user && (entry.username === user.username || entry.username === user.name);
+                return (
+                  <div
+                    key={entry.username}
+                    className={`px-4 py-3.5 flex items-center gap-3 ${isMe ? 'bg-[#ff7a00]/5' : ''} ${idx === 0 ? 'bg-gradient-to-r from-[#ff7a00]/[0.08] to-transparent' : ''}`}
+                  >
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 ${
+                      idx < 3
+                        ? 'text-black'
+                        : 'bg-white/[0.06] text-white/40'
+                    }`}
+                      style={idx < 3 ? { background: medals[idx] } : {}}
+                    >
+                      {idx + 1}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm font-semibold truncate ${isMe ? 'text-[#ff7a00]' : 'text-white'}`}>
+                        {entry.username}
+                        {isMe && <span className="text-[10px] text-[#ff7a00]/60 ml-1.5">(you)</span>}
+                      </p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-white/30 text-[11px]">{entry.sightings} sighting{entry.sightings !== 1 ? 's' : ''}</span>
+                        <span className="text-[#ff7a00]/60 text-[11px] font-bold">{entry.points} pts</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Filters Bar */}
         <div className="mb-6">
           <button
@@ -479,7 +522,17 @@ export default function SightingsPage() {
                             )}
 
                             {/* Posted by */}
-                            <p className="text-white/20 text-[11px] mt-2.5">by {s.user}</p>
+                            <p className="text-white/20 text-[11px] mt-2.5">
+                              by <span className="text-white/40 font-medium">{s.user}</span>
+                              {stats?.leaderboard && (() => {
+                                const rank = stats.leaderboard.find(l => l.username === s.user);
+                                if (rank && rank.rank <= 3) {
+                                  const medals = ['🥇', '🥈', '🥉'];
+                                  return <span className="ml-1.5" title={`#${rank.rank} spotter • ${rank.points} pts`}>{medals[rank.rank - 1]}</span>;
+                                }
+                                return null;
+                              })()}
+                            </p>
                           </div>
 
                           {/* Actions */}
