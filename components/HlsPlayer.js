@@ -257,6 +257,7 @@ export default function HlsPlayer({
   onPlaying,
   onError,
   onLogSighting,
+  onStatsUpdate,
   initialSeekOffset = 0,
   className = '',
   poster = null,
@@ -565,6 +566,51 @@ export default function HlsPlayer({
       console.log(`[HlsPlayer] Applied initial seek: -${initialSeekOffset}s → time ${targetTime.toFixed(1)}`);
     }
   }, [initialSeekOffset, seekableStart, seekableEnd]);
+
+  // ── Report player stats to parent for heartbeat QoE metrics ──
+  const bufferCountRef = useRef(0);
+  const errorCountRef = useRef(0);
+  const bufferTimeRef = useRef(0);
+  const lastBufferStartRef = useRef(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onWaiting = () => {
+      bufferCountRef.current++;
+      lastBufferStartRef.current = Date.now();
+    };
+    const onCanPlay = () => {
+      if (lastBufferStartRef.current) {
+        bufferTimeRef.current += (Date.now() - lastBufferStartRef.current) / 1000;
+        lastBufferStartRef.current = null;
+      }
+    };
+    video.addEventListener('waiting', onWaiting);
+    video.addEventListener('canplay', onCanPlay);
+    return () => {
+      video.removeEventListener('waiting', onWaiting);
+      video.removeEventListener('canplay', onCanPlay);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!onStatsUpdate) return;
+    const statsInterval = setInterval(() => {
+      const video = videoRef.current;
+      if (!video) return;
+      const state = video.paused ? 'paused' : isLoading ? 'buffering' : 'playing';
+      onStatsUpdate({
+        state,
+        position: Math.floor(video.currentTime || 0),
+        bufferCount: bufferCountRef.current,
+        bufferTime: Math.round(bufferTimeRef.current * 10) / 10,
+        errorCount: errorCountRef.current,
+      });
+    }, 10000); // Report every 10s
+    return () => clearInterval(statsInterval);
+  }, [onStatsUpdate, isLoading]);
+
 
   // ── Auto-hide controls ──
   const resetControlsTimer = useCallback(() => {

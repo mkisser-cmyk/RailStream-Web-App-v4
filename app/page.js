@@ -1238,7 +1238,7 @@ function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCame
 
 // WATCH PAGE
 // ============================================
-function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera, removeCamera, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp, replaySeekOffset = 0, clearReplaySeek }) {
+function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera, removeCamera, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp, replaySeekOffset = 0, clearReplaySeek, playerStatsRef }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
@@ -1557,6 +1557,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                         hideReviewButton={true}
                         onLogSighting={user ? (data) => handleLogSighting(selectedCameras[focusedSlot], data) : undefined}
                         initialSeekOffset={focusedSlot === 0 ? replaySeekOffset : 0}
+                        onStatsUpdate={(stats) => { playerStatsRef.current[focusedSlot] = stats; }}
                       />
                     ) : state.loading ? (
                       <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="w-10 h-10 text-[#ff7a00] animate-spin" /></div>
@@ -1668,6 +1669,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                           hideReviewButton={true}
                           onLogSighting={user && !isCompact ? (data) => handleLogSighting(selectedCameras[i], data) : undefined}
                           initialSeekOffset={i === 0 ? replaySeekOffset : 0}
+                          onStatsUpdate={(stats) => { playerStatsRef.current[i] = stats; }}
                         />
                       ) : null}
                       
@@ -2373,27 +2375,52 @@ export default function App() {
   const [thumbTimestamp, setThumbTimestamp] = useState(Date.now());
 
   // Active session tracking for heartbeat and cleanup
-  const activeSessionsRef = useRef({}); // { slotIndex: session_id }
+  const activeSessionsRef = useRef({}); // { slotIndex: { session_id, camera_id } }
+  const playerStatsRef = useRef({}); // { slotIndex: { state, position, bufferCount, ... } }
 
   // Heartbeat — keep active sessions alive every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       const sessions = activeSessionsRef.current;
-      const sessionIds = Object.values(sessions).filter(Boolean);
-      if (sessionIds.length === 0) return;
+      const entries = Object.entries(sessions).filter(([, v]) => v);
+      if (entries.length === 0) return;
       const token = auth.getToken();
-      sessionIds.forEach(sessionId => {
+      const deviceInfo = getDeviceInfo();
+      const connType = typeof navigator !== 'undefined' && navigator.connection
+        ? navigator.connection.effectiveType || 'unknown'
+        : 'unknown';
+
+      entries.forEach(([slotIdx, sessionData]) => {
+        const sessionId = typeof sessionData === 'string' ? sessionData : sessionData?.session_id;
+        if (!sessionId) return;
+
+        // Get player stats for this slot if available
+        const stats = playerStatsRef.current[slotIdx] || {};
+
         fetch('/api/playback/heartbeat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({ session_id: sessionId, device_id: getDeviceId() }),
+          body: JSON.stringify({
+            session_id: sessionId,
+            device_id: getDeviceId(),
+            state: stats.state || 'playing',
+            position_seconds: stats.position || 0,
+            app_version: 'Web 1.0',
+            device_model: deviceInfo.device_model || 'Browser',
+            os_version: deviceInfo.os_version || 'Unknown',
+            client_type: 'web',
+            player_version: 'hls.js',
+            connection_type: connType,
+            buffer_count: stats.bufferCount || 0,
+            buffer_time_seconds: stats.bufferTime || 0,
+            error_count: stats.errorCount || 0,
+          }),
         })
         .then(r => r.json())
         .then(data => {
-          // Kick detection: device was removed remotely
           if (data.code === 'device_removed' || data.code === 'device_not_registered') {
             alert('This device has been signed out remotely. Please sign in again.');
             auth.removeToken();
@@ -2412,7 +2439,9 @@ export default function App() {
     const cleanup = () => {
       const sessions = activeSessionsRef.current;
       const token = auth.getToken();
-      Object.values(sessions).filter(Boolean).forEach(sessionId => {
+      Object.values(sessions).filter(Boolean).forEach(sessionData => {
+        const sessionId = typeof sessionData === 'string' ? sessionData : sessionData?.session_id;
+        if (!sessionId) return;
         // Use sendBeacon for reliable delivery on tab close
         const url = `/api/playback/stop?session_id=${sessionId}`;
         if (navigator.sendBeacon) {
@@ -2583,14 +2612,18 @@ export default function App() {
     setPlaybackStates(prev => ({ ...prev, [slotIndex]: { loading: true, data: null, error: null } }));
     
     // Stop any existing session in this slot
-    const oldSessionId = activeSessionsRef.current[slotIndex];
-    if (oldSessionId) {
-      const token = auth.getToken();
-      fetch(`/api/playback/stop?session_id=${oldSessionId}`, {
-        method: 'POST',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      }).catch(() => {});
+    const oldSession = activeSessionsRef.current[slotIndex];
+    if (oldSession) {
+      const oldSid = typeof oldSession === 'string' ? oldSession : oldSession?.session_id;
+      if (oldSid) {
+        const token = auth.getToken();
+        fetch(`/api/playback/stop?session_id=${oldSid}`, {
+          method: 'POST',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        }).catch(() => {});
+      }
       delete activeSessionsRef.current[slotIndex];
+      delete playerStatsRef.current[slotIndex];
     }
     
     try {
@@ -2671,14 +2704,18 @@ export default function App() {
   // Remove a camera from a slot and stop its session
   const removeCamera = (slotIndex) => {
     // Stop the session for this slot
-    const sessionId = activeSessionsRef.current[slotIndex];
-    if (sessionId) {
-      const token = auth.getToken();
-      fetch(`/api/playback/stop?session_id=${sessionId}`, {
-        method: 'POST',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      }).catch(() => {});
+    const sessionData = activeSessionsRef.current[slotIndex];
+    if (sessionData) {
+      const sid = typeof sessionData === 'string' ? sessionData : sessionData?.session_id;
+      if (sid) {
+        const token = auth.getToken();
+        fetch(`/api/playback/stop?session_id=${sid}`, {
+          method: 'POST',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        }).catch(() => {});
+      }
       delete activeSessionsRef.current[slotIndex];
+      delete playerStatsRef.current[slotIndex];
     }
     // Clear the camera and playback state
     const newCameras = [...selectedCameras];
@@ -2769,6 +2806,7 @@ export default function App() {
             thumbTimestamp={thumbTimestamp}
             replaySeekOffset={replaySeekOffset}
             clearReplaySeek={() => setReplaySeekOffset(0)}
+            playerStatsRef={playerStatsRef}
           />
         )}
 
