@@ -179,14 +179,14 @@ export default function TechnologyPage() {
             </div>
             <div className="relative rounded-2xl overflow-hidden aspect-[4/3] group">
               <img
-                src="https://cdn.casestudies.svc.ui.com/Rail_Stream_04_7337979ad9.jpg"
-                alt="RailStream data center with MC-LAG redundant switching"
+                src="https://cdn.casestudies.svc.ui.com/Rail_Stream_01_410f6fbf7b.jpg"
+                alt="RailStream self-hosted data center with server racks and networking equipment"
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
               <div className="absolute bottom-4 left-4 right-4">
                 <span className="px-3 py-1.5 bg-black/60 backdrop-blur-sm text-white/90 text-xs font-medium rounded-lg">
-                  RailStream Data Center — Redundant Core Infrastructure
+                  RailStream Data Center — Self-Hosted Infrastructure
                 </span>
               </div>
             </div>
@@ -227,14 +227,14 @@ export default function TechnologyPage() {
           <div className="grid md:grid-cols-2 gap-12 md:gap-16 items-center">
             <div className="relative rounded-2xl overflow-hidden aspect-[4/3] group order-2 md:order-1">
               <img
-                src="https://cdn.casestudies.svc.ui.com/Rail_Stream_01_410f6fbf7b.jpg"
-                alt="RailStream camera installation with professional audio equipment"
+                src="https://cdn.casestudies.svc.ui.com/Rail_Stream_04_7337979ad9.jpg"
+                alt="60 GHz wireless link hardware at a RailStream camera site"
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
               <div className="absolute bottom-4 left-4 right-4">
                 <span className="px-3 py-1.5 bg-black/60 backdrop-blur-sm text-white/90 text-xs font-medium rounded-lg">
-                  Professional Camera & Audio Installation
+                  60 GHz Wireless Link — Camera Site Hardware
                 </span>
               </div>
             </div>
@@ -416,7 +416,7 @@ export default function TechnologyPage() {
                 <span className="text-[#ff7a00]"> Co-Founders</span>
               </h2>
               <p className="text-lg text-white/60 mb-6 leading-relaxed">
-                RailStream was built by <span className="text-white font-semibold">Mike & Andrea Kisser</span> — a husband-and-wife team who turned a passion for railfanning into a broadcast-grade streaming network. Since 2011, they've grown RailStream from a single camera at the Fostoria Iron Triangle into a 40+ site network serving viewers in 175 countries.
+                RailStream was built by <span className="text-white font-semibold">Mike Kisser & Andrea Mercatante</span> — a husband-and-wife team who turned a passion for railfanning into a broadcast-grade streaming network. Since 2011, they've grown RailStream from a single camera at the Fostoria Iron Triangle into a 40+ site network serving viewers in 175 countries.
               </p>
               <p className="text-lg text-white/60 mb-8 leading-relaxed">
                 Mike architects the technology — the GPU farm, the network, the streaming pipeline. Andrea is the heart and creative force behind the brand, the community, and the experience that keeps viewers coming back.
