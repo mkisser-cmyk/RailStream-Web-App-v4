@@ -90,14 +90,13 @@ function extractStreamName(hlsUrl) {
 }
 
 // ── Thumbnail scrub timestamp calculator ──
-function calcThumbTimestamp(hoverPct, seekableStart, seekableEnd) {
+function calcThumbTimestamp(hoverPct, seekableStart, seekableEnd, streamEndUnixTime) {
   // Map hover percentage to a position in the seekable range
   const seekRange = seekableEnd - seekableStart;
   const posInStream = seekableStart + hoverPct * seekRange;
-  // seekableEnd ≈ "now", so unix timestamp = now - (seekableEnd - posInStream)
-  const nowUnix = Math.floor(Date.now() / 1000);
-  const offsetFromLive = seekableEnd - posInStream;
-  const ts = nowUnix - Math.floor(offsetFromLive);
+  // streamEndUnixTime = the wall-clock time corresponding to seekableEnd
+  const offsetFromEnd = seekableEnd - posInStream;
+  const ts = streamEndUnixTime - Math.floor(offsetFromEnd);
   // Round to nearest 2-second boundary
   return Math.round(ts / 2) * 2;
 }
@@ -279,6 +278,7 @@ export default function HlsPlayer({
   const [thumbScreenX, setThumbScreenX] = useState(0);
   const [thumbScreenY, setThumbScreenY] = useState(0);
   const thumbDebounceRef = useRef(null);
+  const [dvrUrlOffset, setDvrUrlOffset] = useState(0); // DVR offset from URL for thumbnail timestamp calc
 
   // Review Ops
   const [showReviewOps, setShowReviewOps] = useState(false);
@@ -337,6 +337,16 @@ export default function HlsPlayer({
     setIsLoading(true);
     setError(null);
     setRetryCount(0);
+
+    // Extract DVR offset from URL for correct thumbnail timestamps
+    // URL format: playlist_dvr_timeshift-{offset}-{window}.m3u8
+    const timeshiftMatch = url.match(/playlist_dvr_timeshift-(\d+)-(\d+)/);
+    if (timeshiftMatch) {
+      const offset = parseInt(timeshiftMatch[1], 10);
+      setDvrUrlOffset(offset);
+    } else {
+      setDvrUrlOffset(0); // Live stream
+    }
 
     if (Hls.isSupported()) {
       destroyHls();
@@ -641,23 +651,45 @@ export default function HlsPlayer({
     setThumbHover(false);
   }, []);
 
+  // Compute the wall-clock unix time that corresponds to seekableEnd
+  // For live: seekableEnd ≈ now → streamEndUnixTime = Date.now()/1000
+  // For historical DVR: URL has playlist_dvr_timeshift-{offset}-{window}
+  //   seekableEnd ≈ now - offset (the newest point in the window)
+  const streamEndUnixTime = useMemo(() => {
+    return Math.floor(Date.now() / 1000) - dvrUrlOffset;
+  }, [dvrUrlOffset]);
+
   // Calculate thumbnail timestamp for current hover position
   const thumbTimestamp = useMemo(() => {
     if (!thumbHover || seekableEnd <= seekableStart) return null;
-    return calcThumbTimestamp(thumbPct, seekableStart, seekableEnd);
-  }, [thumbHover, thumbPct, seekableStart, seekableEnd]);
+    return calcThumbTimestamp(thumbPct, seekableStart, seekableEnd, streamEndUnixTime);
+  }, [thumbHover, thumbPct, seekableStart, seekableEnd, streamEndUnixTime]);
 
-  // Calculate time label for thumbnail hover — format as -MM:SS offset from live
+  // Calculate time label for thumbnail hover
   const thumbTimeLabel = useMemo(() => {
     if (!thumbHover || seekableEnd <= seekableStart) return '';
     const seekRange = seekableEnd - seekableStart;
     const posInStream = seekableStart + thumbPct * seekRange;
-    const offsetFromLive = seekableEnd - posInStream;
-    if (offsetFromLive < 2) return 'LIVE';
-    const mins = Math.floor(offsetFromLive / 60);
-    const secs = Math.floor(offsetFromLive % 60);
+    const offsetFromEnd = seekableEnd - posInStream;
+    
+    // In review mode, show actual time; in live mode, show offset from live
+    if (dvrUrlOffset > 0) {
+      // Historical DVR window — show actual wall-clock time
+      const wallTime = new Date((streamEndUnixTime - Math.floor(offsetFromEnd)) * 1000);
+      const h = wallTime.getHours();
+      const m = String(wallTime.getMinutes()).padStart(2, '0');
+      const s = String(wallTime.getSeconds()).padStart(2, '0');
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 || 12;
+      return `${h12}:${m}:${s} ${ampm}`;
+    }
+    
+    // Live mode — show offset from live edge
+    if (offsetFromEnd < 2) return 'LIVE';
+    const mins = Math.floor(offsetFromEnd / 60);
+    const secs = Math.floor(offsetFromEnd % 60);
     return `-${String(mins).padStart(1, '0')}:${String(secs).padStart(2, '0')}`;
-  }, [thumbHover, thumbPct, seekableStart, seekableEnd]);
+  }, [thumbHover, thumbPct, seekableStart, seekableEnd, dvrUrlOffset, streamEndUnixTime]);
 
   // ── Review Ops ──
   const startReviewOps = () => {
