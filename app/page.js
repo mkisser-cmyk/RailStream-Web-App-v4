@@ -923,7 +923,7 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
 // ============================================
 // CAMERA PICKER WITH FAVORITES & PRESETS
 // ============================================
-function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmin, viewMode, favorites, setFavorites, presets, setPresets, onLoadPreset, onSavePreset, thumbnailMap, thumbTimestamp, targetSlot, setTargetSlot }) {
+function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmin, viewMode, favorites, setFavorites, presets, setPresets, onLoadPreset, onSavePreset, thumbnailMap, thumbTimestamp, targetSlot, setTargetSlot, radioMap = {} }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [showPresets, setShowPresets] = useState(false);
@@ -964,6 +964,7 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmi
       c.location?.toLowerCase().includes(search.toLowerCase());
     let matchesFilter = true;
     if (filter === 'favorites') matchesFilter = favorites.includes(c._id);
+    else if (filter === 'radio') matchesFilter = radioMap[c._id] || !!c.radio_code;
     else if (filter !== 'all') matchesFilter = c.min_tier === filter;
     return matchesSearch && matchesFilter;
   });
@@ -1141,6 +1142,12 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmi
                     {favorites.length}
                   </TabsTrigger>
                 )}
+                {Object.keys(radioMap).length > 0 && (
+                  <TabsTrigger value="radio" className="flex-1 text-xs text-white data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+                    <Radio className="w-3 h-3 mr-1" aria-hidden="true" />
+                    Radio
+                  </TabsTrigger>
+                )}
                 {!userTier && (
                   <TabsTrigger value="fireman" className="flex-1 text-xs text-white data-[state=active]:bg-orange-600 data-[state=active]:text-white">Free</TabsTrigger>
                 )}
@@ -1189,6 +1196,7 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmi
                       // and for logged-in users who don't have access (to show upgrade prompt in player)
                       const isClickable = hasAccess || isStatusCamera || true; // Always clickable
                       const isFavorite = favorites.includes(camera._id);
+                      const hasRadio = radioMap[camera._id] || !!camera.radio_code;
                       
                       return (
                         <li key={camera._id}>
@@ -1226,7 +1234,18 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmi
                                 )}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm text-white truncate">{camera.name}</p>
+                                <p className="text-sm text-white truncate flex items-center gap-1.5">
+                                  {camera.name}
+                                  {hasRadio && (
+                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-600/20 text-emerald-400 text-[9px] font-bold uppercase tracking-wider flex-shrink-0" title="Railroad Radio Available">
+                                      <span className="relative flex h-1.5 w-1.5">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-50"></span>
+                                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                                      </span>
+                                      Radio
+                                    </span>
+                                  )}
+                                </p>
                                 <p className="text-xs text-white/70 truncate">{camera.location}</p>
                               </div>
                             </button>
@@ -1837,6 +1856,26 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   // Roundhouse quick-save from snapshot
   const [roundhouseCapture, setRoundhouseCapture] = useState(null); // { imageData, cameraName, cameraLocation }
 
+  // Radio detection map — tracks which cameras have scanner audio
+  const [radioMap, setRadioMap] = useState(() => {
+    // Load from localStorage for persistence across page refreshes
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('railstream_radio_map');
+        return saved ? JSON.parse(saved) : {};
+      } catch { return {}; }
+    }
+    return {};
+  });
+
+  const handleRadioDetected = useCallback((cameraId, hasRadio) => {
+    setRadioMap(prev => {
+      const updated = { ...prev, [cameraId]: hasRadio };
+      try { localStorage.setItem('railstream_radio_map', JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  }, []);
+
   // Ads system
   const [ads, setAds] = useState([]);
   const [showAdManager, setShowAdManager] = useState(false);
@@ -2179,6 +2218,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
             thumbTimestamp={thumbTimestamp}
             targetSlot={targetSlot}
             setTargetSlot={setTargetSlot}
+            radioMap={radioMap}
           />
         </div>
       )}
@@ -2407,6 +2447,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                         hideReviewButton={true}
                         onLogSighting={user ? (data) => handleLogSighting(selectedCameras[focusedSlot], data) : undefined}
                         onSaveToRoundhouse={user ? (data) => setRoundhouseCapture({ ...data, cameraId: selectedCameras[focusedSlot] }) : undefined}
+                        onRadioDetected={selectedCameras[focusedSlot] ? (hasRadio) => handleRadioDetected(selectedCameras[focusedSlot]._id, hasRadio) : undefined}
                         initialSeekOffset={focusedSlot === 0 ? replaySeekOffset : 0}
                         onStatsUpdate={(stats) => { playerStatsRef.current[focusedSlot] = stats; }}
                         adPlaying={prerollActive}
@@ -2609,6 +2650,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                           hideReviewButton={true}
                           onLogSighting={user && !isCompact ? (data) => handleLogSighting(selectedCameras[i], data) : undefined}
                           onSaveToRoundhouse={user && !isCompact ? (data) => setRoundhouseCapture({ ...data, cameraId: selectedCameras[i] }) : undefined}
+                          onRadioDetected={selectedCameras[i] ? (hasRadio) => handleRadioDetected(selectedCameras[i]._id, hasRadio) : undefined}
                           initialSeekOffset={i === 0 ? replaySeekOffset : 0}
                           onStatsUpdate={(stats) => { playerStatsRef.current[i] = stats; }}
                           adPlaying={prerollActive}

@@ -274,6 +274,7 @@ export default function HlsPlayer({
   onLogSighting,
   onSaveToRoundhouse,
   onStatsUpdate,
+  onRadioDetected,
   initialSeekOffset = 0,
   className = '',
   poster = null,
@@ -435,6 +436,10 @@ export default function HlsPlayer({
         // Audio tracks
         if (data.audioTracks && data.audioTracks.length > 0) {
           setAudioTracks(data.audioTracks.map((t, i) => ({ id: i, name: t.name || `Track ${i + 1}` })));
+          // Report radio availability to parent
+          if (data.audioTracks.length > 1 && onRadioDetected) {
+            onRadioDetected(true);
+          }
         }
         // Apply resolution-based quality cap for multi-view
         if (qualityTarget > 0 && hls.levels && hls.levels.length > 0) {
@@ -452,6 +457,9 @@ export default function HlsPlayer({
       hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (_, data) => {
         if (data.audioTracks && data.audioTracks.length > 0) {
           setAudioTracks(data.audioTracks.map((t, i) => ({ id: i, name: t.name || `Track ${i + 1}` })));
+          if (data.audioTracks.length > 1 && onRadioDetected) {
+            onRadioDetected(true);
+          }
         }
       });
 
@@ -1258,28 +1266,32 @@ export default function HlsPlayer({
             {/* Spacer */}
             <div className="flex-1" />
 
-            {/* Audio Track Selector — only shown when multiple tracks available */}
+            {/* Audio Track Selector — Railroad Radio indicator */}
             {audioTracks.length > 1 && (
               <div className="relative">
                 <button
                   onClick={() => setShowAudioMenu(!showAudioMenu)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-sm font-medium ${showAudioMenu ? 'bg-[#ff7a00] text-white' : 'bg-white/10 text-white hover:bg-white/15'}`}
-                  aria-label="Switch audio track"
-                  title="Switch audio track"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors text-sm font-bold ${showAudioMenu ? 'bg-[#ff7a00] text-white' : 'bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 ring-1 ring-emerald-500/30'}`}
+                  aria-label="Railroad Radio — switch audio track"
+                  title="Railroad Radio — switch audio track"
                 >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <span className="relative flex h-2.5 w-2.5 mr-0.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-50"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  </span>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
                   </svg>
-                  <span>Audio</span>
+                  <span className="hidden sm:inline">Radio</span>
                   <svg className={`w-3 h-3 transition-transform ${showAudioMenu ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
                   </svg>
                 </button>
                 {/* Audio menu dropdown */}
                 {showAudioMenu && (
-                  <div className="absolute bottom-full right-0 mb-2 bg-[#1a1a1a] border border-white/10 rounded-lg shadow-xl overflow-hidden min-w-[160px]">
-                    <div className="px-3 py-2 border-b border-white/10">
-                      <span className="text-[#ff7a00] text-xs font-bold uppercase">Audio Track</span>
+                  <div className="absolute bottom-full right-0 mb-2 bg-[#1a1a1a] border border-white/10 rounded-lg shadow-xl overflow-hidden min-w-[180px]">
+                    <div className="px-3 py-2 border-b border-white/10 flex items-center gap-2">
+                      <span className="text-emerald-400 text-xs font-black uppercase tracking-wider">📻 Railroad Radio</span>
                     </div>
                     {audioTracks.map((track) => (
                       <button
@@ -1287,7 +1299,7 @@ export default function HlsPlayer({
                         onClick={() => switchAudioTrack(track.id)}
                         className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2 ${
                           activeAudioTrack === track.id
-                            ? 'bg-[#ff7a00]/10 text-[#ff7a00]'
+                            ? 'bg-emerald-600/10 text-emerald-400'
                             : 'text-white/70 hover:bg-white/5 hover:text-white'
                         }`}
                       >
