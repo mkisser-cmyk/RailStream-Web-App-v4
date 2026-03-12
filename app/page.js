@@ -2108,23 +2108,15 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
     // Switch view mode
     setViewMode(preset.viewMode);
     
-    // Clear cameras and playback states in one go, then immediately load preset cameras
-    // This avoids the "flash" of empty slots
-    const freshCameras = [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null];
-    const freshStates = {};
-    preset.cameras.forEach((camera, i) => {
-      if (camera) {
-        freshCameras[i] = camera;
-        freshStates[i] = { loading: true, data: null, error: null };
-      }
-    });
-    setSelectedCameras(freshCameras);
-    setPlaybackStates(freshStates);
+    // Reset to clean slate
+    setSelectedCameras([null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]);
+    setPlaybackStates({});
     playerStatsRef.current = {};
     
-    // Load camera streams with short stagger to avoid overwhelming the API
+    // Load camera streams — loadCamera uses functional updates so each call
+    // safely builds on the previous one (no stale closure overwrite)
     preset.cameras.forEach((camera, i) => {
-      if (camera) setTimeout(() => loadCamera(camera, i), i * 150);
+      if (camera) setTimeout(() => loadCamera(camera, i), 50 + i * 100);
     });
   };
 
@@ -3732,9 +3724,13 @@ export default function App() {
   }, []);
 
   const loadCamera = async (camera, slotIndex) => {
-    const newCameras = [...selectedCameras];
-    newCameras[slotIndex] = camera;
-    setSelectedCameras(newCameras);
+    // Use functional update to avoid stale closure race conditions
+    // (critical when loading multiple cameras from a preset)
+    setSelectedCameras(prev => {
+      const newCameras = [...prev];
+      newCameras[slotIndex] = camera;
+      return newCameras;
+    });
     setPlaybackStates(prev => ({ ...prev, [slotIndex]: { loading: true, data: null, error: null } }));
     
     // If user is not logged in and camera requires a tier above free, show sign-in prompt
@@ -3918,9 +3914,11 @@ export default function App() {
       delete playerStatsRef.current[slotIndex];
     }
     // Clear the camera and playback state
-    const newCameras = [...selectedCameras];
-    newCameras[slotIndex] = null;
-    setSelectedCameras(newCameras);
+    setSelectedCameras(prev => {
+      const newCameras = [...prev];
+      newCameras[slotIndex] = null;
+      return newCameras;
+    });
     setPlaybackStates(prev => {
       const next = { ...prev };
       delete next[slotIndex];
