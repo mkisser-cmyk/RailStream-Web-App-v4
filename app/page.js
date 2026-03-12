@@ -3375,6 +3375,53 @@ function AboutPage() {
             <div className="order-1 md:order-2"><img src="https://railstream.net/images/us3.png" alt="RailStream team on location" className="rounded-2xl w-full shadow-2xl" /></div>
           </section>
 
+          <section className="bg-zinc-900 rounded-2xl p-8 border border-white/[0.06]">
+            <div className="flex items-center gap-4 mb-6">
+              <span className="text-4xl">🏛️</span>
+              <div>
+                <h2 className="text-3xl font-bold text-white">The Roundhouse</h2>
+                <p className="text-[#ff7a00] text-sm font-semibold">Community Rail Photo Archives</p>
+              </div>
+            </div>
+            <p className="text-white/80 leading-relaxed mb-4">
+              The Roundhouse is our community-driven photo vault — a growing archive of rail photography captured 
+              both from our live cameras and trackside by our members. Every photo is searchable by locomotive number, 
+              railroad, location, and tags.
+            </p>
+            <p className="text-white/80 leading-relaxed mb-4">
+              <strong className="text-white">Heritage Unit Tracking:</strong> Our system automatically detects when a heritage unit 
+              is logged — think NS Southern Railway #1073, UP Big Boy #4014, or CSX Spirit of America #1776 — and 
+              alerts the community in real-time through The Yard chat.
+            </p>
+            <p className="text-white/80 leading-relaxed mb-4">
+              <strong className="text-white">Your photos are safe here.</strong> All images are stored on our own infrastructure 
+              with download protection and watermarking. Unlike social media posts that get buried and forgotten, 
+              The Roundhouse is a permanent, searchable archive — a living history of what runs on America's rails.
+            </p>
+            <p className="text-white/80 leading-relaxed mb-6">
+              <strong className="text-white">Historical value matters.</strong> Years from now, these photos become invaluable records. 
+              That consist you captured today? It's tomorrow's history. The Roundhouse ensures it's preserved, credited, 
+              and discoverable — not lost in a social media feed.
+            </p>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-white/[0.03] rounded-xl p-4 text-center border border-white/[0.04]">
+                <div className="text-2xl mb-1">📸</div>
+                <div className="text-white text-sm font-semibold">Camera Captures</div>
+                <div className="text-white/40 text-xs">Save directly from live feeds</div>
+              </div>
+              <div className="bg-white/[0.03] rounded-xl p-4 text-center border border-white/[0.04]">
+                <div className="text-2xl mb-1">🚶</div>
+                <div className="text-white text-sm font-semibold">Trackside Photos</div>
+                <div className="text-white/40 text-xs">Upload your own shots</div>
+              </div>
+              <div className="bg-white/[0.03] rounded-xl p-4 text-center border border-white/[0.04]">
+                <div className="text-2xl mb-1">👑</div>
+                <div className="text-white text-sm font-semibold">Heritage Alerts</div>
+                <div className="text-white/40 text-xs">Auto-detected & announced</div>
+              </div>
+            </div>
+          </section>
+
           <section className="bg-gradient-to-r from-[#ff7a00] to-orange-600 rounded-2xl p-8 text-center">
             <h2 className="text-3xl font-bold text-white mb-4">Watch Everywhere</h2>
             <p className="text-white/90 mb-6">Available 24/7/365 on all your favorite platforms.</p>

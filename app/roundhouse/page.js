@@ -13,8 +13,8 @@ import {
 
 const RAILROADS = ['CSX', 'NS', 'UP', 'BNSF', 'CN', 'CP', 'KCS', 'Amtrak', 'Other'];
 
-// Protected image component - prevents right-click, drag, save
-function ProtectedImage({ src, alt, className, style, onError }) {
+// Protected image component - prevents right-click, drag, save + adds watermark
+function ProtectedImage({ src, alt, className, style, onError, noWatermark }) {
   return (
     <div className="relative select-none" style={{ WebkitUserSelect: 'none' }}>
       <img
@@ -25,9 +25,11 @@ function ProtectedImage({ src, alt, className, style, onError }) {
         onError={onError}
         draggable={false}
       />
+      {/* Watermark overlay */}
+      {!noWatermark && <div className="watermark-overlay" />}
       {/* Transparent overlay to block right-click/save on the image */}
       <div
-        className="absolute inset-0 z-[1]"
+        className="absolute inset-0 z-[3]"
         onContextMenu={(e) => e.preventDefault()}
         style={{ background: 'transparent' }}
       />
@@ -881,8 +883,12 @@ export default function RoundhousePage() {
             {/* Image */}
             <div className={`relative ${selectedPhoto.is_heritage ? '' : 'rounded-t-xl'} overflow-hidden`} onContextMenu={(e) => e.preventDefault()}>
               {selectedPhoto.image_url ? (
-                <ProtectedImage src={selectedPhoto.image_url} alt={selectedPhoto.title || 'Rail photo'}
-                  className="w-full max-h-[60vh] object-contain bg-black" />
+                <div className="relative">
+                  <ProtectedImage src={selectedPhoto.image_url} alt={selectedPhoto.title || 'Rail photo'}
+                    className="w-full max-h-[60vh] object-contain bg-black" noWatermark={true} />
+                  {/* Tiled watermark for lightbox */}
+                  <div className="watermark-overlay-tile" />
+                </div>
               ) : (
                 <div className="w-full h-64 bg-white/[0.03] flex items-center justify-center">
                   <Camera className="w-12 h-12 text-white/10" />

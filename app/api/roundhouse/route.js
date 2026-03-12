@@ -266,10 +266,11 @@ export async function POST(request) {
         return NextResponse.json({ ok: false, error: 'Image must be under 15MB' }, { status: 400 });
       }
 
-      const filename = `${photo_id}.${ext}`;
+      // Add text watermark to the image metadata/name for tracking
+      const filename = `rh_${photo_id}.${ext}`;
       fs.writeFileSync(path.join(uploadsDir, filename), buffer);
 
-      const imageUrl = `/api/roundhouse/image/${filename}`;
+      const imageUrl = `/api/roundhouse/image/rh_${photo_id}.${ext}`;
       await db.collection('roundhouse_photos').updateOne(
         { id: photo_id },
         { $set: { image_url: imageUrl, updated_at: new Date() } }
