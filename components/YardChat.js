@@ -1,307 +1,501 @@
 'use client';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  MessageCircle, Send, Users, X, ExternalLink, Hash, ChevronDown,
+  Shield, ShieldCheck, Crown, Pin, Trash2, VolumeX, Ban, MoreHorizontal,
+  Radio, ChevronRight,
+} from 'lucide-react';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Trash2, MessageCircle, Crown, Shield, Zap, Users, X, Minimize2, Maximize2 } from 'lucide-react';
-
-// Tier badge configuration
-const TIER_CONFIG = {
-  engineer: { icon: Crown, color: 'text-orange-400', bg: 'bg-orange-500/20', label: 'Engineer' },
-  conductor: { icon: Shield, color: 'text-purple-400', bg: 'bg-purple-500/20', label: 'Conductor' },
-  fireman: { icon: Zap, color: 'text-blue-400', bg: 'bg-blue-500/20', label: 'Fireman' },
-  guest: { icon: Users, color: 'text-gray-400', bg: 'bg-gray-500/20', label: 'Guest' },
-};
-
-function TierBadge({ tier }) {
-  const config = TIER_CONFIG[tier] || TIER_CONFIG.guest;
-  const Icon = config.icon;
-  
-  return (
-    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs ${config.bg} ${config.color}`}>
-      <Icon className="w-3 h-3" />
-      <span className="hidden sm:inline">{config.label}</span>
-    </span>
-  );
+// ── Tier badge component ──
+function TierBadge({ tier, isAdmin, isMod, size = 'sm' }) {
+  if (isAdmin) return <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 ${size === 'xs' ? 'text-[9px] px-1' : ''}`}><Crown className="w-2.5 h-2.5" />ADMIN</span>;
+  if (isMod) return <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-400 ${size === 'xs' ? 'text-[9px] px-1' : ''}`}><ShieldCheck className="w-2.5 h-2.5" />MOD</span>;
+  const colors = {
+    engineer: 'bg-[#ff7a00]/20 text-[#ff7a00]',
+    conductor: 'bg-purple-500/20 text-purple-400',
+    fireman: 'bg-green-500/20 text-green-400',
+  };
+  const label = tier?.charAt(0).toUpperCase() + tier?.slice(1) || 'Guest';
+  return <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold ${colors[tier] || 'bg-zinc-700 text-zinc-400'} ${size === 'xs' ? 'text-[9px] px-1' : ''}`}>{label}</span>;
 }
 
-function ChatMessage({ message, user, onDelete }) {
-  const isOwnMessage = user?.username === message.username;
-  const canDelete = user?.is_admin;
-  const [showDelete, setShowDelete] = useState(false);
+// ── Message component ──
+function ChatMessage({ msg, currentUser, onDelete, onMute, onBan }) {
+  const [showMenu, setShowMenu] = useState(false);
+  const isOwn = msg.username === currentUser?.username;
+  const canModerate = currentUser?.is_admin || currentUser?.is_mod;
 
-  // Format timestamp
-  const time = new Date(message.created_at);
-  const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  return (
-    <div 
-      className={`group flex gap-2 px-3 py-2 hover:bg-white/5 transition-colors ${isOwnMessage ? 'bg-orange-500/5' : ''}`}
-      onMouseEnter={() => setShowDelete(true)}
-      onMouseLeave={() => setShowDelete(false)}
-    >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className={`font-semibold text-sm ${isOwnMessage ? 'text-orange-400' : 'text-white'}`}>
-            {message.username}
-          </span>
-          <TierBadge tier={message.tier} />
-          <span className="text-xs text-gray-500">{timeStr}</span>
-          
-          {canDelete && showDelete && (
-            <button
-              onClick={() => onDelete(message.id)}
-              className="ml-auto p-1 rounded hover:bg-red-500/20 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Delete message"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-        <p className="text-gray-300 text-sm break-words">{message.message}</p>
-      </div>
-    </div>
-  );
-}
-
-export default function YardChat({ user, isMinimized = false, onToggleMinimize }) {
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSending, setIsSending] = useState(false);
-  const [error, setError] = useState(null);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const messagesEndRef = useRef(null);
-  const chatContainerRef = useRef(null);
-  const lastMessageCountRef = useRef(0);
-
-  // Scroll to bottom
-  const scrollToBottom = useCallback(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, []);
-
-  // Fetch messages
-  const fetchMessages = useCallback(async () => {
-    try {
-      const res = await fetch('/api/chat?limit=50');
-      const data = await res.json();
-      
-      if (data.ok) {
-        setMessages(data.messages);
-        setError(null);
-        
-        // Track unread when minimized
-        if (isMinimized && data.messages.length > lastMessageCountRef.current) {
-          setUnreadCount(prev => prev + (data.messages.length - lastMessageCountRef.current));
-        }
-        lastMessageCountRef.current = data.messages.length;
-      }
-    } catch (err) {
-      console.error('Failed to fetch messages:', err);
-      setError('Failed to load chat');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isMinimized]);
-
-  // Initial load and polling
-  useEffect(() => {
-    fetchMessages();
-    
-    // Poll for new messages every 3 seconds
-    const interval = setInterval(fetchMessages, 3000);
-    
-    return () => clearInterval(interval);
-  }, [fetchMessages]);
-
-  // Scroll on new messages (only if not minimized)
-  useEffect(() => {
-    if (!isMinimized && messages.length > 0) {
-      scrollToBottom();
-    }
-  }, [messages, isMinimized, scrollToBottom]);
-
-  // Clear unread when expanded
-  useEffect(() => {
-    if (!isMinimized) {
-      setUnreadCount(0);
-    }
-  }, [isMinimized]);
-
-  // Send message
-  const handleSend = async (e) => {
-    e.preventDefault();
-    
-    if (!user) {
-      setError('Please sign in to chat');
-      return;
-    }
-    
-    const trimmed = newMessage.trim();
-    if (!trimmed || isSending) return;
-    
-    setIsSending(true);
-    setError(null);
-    
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: trimmed,
-          user: {
-            username: user.username,
-            membership_tier: user.membership_tier,
-            is_admin: user.is_admin,
-            user_id: user.user_id,
-          }
-        }),
-      });
-      
-      const data = await res.json();
-      
-      if (data.ok) {
-        setNewMessage('');
-        // Add message immediately for responsiveness
-        setMessages(prev => [...prev, data.message]);
-        scrollToBottom();
-      } else {
-        setError(data.error || 'Failed to send');
-      }
-    } catch (err) {
-      setError('Failed to send message');
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  // Delete message (admin only)
-  const handleDelete = async (messageId) => {
-    if (!user?.is_admin) return;
-    
-    try {
-      const res = await fetch(`/api/chat?id=${messageId}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user }),
-      });
-      
-      const data = await res.json();
-      
-      if (data.ok) {
-        setMessages(prev => prev.filter(m => m.id !== messageId));
-      }
-    } catch (err) {
-      console.error('Failed to delete:', err);
-    }
-  };
-
-  // Minimized view
-  if (isMinimized) {
+  if (msg.is_system) {
     return (
-      <button
-        onClick={onToggleMinimize}
-        className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors"
-      >
-        <MessageCircle className="w-5 h-5 text-orange-400" />
-        <span className="font-medium text-white">Yard Chat</span>
-        {unreadCount > 0 && (
-          <span className="px-2 py-0.5 bg-orange-500 text-white text-xs font-bold rounded-full">
-            {unreadCount}
-          </span>
-        )}
-        <Maximize2 className="w-4 h-4 text-gray-400" />
-      </button>
+      <div className="flex justify-center py-1.5 px-3">
+        <span className="text-[11px] text-yellow-500/70 bg-yellow-500/5 px-3 py-1 rounded-full italic">
+          {msg.message}
+        </span>
+      </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-gray-800/50 border-b border-gray-700">
-        <div className="flex items-center gap-2">
-          <MessageCircle className="w-5 h-5 text-orange-400" />
-          <h3 className="font-bold text-white">Yard Chat</h3>
-          <span className="text-xs text-gray-500">({messages.length} messages)</span>
+    <div className={`group flex gap-2 px-3 py-1.5 hover:bg-white/[0.02] transition-colors ${msg.pinned ? 'bg-[#ff7a00]/5 border-l-2 border-[#ff7a00]/40' : ''}`}>
+      {/* Avatar */}
+      <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-[11px] font-bold mt-0.5 ${
+        msg.is_admin ? 'bg-red-500/20 text-red-400' : msg.is_mod ? 'bg-blue-500/20 text-blue-400' : 'bg-zinc-700 text-zinc-300'
+      }`}>
+        {msg.username.charAt(0).toUpperCase()}
+      </div>
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className={`text-sm font-semibold ${isOwn ? 'text-[#ff7a00]' : msg.is_admin ? 'text-red-400' : 'text-white'}`}>
+            {msg.username}
+          </span>
+          <TierBadge tier={msg.tier} isAdmin={msg.is_admin} isMod={msg.is_mod} size="xs" />
+          {msg.pinned && <Pin className="w-3 h-3 text-[#ff7a00]" />}
+          <span className="text-[10px] text-white/30">{formatTime(msg.created_at)}</span>
         </div>
-        {onToggleMinimize && (
+        <p className="text-sm text-white/80 break-words leading-relaxed">{msg.message}</p>
+      </div>
+      {/* Mod actions */}
+      {canModerate && !isOwn && (
+        <div className="relative flex-shrink-0">
           <button
-            onClick={onToggleMinimize}
-            className="p-1.5 hover:bg-gray-700 rounded transition-colors"
-            title="Minimize chat"
+            onClick={() => setShowMenu(!showMenu)}
+            className="p-1 text-white/20 hover:text-white/60 opacity-0 group-hover:opacity-100 transition"
           >
-            <Minimize2 className="w-4 h-4 text-gray-400" />
+            <MoreHorizontal className="w-4 h-4" />
           </button>
-        )}
+          {showMenu && (
+            <div className="absolute right-0 top-6 z-50 bg-zinc-800 border border-white/10 rounded-lg shadow-xl py-1 min-w-[140px]"
+              onMouseLeave={() => setShowMenu(false)}>
+              <button onClick={() => { onDelete(msg.id); setShowMenu(false); }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10">
+                <Trash2 className="w-3 h-3" /> Delete
+              </button>
+              <button onClick={() => { onMute(msg.username, 5); setShowMenu(false); }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-yellow-400 hover:bg-yellow-500/10">
+                <VolumeX className="w-3 h-3" /> Mute 5 min
+              </button>
+              <button onClick={() => { onMute(msg.username, 60); setShowMenu(false); }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-yellow-400 hover:bg-yellow-500/10">
+                <VolumeX className="w-3 h-3" /> Mute 1 hour
+              </button>
+              <button onClick={() => { onBan(msg.username); setShowMenu(false); }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-500 hover:bg-red-500/10">
+                <Ban className="w-3 h-3" /> Ban
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatTime(iso) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch { return ''; }
+}
+
+// ── Main YardChat component ──
+export default function YardChat({ user, selectedCameras = [], isPopout = false, onClose, onPopout }) {
+  const [activeRoom, setActiveRoom] = useState('the-yard');
+  const [rooms, setRooms] = useState([{ id: 'the-yard', name: 'The Yard', type: 'global', online_count: 0, online_users: [], pinned_message: null }]);
+  const [joinedRooms, setJoinedRooms] = useState(['the-yard']);
+  const [messages, setMessages] = useState({});
+  const [input, setInput] = useState('');
+  const [showOnline, setShowOnline] = useState(false);
+  const [showBrowse, setShowBrowse] = useState(false);
+  const [sending, setSending] = useState(false);
+  const messagesEndRef = useRef(null);
+  const lastFetchRef = useRef({});
+  const scrollContainerRef = useRef(null);
+  const isAtBottomRef = useRef(true);
+
+  // Track scroll position
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+  }, []);
+
+  // Auto-scroll to bottom when new messages arrive (only if user is at bottom)
+  const scrollToBottom = useCallback(() => {
+    if (isAtBottomRef.current && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, []);
+
+  // ── Auto-join camera rooms based on what's being watched ──
+  useEffect(() => {
+    const cameraRooms = selectedCameras
+      .filter(Boolean)
+      .map(cam => ({
+        id: `cam-${cam._id}`,
+        name: cam.location || cam.name,
+        type: 'camera',
+        camera_id: cam._id,
+      }));
+
+    // Ensure camera rooms exist on the server
+    cameraRooms.forEach(room => {
+      fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'ensure_room', room_id: room.id, name: room.name, type: 'camera', camera_id: room.camera_id }),
+      }).catch(() => {});
+    });
+
+    setJoinedRooms(prev => {
+      const newRooms = new Set(prev);
+      newRooms.add('the-yard'); // Always in The Yard
+      cameraRooms.forEach(r => newRooms.add(r.id));
+      // Remove camera rooms we're no longer watching (but keep manually joined ones)
+      const watchingIds = new Set(cameraRooms.map(r => r.id));
+      prev.forEach(rid => {
+        if (rid.startsWith('cam-') && !watchingIds.has(rid)) {
+          newRooms.delete(rid);
+        }
+      });
+      return [...newRooms];
+    });
+  }, [selectedCameras]);
+
+  // ── Fetch rooms list ──
+  useEffect(() => {
+    const fetchRooms = () => {
+      fetch('/api/chat?action=rooms')
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok && data.rooms) {
+            // Merge server rooms with auto-joined camera rooms
+            const serverRooms = data.rooms;
+            const cameraRooms = selectedCameras.filter(Boolean).map(cam => ({
+              id: `cam-${cam._id}`,
+              name: cam.location || cam.name,
+              type: 'camera',
+              camera_id: cam._id,
+              online_count: 0,
+              online_users: [],
+              pinned_message: null,
+            }));
+            // Merge: server data takes priority
+            const roomMap = {};
+            [...cameraRooms, ...serverRooms].forEach(r => { roomMap[r.id] = r; });
+            // Always ensure The Yard is present
+            if (!roomMap['the-yard']) {
+              roomMap['the-yard'] = { id: 'the-yard', name: 'The Yard', type: 'global', online_count: 0, online_users: [], pinned_message: null };
+            }
+            setRooms(Object.values(roomMap));
+          }
+        })
+        .catch(() => {});
+    };
+    fetchRooms();
+    const interval = setInterval(fetchRooms, 15000);
+    return () => clearInterval(interval);
+  }, [selectedCameras]);
+
+  // ── Poll messages for active room ──
+  useEffect(() => {
+    if (!activeRoom) return;
+
+    const fetchMessages = () => {
+      const after = lastFetchRef.current[activeRoom];
+      const url = after
+        ? `/api/chat?action=messages&room=${activeRoom}&after=${encodeURIComponent(after)}`
+        : `/api/chat?action=messages&room=${activeRoom}&limit=50`;
+
+      fetch(url)
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok && data.messages?.length > 0) {
+            setMessages(prev => {
+              const existing = prev[activeRoom] || [];
+              const existingIds = new Set(existing.map(m => m.id));
+              const newMsgs = data.messages.filter(m => !existingIds.has(m.id));
+              if (newMsgs.length === 0) return prev;
+              const merged = [...existing, ...newMsgs].slice(-200); // Keep last 200
+              return { ...prev, [activeRoom]: merged };
+            });
+            const lastMsg = data.messages[data.messages.length - 1];
+            if (lastMsg) lastFetchRef.current[activeRoom] = lastMsg.created_at;
+            setTimeout(scrollToBottom, 100);
+          }
+        })
+        .catch(() => {});
+    };
+
+    // Initial fetch (full history)
+    if (!lastFetchRef.current[activeRoom]) {
+      fetchMessages();
+    }
+
+    const interval = setInterval(fetchMessages, 3000);
+    return () => clearInterval(interval);
+  }, [activeRoom, scrollToBottom]);
+
+  // ── Presence heartbeat ──
+  useEffect(() => {
+    if (!user?.username) return;
+
+    const sendPresence = () => {
+      joinedRooms.forEach(roomId => {
+        fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'presence', user, room_id: roomId }),
+        }).catch(() => {});
+      });
+    };
+
+    sendPresence();
+    const interval = setInterval(sendPresence, 30000);
+    return () => clearInterval(interval);
+  }, [user, joinedRooms]);
+
+  // ── Send message ──
+  const handleSend = async () => {
+    if (!input.trim() || !user?.username || sending) return;
+    setSending(true);
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'message', message: input.trim(), user, room_id: activeRoom }),
+      });
+      const data = await res.json();
+      if (data.ok && data.message) {
+        setMessages(prev => {
+          const existing = prev[activeRoom] || [];
+          return { ...prev, [activeRoom]: [...existing, data.message].slice(-200) };
+        });
+        lastFetchRef.current[activeRoom] = data.message.created_at;
+        setInput('');
+        isAtBottomRef.current = true;
+        setTimeout(scrollToBottom, 50);
+      } else if (data.error) {
+        // Show mute/ban error inline
+        setMessages(prev => {
+          const existing = prev[activeRoom] || [];
+          return { ...prev, [activeRoom]: [...existing, { id: 'err-' + Date.now(), is_system: true, message: data.error, created_at: new Date().toISOString() }] };
+        });
+      }
+    } catch {}
+    setSending(false);
+  };
+
+  // ── Mod actions ──
+  const handleDelete = async (messageId) => {
+    await fetch(`/api/chat?id=${messageId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user }),
+    });
+    setMessages(prev => ({
+      ...prev,
+      [activeRoom]: (prev[activeRoom] || []).filter(m => m.id !== messageId),
+    }));
+  };
+
+  const handleMute = async (username, minutes) => {
+    await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'moderate', user, target_username: username, type: 'mute', room_id: activeRoom, duration_minutes: minutes }),
+    });
+  };
+
+  const handleBan = async (username) => {
+    await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'moderate', user, target_username: username, type: 'ban', room_id: '*' }),
+    });
+  };
+
+  // ── Join a room from browse ──
+  const handleJoinRoom = (roomId) => {
+    if (!joinedRooms.includes(roomId)) {
+      setJoinedRooms(prev => [...prev, roomId]);
+    }
+    setActiveRoom(roomId);
+    setShowBrowse(false);
+  };
+
+  const activeRoomData = rooms.find(r => r.id === activeRoom) || { name: 'The Yard', online_count: 0, online_users: [], pinned_message: null };
+  const activeMessages = messages[activeRoom] || [];
+  const visibleRooms = rooms.filter(r => joinedRooms.includes(r.id));
+
+  return (
+    <div className={`flex flex-col bg-zinc-900/95 ${isPopout ? 'h-screen' : 'h-full'} border-l border-white/5`}>
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between px-3 py-2.5 bg-zinc-800/80 border-b border-white/5">
+        <div className="flex items-center gap-2">
+          <MessageCircle className="w-4 h-4 text-[#ff7a00]" />
+          <span className="text-sm font-bold text-white">The Yard</span>
+          <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full font-bold">
+            {activeRoomData.online_count} online
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setShowOnline(!showOnline)} className="p-1.5 text-white/50 hover:text-white/80 transition" title="Who's Online">
+            <Users className="w-4 h-4" />
+          </button>
+          {!isPopout && onPopout && (
+            <button onClick={onPopout} className="p-1.5 text-white/50 hover:text-white/80 transition" title="Pop Out Chat">
+              <ExternalLink className="w-4 h-4" />
+            </button>
+          )}
+          {onClose && (
+            <button onClick={onClose} className="p-1.5 text-white/50 hover:text-white/80 transition">
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Messages */}
-      <div 
-        ref={chatContainerRef}
-        className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent"
-      >
-        {isLoading ? (
-          <div className="flex items-center justify-center h-full text-gray-500">
-            <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500 p-4">
-            <MessageCircle className="w-12 h-12 mb-2 opacity-50" />
-            <p>No messages yet</p>
-            <p className="text-sm">Be the first to say hello!</p>
-          </div>
-        ) : (
-          <div className="py-2">
-            {messages.map((msg) => (
-              <ChatMessage 
-                key={msg.id} 
-                message={msg} 
-                user={user}
-                onDelete={handleDelete}
-              />
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-        )}
+      {/* ── Room tabs ── */}
+      <div className="flex items-center gap-0.5 px-2 py-1.5 bg-zinc-800/40 border-b border-white/5 overflow-x-auto scrollbar-none">
+        {visibleRooms.map(room => (
+          <button
+            key={room.id}
+            onClick={() => setActiveRoom(room.id)}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all ${
+              activeRoom === room.id
+                ? 'bg-[#ff7a00]/20 text-[#ff7a00] border border-[#ff7a00]/30'
+                : 'text-white/50 hover:text-white/80 hover:bg-white/5'
+            }`}
+          >
+            {room.type === 'global' ? <Radio className="w-3 h-3" /> : <Hash className="w-3 h-3" />}
+            {room.name}
+            {room.online_count > 0 && (
+              <span className="text-[9px] bg-white/10 px-1 rounded">{room.online_count}</span>
+            )}
+          </button>
+        ))}
+        <button
+          onClick={() => setShowBrowse(!showBrowse)}
+          className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-white/40 hover:text-white/70 hover:bg-white/5 transition"
+        >
+          <ChevronRight className="w-3 h-3" /> Browse
+        </button>
       </div>
 
-      {/* Error */}
-      {error && (
-        <div className="px-4 py-2 bg-red-500/10 border-t border-red-500/30 text-red-400 text-sm">
-          {error}
+      {/* ── Browse rooms dropdown ── */}
+      {showBrowse && (
+        <div className="bg-zinc-800 border-b border-white/10 max-h-48 overflow-y-auto">
+          <div className="px-3 py-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">All Active Rooms</div>
+          {rooms.map(room => (
+            <button
+              key={room.id}
+              onClick={() => handleJoinRoom(room.id)}
+              className={`w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-white/5 transition ${
+                joinedRooms.includes(room.id) ? 'text-[#ff7a00]' : 'text-white/70'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                {room.type === 'global' ? <Radio className="w-3.5 h-3.5" /> : <Hash className="w-3.5 h-3.5" />}
+                {room.name}
+              </span>
+              <span className="text-[10px] text-white/40">{room.online_count} online</span>
+            </button>
+          ))}
         </div>
       )}
 
-      {/* Input */}
-      <div className="p-3 border-t border-gray-700 bg-gray-800/30">
-        {user ? (
-          <form onSubmit={handleSend} className="flex gap-2">
-            <input
-              type="text"
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Type a message..."
-              maxLength={500}
-              className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:border-orange-500 focus:outline-none transition-colors"
-              disabled={isSending}
-            />
-            <button
-              type="submit"
-              disabled={!newMessage.trim() || isSending}
-              className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center gap-2"
-            >
-              <Send className="w-4 h-4" />
-            </button>
-          </form>
-        ) : (
-          <div className="text-center py-2">
-            <p className="text-gray-400 text-sm">
-              <button className="text-orange-400 hover:underline font-medium">Sign in</button>
-              {' '}to join the conversation
-            </p>
+      {/* ── Who's Online panel ── */}
+      {showOnline && (
+        <div className="bg-zinc-800 border-b border-white/10 max-h-48 overflow-y-auto">
+          <div className="px-3 py-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
+            Online in {activeRoomData.name} ({activeRoomData.online_count})
           </div>
+          {(activeRoomData.online_users || []).map((u, i) => (
+            <div key={i} className="flex items-center gap-2 px-3 py-1.5">
+              <div className="w-2 h-2 rounded-full bg-green-500" />
+              <span className="text-sm text-white/80">{u.username}</span>
+              <TierBadge tier={u.tier} isAdmin={u.is_admin} isMod={u.is_mod} size="xs" />
+            </div>
+          ))}
+          {(activeRoomData.online_users || []).length === 0 && (
+            <div className="px-3 py-3 text-xs text-white/30 text-center">No one else here yet</div>
+          )}
+        </div>
+      )}
+
+      {/* ── Pinned message ── */}
+      {activeRoomData.pinned_message && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-[#ff7a00]/5 border-b border-[#ff7a00]/10">
+          <Pin className="w-3 h-3 text-[#ff7a00] flex-shrink-0" />
+          <span className="text-xs text-[#ff7a00]/80 truncate">{activeRoomData.pinned_message}</span>
+        </div>
+      )}
+
+      {/* ── Messages ── */}
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto overflow-x-hidden py-2"
+      >
+        {activeMessages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-white/30 gap-2">
+            <MessageCircle className="w-8 h-8" />
+            <p className="text-sm">No messages yet</p>
+            <p className="text-xs">Be the first to say something!</p>
+          </div>
+        ) : (
+          activeMessages.map(msg => (
+            <ChatMessage
+              key={msg.id}
+              msg={msg}
+              currentUser={user}
+              onDelete={handleDelete}
+              onMute={handleMute}
+              onBan={handleBan}
+            />
+          ))
         )}
+        <div ref={messagesEndRef} />
       </div>
+
+      {/* ── Scroll to bottom indicator ── */}
+      {!isAtBottomRef.current && activeMessages.length > 10 && (
+        <button
+          onClick={() => { isAtBottomRef.current = true; messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }}
+          className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-[#ff7a00] text-white text-xs px-3 py-1.5 rounded-full shadow-lg hover:bg-[#ff8c20] transition z-10"
+        >
+          <ChevronDown className="w-3 h-3 inline mr-1" />New messages
+        </button>
+      )}
+
+      {/* ── Input ── */}
+      {user ? (
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleSend(); }}
+          className="flex items-center gap-2 px-3 py-2.5 bg-zinc-800/80 border-t border-white/5"
+        >
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={`Message ${activeRoomData.name}...`}
+            maxLength={500}
+            className="flex-1 bg-zinc-700/50 text-white text-sm rounded-lg px-3 py-2 border border-white/5 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-1 focus:ring-[#ff7a00]/20 placeholder:text-white/30"
+          />
+          <button
+            type="submit"
+            disabled={!input.trim() || sending}
+            className="p-2 rounded-lg bg-[#ff7a00] hover:bg-[#ff8c20] text-white disabled:opacity-30 disabled:cursor-not-allowed transition"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        </form>
+      ) : (
+        <div className="px-3 py-3 bg-zinc-800/80 border-t border-white/5 text-center">
+          <p className="text-xs text-white/40">Sign in to chat</p>
+        </div>
+      )}
     </div>
   );
 }

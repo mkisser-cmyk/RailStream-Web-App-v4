@@ -2784,7 +2784,12 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
             <div className="w-80 flex-shrink-0 border-l border-white/10">
               <YardChat 
                 user={user}
-                onToggleMinimize={() => setChatOpen(false)}
+                selectedCameras={selectedCameras}
+                onClose={() => setChatOpen(false)}
+                onPopout={() => {
+                  window.open('/chat', 'yard-chat', 'width=400,height=700,resizable=yes,scrollbars=yes');
+                  setChatOpen(false);
+                }}
               />
             </div>
           )}
