@@ -61,6 +61,7 @@ import {
   CameraOff,
   Sparkles,
   Facebook,
+  LayoutPanelLeft,
 } from 'lucide-react';
 import { clientApi } from '@/lib/api';
 import { auth } from '@/lib/auth';
@@ -146,6 +147,7 @@ const VIEW_MODES = [
   { id: 'single', label: '1', icon: Square, slots: 1 },
   { id: 'dual', label: '2', icon: Columns2, slots: 2 },
   { id: 'quad', label: '4', icon: Grid2X2, slots: 4 },
+  { id: 'main5', label: '1+5', icon: LayoutPanelLeft, slots: 6 },
   { id: 'nine', label: '9', icon: Grid3X3, slots: 9 },
   { id: 'sixteen', label: '16', icon: Grid4X4, slots: 16 },
 ];
@@ -1293,7 +1295,7 @@ function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCame
     toast.success(`Layout "${name}" saved!`);
   };
 
-  const VIEW_LABELS = { single: '1', dual: '2', quad: '4', nine: '9', sixteen: '16' };
+  const VIEW_LABELS = { single: '1', dual: '2', quad: '4', main5: '1+5', nine: '9', sixteen: '16' };
 
   return (
     <div className="relative" ref={menuRef}>
@@ -1793,7 +1795,7 @@ function CompanionAdPanel({ ads }) {
 
 // WATCH PAGE
 // ============================================
-function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, loadCamera, removeCamera, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp, replaySeekOffset = 0, clearReplaySeek, playerStatsRef, onStatusCamera, onLogin }) {
+function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, setPlaybackStates, loadCamera, removeCamera, stopAllSessions, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp, replaySeekOffset = 0, clearReplaySeek, playerStatsRef, onStatusCamera, onLogin }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
@@ -2085,18 +2087,35 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   };
 
   const handleLoadPreset = (preset) => {
+    // Stop all active sessions before switching
+    stopAllSessions();
     setViewMode(preset.viewMode);
     setFocusedSlot(null);
     setSelectedCameras([null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]);
+    setPlaybackStates({});
+    setTargetSlot(null);
     preset.cameras.forEach((camera, i) => {
       if (camera) setTimeout(() => loadCamera(camera, i), i * 200);
     });
+  };
+
+  // Clear all cameras when switching layout mode
+  const handleViewModeChange = (newMode) => {
+    if (newMode === viewMode) return;
+    stopAllSessions();
+    setFocusedSlot(null);
+    setTargetSlot(null);
+    setSelectedCameras([null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]);
+    setPlaybackStates({});
+    playerStatsRef.current = {};
+    setViewMode(newMode);
   };
 
   const gridClass = {
     single: 'grid-cols-1 grid-rows-1',
     dual: 'grid-cols-2 grid-rows-1',
     quad: 'grid-cols-2 grid-rows-2',
+    main5: '', // Custom layout — handled with explicit CSS grid
     nine: 'grid-cols-3 grid-rows-3',
     sixteen: 'grid-cols-4 grid-rows-4',
   }[viewMode];
@@ -2151,7 +2170,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                 return (
                   <button
                     key={mode.id}
-                    onClick={() => !needsUpgrade && setViewMode(mode.id)}
+                    onClick={() => !needsUpgrade && handleViewModeChange(mode.id)}
                     disabled={needsUpgrade}
                     className={`relative flex items-center gap-1 px-2 py-1.5 rounded transition-all text-xs font-medium ${
                       viewMode === mode.id ? 'bg-[#ff7a00] text-white' : needsUpgrade ? 'text-white/60' : 'text-white/70 hover:bg-white/10 hover:text-white'
@@ -2363,16 +2382,28 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
               })()}
             </div>
           ) : (
-          <div className={`flex-1 grid ${gridClass} gap-1 p-1 bg-black`}>
+          <div 
+            className={`flex-1 grid ${gridClass} gap-1 p-1 bg-black`}
+            style={viewMode === 'main5' ? {
+              gridTemplateColumns: '1fr 1fr 1fr',
+              gridTemplateRows: '1fr 1fr 1fr',
+            } : undefined}
+          >
             {Array.from({ length: slots }).map((_, i) => {
               const camera = selectedCameras[i];
               const state = playbackStates[i] || {};
               const isCompact = viewMode === 'nine' || viewMode === 'sixteen';
               
+              // Slot label for main5 layout
+              const slotLabel = viewMode === 'main5' 
+                ? (i === 0 ? 'Main Feed' : `Aux ${i}`)
+                : `Slot ${i + 1}`;
+              
               return (
                 <div 
                   key={i} 
                   className={`relative bg-zinc-900 rounded overflow-hidden group ${camera && viewMode !== 'single' ? 'cursor-pointer' : ''}`}
+                  style={viewMode === 'main5' && i === 0 ? { gridColumn: 'span 2', gridRow: 'span 2' } : undefined}
                   role="region"
                   aria-label={camera ? `Camera ${i + 1}: ${camera.name}` : `Empty slot ${i + 1}`}
                   onDoubleClick={() => handleTileFocus(i)}
@@ -2609,20 +2640,20 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                           <>
                             {targetSlot === i ? (
                               <>
-                                <p className="text-[#ff7a00] text-lg font-bold mb-1">Slot {i + 1} Selected</p>
+                                <p className="text-[#ff7a00] text-lg font-bold mb-1">{slotLabel} Selected</p>
                                 <p className="text-white/80 text-base">Now pick a camera from the sidebar</p>
                               </>
                             ) : (
                               <>
-                                <p className="text-white text-lg font-bold mb-1">Slot {i + 1}</p>
-                                <p className="text-white/80 text-base">Click to add a camera here</p>
+                                <p className="text-white text-lg font-bold mb-1">{slotLabel}</p>
+                                <p className="text-white/80 text-base">Click to select camera</p>
                               </>
                             )}
                           </>
                         )}
                         {isCompact && (
                           <p className={`text-xs font-bold ${targetSlot === i ? 'text-[#ff7a00]' : 'text-white/80'}`}>
-                            {targetSlot === i ? `Slot ${i + 1} ✓` : `+ Slot ${i + 1}`}
+                            {targetSlot === i ? `${slotLabel} ✓` : `+ ${slotLabel}`}
                           </p>
                         )}
                       </div>
@@ -3948,8 +3979,10 @@ export default function App() {
             selectedCameras={selectedCameras}
             setSelectedCameras={setSelectedCameras}
             playbackStates={playbackStates}
+            setPlaybackStates={setPlaybackStates}
             loadCamera={loadCamera}
             removeCamera={removeCamera}
+            stopAllSessions={stopAllSessions}
             favorites={favorites}
             setFavorites={updateFavorites}
             presets={presets}
