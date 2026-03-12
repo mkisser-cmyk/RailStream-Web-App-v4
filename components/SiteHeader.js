@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { id: 'watch', label: 'Watch', href: '/?page=watch' },
   { id: 'cameras', label: 'Cameras', href: '/cameras' },
   { id: 'sightings', label: 'Train Log', href: '/sightings' },
+  { id: 'roundhouse', label: 'The Roundhouse', href: '/roundhouse' },
 ];
 
 const ABOUT_DROPDOWN = [

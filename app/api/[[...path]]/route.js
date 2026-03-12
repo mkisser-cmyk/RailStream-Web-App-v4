@@ -1186,6 +1186,36 @@ async function handleRoute(request, { params }) {
       }
     }
 
+    // GET /api/roundhouse/image/:filename — Serve a roundhouse photo
+    if (route.startsWith('/roundhouse/image/') && method === 'GET') {
+      const filename = route.split('/roundhouse/image/')[1];
+      if (!filename || filename.includes('..') || filename.includes('/')) {
+        return handleCORS(NextResponse.json({ error: 'Invalid filename' }, { status: 400 }));
+      }
+
+      try {
+        const fs = await import('fs/promises');
+        const path_mod = await import('path');
+        const uploadsDir = path_mod.join(process.cwd(), 'uploads', 'roundhouse');
+        const filePath = path_mod.join(uploadsDir, filename);
+        const imageData = await fs.readFile(filePath);
+
+        const ext = filename.split('.').pop()?.toLowerCase();
+        const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' };
+
+        return new Response(imageData, {
+          status: 200,
+          headers: {
+            'Content-Type': mimeMap[ext] || 'image/jpeg',
+            'Cache-Control': 'public, max-age=86400',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+      } catch {
+        return new Response(null, { status: 404 });
+      }
+    }
+
     // GET /api/sightings/stats — Quick stats
     if (route === '/sightings/stats' && method === 'GET') {
       try {
