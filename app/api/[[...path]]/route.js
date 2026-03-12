@@ -378,6 +378,37 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json(data));
     }
 
+    // Auth: Refresh token — silently get a new access token using refresh token
+    if (route === '/auth/refresh' && method === 'POST') {
+      const body = await request.json();
+      const refreshToken = body.refresh_token;
+      if (!refreshToken) {
+        return handleCORS(NextResponse.json({ error: 'No refresh token' }, { status: 400 }));
+      }
+      try {
+        const res = await fetch(`${API_BASE}/api/auth/refresh`, {
+          method: 'POST',
+          headers: upstreamHeaders(request, { contentType: 'application/json' }),
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (data.access_token) {
+          // Update the httpOnly cookie too
+          const response = NextResponse.json(data);
+          response.cookies.set('railstream_token', data.access_token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: data.expires_in || 3600,
+          });
+          return handleCORS(response);
+        }
+        return handleCORS(NextResponse.json(data, { status: res.status }));
+      } catch (e) {
+        return handleCORS(NextResponse.json({ error: 'Refresh failed' }, { status: 500 }));
+      }
+    }
+
     // Cameras: Get catalog
     if (route === '/cameras/catalog' && method === 'GET') {
       const res = await fetch(`${API_BASE}/api/cameras/catalog`, {
