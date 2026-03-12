@@ -14,8 +14,8 @@ import { RAILROADS, RAILROAD_CATEGORIES, getRailroad, getRailroadColor, getRailr
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 
-// Protected image component - prevents right-click, drag, save + adds watermark
-function ProtectedImage({ src, alt, className, style, onError, noWatermark }) {
+// Protected image component - prevents right-click, drag, save
+function ProtectedImage({ src, alt, className, style, onError }) {
   return (
     <div className="relative select-none" style={{ WebkitUserSelect: 'none' }}>
       <img
@@ -26,8 +26,6 @@ function ProtectedImage({ src, alt, className, style, onError, noWatermark }) {
         onError={onError}
         draggable={false}
       />
-      {/* Watermark overlay */}
-      {!noWatermark && <div className="watermark-overlay" />}
       {/* Transparent overlay to block right-click/save on the image */}
       <div
         className="absolute inset-0 z-[3]"
@@ -985,9 +983,7 @@ export default function RoundhousePage() {
               {selectedPhoto.image_url ? (
                 <div className="relative">
                   <ProtectedImage src={selectedPhoto.image_url} alt={selectedPhoto.title || 'Rail photo'}
-                    className="w-full max-h-[60vh] object-contain bg-black" noWatermark={true} />
-                  {/* Tiled watermark for lightbox */}
-                  <div className="watermark-overlay-tile" />
+                    className="w-full max-h-[60vh] object-contain bg-black" />
                 </div>
               ) : (
                 <div className="w-full h-64 bg-white/[0.03] flex items-center justify-center">
