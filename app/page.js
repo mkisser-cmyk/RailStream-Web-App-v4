@@ -3324,11 +3324,14 @@ function LoginDialog({ open, onClose, onSuccess }) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [rememberMe, setRememberMe] = useState(() => auth.getRememberMe());
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    // Set the remember preference BEFORE storing the token
+    auth.setRememberMe(rememberMe);
     try {
       const data = await clientApi.login(username, password);
       if (data.access_token) {
@@ -3373,6 +3376,15 @@ function LoginDialog({ open, onClose, onSuccess }) {
             <label htmlFor="login-password" className="text-white/60 text-xs font-medium mb-1.5 block">Password</label>
             <Input id="login-password" type="password" placeholder="Enter your password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 bg-zinc-800/80 border-zinc-700 text-white placeholder:text-white/40 focus:border-[#ff7a00] focus:ring-[#ff7a00]" required />
           </div>
+          <label className="flex items-center gap-3 cursor-pointer select-none py-1">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="w-5 h-5 rounded border-zinc-600 bg-zinc-800 text-[#ff7a00] focus:ring-[#ff7a00] focus:ring-offset-0 cursor-pointer accent-[#ff7a00]"
+            />
+            <span className="text-white/70 text-sm">Keep me logged in</span>
+          </label>
           <Button type="submit" className="w-full h-12 bg-[#ff7a00] hover:bg-[#ff8c20] text-white font-bold text-base rounded-xl transition-all hover:shadow-lg hover:shadow-orange-500/20" disabled={loading}>
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Sign In'}
           </Button>
@@ -3498,12 +3510,15 @@ export default function App() {
   }, []);
 
   // ── Auth session heartbeat / keep-alive ──
-  // Periodically validates the auth token with the server.
-  // If the token has expired, re-authenticate silently or prompt re-login.
+  // Smart validation: checks token when tab becomes visible again (not on a blind timer).
+  // Does NOT auto-logout — shows a gentle re-login prompt instead.
   useEffect(() => {
-    const validateSession = async () => {
+    let sessionExpired = false;
+
+    const validateSession = async (quiet = false) => {
       const token = auth.getToken();
       if (!token) return; // Not logged in — nothing to validate
+      if (sessionExpired) return; // Already flagged — don't spam
 
       try {
         const res = await fetch('/api/auth/me', {
@@ -3522,26 +3537,46 @@ export default function App() {
             auth.setUser(updatedUser);
             setUser(updatedUser);
           }
+          sessionExpired = false; // Reset flag on success
         } else if (res.status === 401) {
-          // Token expired — clear auth and prompt re-login
-          console.log('[Auth Heartbeat] Token expired, prompting re-login');
-          auth.clear();
-          setUser(null);
-          toast.error('Your session has expired. Please sign in again.', { duration: 5000 });
-          setLoginOpen(true);
+          // Token expired — but DON'T immediately log out.
+          // Just flag it so next user action triggers re-login.
+          sessionExpired = true;
+          if (!quiet) {
+            console.log('[Auth] Token expired — showing re-login prompt');
+            toast('Your session has expired.', {
+              duration: 8000,
+              action: {
+                label: 'Sign In',
+                onClick: () => setLoginOpen(true),
+              },
+            });
+          }
         }
       } catch (e) {
-        // Network error — don't log out, just skip this check
-        console.log('[Auth Heartbeat] Network error, skipping validation');
+        // Network error — don't do anything
+        console.log('[Auth] Network error, skipping validation');
       }
     };
 
-    // Validate immediately on mount (checks if stored token is still valid)
-    validateSession();
+    // Validate once on initial load (quietly — don't show toast if expired)
+    validateSession(true);
 
-    // Then validate every 5 minutes
-    const interval = setInterval(validateSession, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    // Validate when tab becomes visible again (user switches back to this tab)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        validateSession(false);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // Also validate every 15 minutes as a safety net (quietly)
+    const interval = setInterval(() => validateSession(true), 15 * 60 * 1000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      clearInterval(interval);
+    };
   }, []);
 
   // Sync preferences to server (debounced)
