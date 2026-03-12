@@ -3469,13 +3469,12 @@ export default function App() {
             error_count: stats.errorCount || 0,
           }),
         })
-        .then(r => r.json())
+        .then(r => r.ok ? r.json() : null)
         .then(data => {
-          if (data.code === 'device_removed' || data.code === 'device_not_registered') {
-            alert('This device has been signed out remotely. Please sign in again.');
-            auth.removeToken();
-            setUser(null);
-            setCurrentPage('home');
+          // Only log device-removal events — NEVER force-logout from a background heartbeat.
+          // The user should only be logged out by explicit action.
+          if (data && (data.code === 'device_removed' || data.code === 'device_not_registered')) {
+            console.warn('[Heartbeat] Server returned:', data.code, '— ignoring (user stays logged in)');
           }
         })
         .catch(() => {});
@@ -3820,11 +3819,10 @@ export default function App() {
       const data = await res.json();
       
       // Handle HTTP 401 — token is expired or invalid
+      // DON'T clear auth state — just prompt re-login so the user doesn't lose their place
       if (res.status === 401) {
-        console.log('[loadCamera] Got 401 — token expired');
-        auth.clear();
-        setUser(null);
-        toast.error('Your session has expired. Please sign in again.', { duration: 5000 });
+        console.log('[loadCamera] Got 401 — token may be expired');
+        toast.error('Please sign in again to access this camera.', { duration: 5000 });
         setLoginOpen(true);
         setPlaybackStates(prev => ({
           ...prev,
@@ -3863,11 +3861,9 @@ export default function App() {
         const locallyHasAccess = localUser && (localUser.is_admin || canAccess(localUser.membership_tier, camera.min_tier, localUser.is_admin));
         
         if (locallyHasAccess) {
-          // Token might be expired — validate and retry
+          // Token might be expired — prompt re-login WITHOUT clearing auth state
           console.log('[loadCamera] Locally authorized user got upgrade_required — token may be expired, prompting re-login');
-          auth.clear();
-          setUser(null);
-          toast.error('Your session has expired. Please sign in again to access this camera.', { duration: 5000 });
+          toast.error('Please sign in again to access this camera.', { duration: 5000 });
           setLoginOpen(true);
           // Show sign-in prompt in the player slot
           setPlaybackStates(prev => ({
@@ -3915,11 +3911,10 @@ export default function App() {
           },
         }));
       } else if (data.code === 'device_removed' || data.code === 'device_not_registered') {
-        // Device was kicked remotely — force logout
-        alert('This device has been signed out remotely. Please sign in again.');
-        auth.removeToken();
-        setUser(null);
-        setCurrentPage('home');
+        // Device issue — just prompt re-login, don't force logout
+        console.warn('[loadCamera] Device issue:', data.code);
+        toast.error('Please sign in again.', { duration: 5000 });
+        setLoginOpen(true);
       } else {
         setPlaybackStates(prev => ({
           ...prev,
