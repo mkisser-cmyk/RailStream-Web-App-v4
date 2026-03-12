@@ -3538,19 +3538,11 @@ export default function App() {
           }
           sessionExpired = false; // Reset flag on success
         } else if (res.status === 401) {
-          // Token expired — but DON'T immediately log out.
-          // Just flag it so next user action triggers re-login.
+          // Token expired — just flag it silently. Do NOT show any popup or toast.
+          // The user stays "logged in" on the frontend. They'll see an inline 
+          // "Sign In" prompt if they try to load a new camera.
           sessionExpired = true;
-          if (!quiet) {
-            console.log('[Auth] Token expired — showing re-login prompt');
-            toast('Your session has expired.', {
-              duration: 8000,
-              action: {
-                label: 'Sign In',
-                onClick: () => setLoginOpen(true),
-              },
-            });
-          }
+          console.log('[Auth] Token expired — user will be prompted on next camera load');
         }
       } catch (e) {
         // Network error — don't do anything
@@ -3819,11 +3811,9 @@ export default function App() {
       const data = await res.json();
       
       // Handle HTTP 401 — token is expired or invalid
-      // DON'T clear auth state — just prompt re-login so the user doesn't lose their place
+      // Show inline message in the slot — do NOT pop up the login dialog
       if (res.status === 401) {
         console.log('[loadCamera] Got 401 — token may be expired');
-        toast.error('Please sign in again to access this camera.', { duration: 5000 });
-        setLoginOpen(true);
         setPlaybackStates(prev => ({
           ...prev,
           [slotIndex]: {
@@ -3861,11 +3851,8 @@ export default function App() {
         const locallyHasAccess = localUser && (localUser.is_admin || canAccess(localUser.membership_tier, camera.min_tier, localUser.is_admin));
         
         if (locallyHasAccess) {
-          // Token might be expired — prompt re-login WITHOUT clearing auth state
-          console.log('[loadCamera] Locally authorized user got upgrade_required — token may be expired, prompting re-login');
-          toast.error('Please sign in again to access this camera.', { duration: 5000 });
-          setLoginOpen(true);
-          // Show sign-in prompt in the player slot
+          // Token might be expired — show inline sign-in prompt, do NOT pop up dialog
+          console.log('[loadCamera] Locally authorized user got upgrade_required — token may be expired');
           setPlaybackStates(prev => ({
             ...prev,
             [slotIndex]: {
@@ -3913,8 +3900,11 @@ export default function App() {
       } else if (data.code === 'device_removed' || data.code === 'device_not_registered') {
         // Device issue — just prompt re-login, don't force logout
         console.warn('[loadCamera] Device issue:', data.code);
-        toast.error('Please sign in again.', { duration: 5000 });
-        setLoginOpen(true);
+        // Show inline error — do NOT pop up login dialog
+        setPlaybackStates(prev => ({
+          ...prev,
+          [slotIndex]: { loading: false, data: null, error: 'Session issue — please click Sign In to reconnect' },
+        }));
       } else {
         setPlaybackStates(prev => ({
           ...prev,
