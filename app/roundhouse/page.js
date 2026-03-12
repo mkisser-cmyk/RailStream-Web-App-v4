@@ -12,6 +12,28 @@ import {
 } from 'lucide-react';
 
 const RAILROADS = ['CSX', 'NS', 'UP', 'BNSF', 'CN', 'CP', 'KCS', 'Amtrak', 'Other'];
+
+// Protected image component - prevents right-click, drag, save
+function ProtectedImage({ src, alt, className, style, onError }) {
+  return (
+    <div className="relative select-none" style={{ WebkitUserSelect: 'none' }}>
+      <img
+        src={src}
+        alt={alt || ''}
+        className={className}
+        style={{ ...style, WebkitUserDrag: 'none', userSelect: 'none', pointerEvents: 'none' }}
+        onError={onError}
+        draggable={false}
+      />
+      {/* Transparent overlay to block right-click/save on the image */}
+      <div
+        className="absolute inset-0 z-[1]"
+        onContextMenu={(e) => e.preventDefault()}
+        style={{ background: 'transparent' }}
+      />
+    </div>
+  );
+}
 const PHOTO_TAGS = [
   { id: 'heritage', label: 'Heritage', icon: '👑', color: '#FFD700' },
   { id: 'rare_power', label: 'Rare Power', icon: '⚡', color: '#ff7a00' },
@@ -226,7 +248,7 @@ export default function RoundhousePage() {
   const handleImageSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { alert('Image must be under 10MB'); return; }
+    if (file.size > 15 * 1024 * 1024) { alert('Image must be under 15MB'); return; }
     setImageFile(file);
     const reader = new FileReader();
     reader.onload = (ev) => setImagePreview(ev.target.result);
@@ -338,16 +360,21 @@ export default function RoundhousePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white">
+    <div className="min-h-screen bg-[#050505] text-white" onContextMenu={(e) => {
+      // Only block right-click on images
+      if (e.target.tagName === 'IMG' || e.target.closest('[data-protected]')) {
+        e.preventDefault();
+      }
+    }}>
       <SiteHeader currentPage="roundhouse" user={user} />
 
       {/* ====== HERO ====== */}
       <div className="relative pt-16 overflow-hidden">
         <div className="absolute inset-0" style={{ transform: `translateY(${scrollY * 0.3}px)` }}>
           <img
-            src="https://images.unsplash.com/photo-1474487548417-781cb71495f3?w=1920&q=80"
+            src="/images/roundhouse-hero.png"
             alt="" className="w-full h-[550px] object-cover opacity-25"
-            style={{ objectPosition: 'center 60%' }}
+            style={{ objectPosition: 'center 40%' }}
           />
         </div>
         <div className="absolute inset-0 bg-gradient-to-b from-[#050505] via-transparent to-[#050505]" />
@@ -550,9 +577,9 @@ export default function RoundhousePage() {
                     )}
 
                     {/* Image */}
-                    <div className="relative overflow-hidden">
+                    <div className="relative overflow-hidden" onContextMenu={(e) => e.preventDefault()}>
                       {photo.image_url ? (
-                        <img src={photo.image_url} alt={photo.title || `${photo.railroad} ${photo.locomotive_numbers}`}
+                        <ProtectedImage src={photo.image_url} alt={photo.title || `${photo.railroad} ${photo.locomotive_numbers}`}
                           className="w-full object-cover transition-transform duration-700 group-hover:scale-110"
                           style={{ minHeight: '180px', maxHeight: '400px' }}
                           onError={(e) => { e.target.src = ''; e.target.className = 'w-full h-48 bg-white/[0.03]'; }} />
@@ -722,7 +749,7 @@ export default function RoundhousePage() {
                   <button type="button" onClick={() => fileInputRef.current?.click()}
                     className="w-full h-32 border-2 border-dashed border-white/[0.06] hover:border-[#ff7a00]/20 rounded-xl flex flex-col items-center justify-center gap-2 transition-all duration-300 group hover:bg-[#ff7a00]/[0.02]">
                     <Upload className="w-6 h-6 text-white/20 group-hover:text-[#ff7a00]/40 transition-colors" />
-                    <span className="text-white/30 text-xs group-hover:text-white/50">Click to upload (max 10MB)</span>
+                    <span className="text-white/30 text-xs group-hover:text-white/50">Click to upload (max 15MB)</span>
                   </button>
                 )}
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
@@ -852,9 +879,9 @@ export default function RoundhousePage() {
             )}
 
             {/* Image */}
-            <div className={`relative ${selectedPhoto.is_heritage ? '' : 'rounded-t-xl'} overflow-hidden`}>
+            <div className={`relative ${selectedPhoto.is_heritage ? '' : 'rounded-t-xl'} overflow-hidden`} onContextMenu={(e) => e.preventDefault()}>
               {selectedPhoto.image_url ? (
-                <img src={selectedPhoto.image_url} alt={selectedPhoto.title || 'Rail photo'}
+                <ProtectedImage src={selectedPhoto.image_url} alt={selectedPhoto.title || 'Rail photo'}
                   className="w-full max-h-[60vh] object-contain bg-black" />
               ) : (
                 <div className="w-full h-64 bg-white/[0.03] flex items-center justify-center">

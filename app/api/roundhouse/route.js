@@ -251,8 +251,8 @@ export async function POST(request) {
         return NextResponse.json({ ok: false, error: 'image_data and photo_id required' }, { status: 400 });
       }
 
-      // Save image to disk
-      const uploadsDir = '/app/uploads/roundhouse';
+      // Save image to disk (supports NFS mount via ROUNDHOUSE_UPLOADS_PATH env var)
+      const uploadsDir = process.env.ROUNDHOUSE_UPLOADS_PATH || '/app/uploads/roundhouse';
       if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
       const matches = image_data.match(/^data:image\/(\w+);base64,(.+)$/);
@@ -261,9 +261,9 @@ export async function POST(request) {
       const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
       const buffer = Buffer.from(matches[2], 'base64');
 
-      // 10MB limit
-      if (buffer.length > 10 * 1024 * 1024) {
-        return NextResponse.json({ ok: false, error: 'Image must be under 10MB' }, { status: 400 });
+      // 15MB limit
+      if (buffer.length > 15 * 1024 * 1024) {
+        return NextResponse.json({ ok: false, error: 'Image must be under 15MB' }, { status: 400 });
       }
 
       const filename = `${photo_id}.${ext}`;

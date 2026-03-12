@@ -1186,7 +1186,7 @@ async function handleRoute(request, { params }) {
       }
     }
 
-    // GET /api/roundhouse/image/:filename — Serve a roundhouse photo
+    // GET /api/roundhouse/image/:filename — Serve a roundhouse photo (protected)
     if (route.startsWith('/roundhouse/image/') && method === 'GET') {
       const filename = route.split('/roundhouse/image/')[1];
       if (!filename || filename.includes('..') || filename.includes('/')) {
@@ -1196,7 +1196,7 @@ async function handleRoute(request, { params }) {
       try {
         const fs = await import('fs/promises');
         const path_mod = await import('path');
-        const uploadsDir = path_mod.join(process.cwd(), 'uploads', 'roundhouse');
+        const uploadsDir = process.env.ROUNDHOUSE_UPLOADS_PATH || path_mod.join(process.cwd(), 'uploads', 'roundhouse');
         const filePath = path_mod.join(uploadsDir, filename);
         const imageData = await fs.readFile(filePath);
 
@@ -1209,6 +1209,9 @@ async function handleRoute(request, { params }) {
             'Content-Type': mimeMap[ext] || 'image/jpeg',
             'Cache-Control': 'public, max-age=86400',
             'Access-Control-Allow-Origin': '*',
+            // Download protection headers
+            'Content-Disposition': 'inline',
+            'X-Content-Type-Options': 'nosniff',
           },
         });
       } catch {
