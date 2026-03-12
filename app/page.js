@@ -1239,8 +1239,8 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmi
                             )}
                             
                             {isSelected && (
-                              <span className="w-6 h-6 rounded-full bg-[#ff7a00] flex items-center justify-center text-white text-xs font-bold">
-                                {selectedCameras.findIndex(c => c?._id === camera._id) + 1}
+                              <span className="w-6 h-6 rounded-full bg-[#ff7a00] flex items-center justify-center text-white" title="Click to remove">
+                                <X className="w-3.5 h-3.5" />
                               </span>
                             )}
                           </div>
@@ -2049,6 +2049,13 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
       return;
     }
 
+    // ── TOGGLE BEHAVIOR: If camera is already playing, remove it ──
+    const existingSlot = selectedCameras.findIndex(c => c?._id === camera._id);
+    if (existingSlot !== -1) {
+      removeCamera(existingSlot);
+      return;
+    }
+
     // In single view, always replace slot 0
     if (viewMode === 'single') {
       loadCamera(camera, 0);
@@ -2564,27 +2571,16 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                               >
                                 <Monitor className={`${isCompact ? 'w-4 h-4' : 'w-5 h-5'}`} />
                               </button>
-                              <div className="absolute bottom-full right-0 mb-2 pointer-events-none opacity-0 group-hover/expand:opacity-100 transition-opacity whitespace-nowrap">
+                              <div className="absolute bottom-full right-1/2 translate-x-1/2 mb-2 pointer-events-none opacity-0 group-hover/expand:opacity-100 transition-opacity whitespace-nowrap z-50">
                                 <div className="bg-zinc-800 border border-white/10 text-white text-sm font-medium px-3 py-1.5 rounded-lg shadow-xl">
                                   Expand to Full View
-                                  <div className="absolute top-full right-3 w-2.5 h-2.5 bg-zinc-800 border-r border-b border-white/10 transform rotate-45 -mt-1.5" />
+                                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-zinc-800 border-r border-b border-white/10 transform rotate-45 -mt-1.5" />
                                 </div>
                               </div>
                             </div>
                           </div>
                         </div>
                       )}
-                      
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeCamera(i);
-                        }}
-                        className={`absolute top-1 right-1 rounded bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity ${isCompact ? 'p-0.5' : 'p-1.5'}`}
-                        aria-label={`Remove ${camera.name}`}
-                      >
-                        <X className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'}`} />
-                      </button>
                     </>
                   ) : (
                     <button
