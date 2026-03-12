@@ -67,6 +67,31 @@ function getToken(request) {
   return cookieStore.get('railstream_token')?.value;
 }
 
+// Extract real client IP from proxy headers (NGINX Proxy Manager → Next.js)
+function getClientIP(request) {
+  // X-Real-IP is set by your NGINX proxy to the actual client address
+  const realIP = request.headers.get('x-real-ip');
+  if (realIP) return realIP;
+  // Fallback: first IP in the X-Forwarded-For chain
+  const forwarded = request.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  return null;
+}
+
+// Build headers for upstream API calls, including client IP forwarding
+function upstreamHeaders(request, { token, contentType } = {}) {
+  const headers = { 'X-API-Key': API_KEY };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (contentType) headers['Content-Type'] = contentType;
+  // Forward real client IP to the upstream RailStream API
+  const clientIP = getClientIP(request);
+  if (clientIP) {
+    headers['X-Real-IP'] = clientIP;
+    headers['X-Forwarded-For'] = request.headers.get('x-forwarded-for') || clientIP;
+  }
+  return headers;
+}
+
 // Get admin token (with caching)
 async function getAdminToken() {
   const now = Date.now();
@@ -312,7 +337,7 @@ async function handleRoute(request, { params }) {
       const body = await request.json();
       const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+        headers: upstreamHeaders(request, { contentType: 'application/json' }),
         body: JSON.stringify(body),
       });
       const data = await res.json();
@@ -344,7 +369,7 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ error: 'Not authenticated' }, { status: 401 }));
       }
       const res = await fetch(`${API_BASE}/api/auth/me`, {
-        headers: { 'Authorization': `Bearer ${token}`, 'X-API-Key': API_KEY },
+        headers: upstreamHeaders(request, { token }),
       });
       if (!res.ok) {
         return handleCORS(NextResponse.json({ error: 'Session expired' }, { status: 401 }));
@@ -383,9 +408,7 @@ async function handleRoute(request, { params }) {
       const res = await fetch(`${API_BASE}/api/playback/authorize`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': API_KEY,
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          ...upstreamHeaders(request, { token, contentType: 'application/json' }),
         },
         body: JSON.stringify({
           camera_id: body.camera_id,
@@ -429,11 +452,7 @@ async function handleRoute(request, { params }) {
       const token = getToken(request);
       const res = await fetch(`${API_BASE}/api/playback/heartbeat`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': API_KEY,
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
+        headers: upstreamHeaders(request, { token, contentType: 'application/json' }),
         body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({ ok: true }));
