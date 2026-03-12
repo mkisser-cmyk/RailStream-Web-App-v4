@@ -16,7 +16,7 @@ const FEATURES = [
     title: 'DVR & Time Travel',
     subtitle: 'Never miss a moment',
     description: 'Rewind up to 2 hours on any camera. Scrub through the timeline with thumbnail previews to find the exact moment you want. Jump back 10 seconds or forward 10 seconds with precision controls.',
-    highlights: ['2-hour rewind on all cameras', 'Thumbnail preview on timeline hover', 'Skip forward/back 10 seconds', '7-day full archive for Review Ops'],
+    highlights: ['Up to 7-day rewind on all cameras', 'Thumbnail preview on timeline hover', 'Skip forward/back 10 seconds', '7-day full archive for Review Ops'],
     color: '#ff7a00',
   },
   {

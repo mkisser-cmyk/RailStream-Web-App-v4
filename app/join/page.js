@@ -14,7 +14,7 @@ const tiers = [
     features: [
       'Access to select free cameras',
       'Standard definition streaming',
-      'Basic DVR (2-hour rewind)',
+      'Basic DVR (up to 7-day rewind)',
       'Ad-supported experience',
     ],
   },
@@ -30,7 +30,7 @@ const tiers = [
       'Everything in Fireman, plus:',
       'Conductor-tier camera access',
       'HD streaming quality',
-      'Extended DVR (2-hour rewind)',
+      'Extended DVR (up to 7-day rewind)',
       'Ad-free experience',
       'Train sighting log',
     ],

@@ -21,11 +21,12 @@ const TIERS = [
     features: [
       { text: '14 live cameras', included: true },
       { text: 'Standard quality streams', included: true },
-      { text: 'DVR / 2-hour rewind', included: true },
+      { text: 'DVR / up to 7-day rewind', included: true },
       { text: 'Train sighting logging', included: true },
       { text: 'Community chat', included: true },
       { text: 'Ad-supported viewing', included: true, note: 'Includes ads' },
       { text: 'Multi-view layouts', included: false },
+      { text: 'The Roundhouse photo archive', included: false },
       { text: 'Mobile & TV apps', included: false },
       { text: 'Premium camera locations', included: false },
       { text: 'Priority support', included: false },
@@ -48,11 +49,12 @@ const TIERS = [
     features: [
       { text: '18 live cameras', included: true },
       { text: 'HD quality streams', included: true },
-      { text: 'DVR / 2-hour rewind', included: true },
+      { text: 'DVR / up to 7-day rewind', included: true },
       { text: 'Train sighting logging', included: true },
       { text: 'Community chat', included: true },
       { text: 'Ad-free viewing', included: true },
       { text: 'Multi-view (up to 4)', included: true },
+      { text: 'The Roundhouse photo archive', included: true },
       { text: 'Mobile & TV apps', included: false },
       { text: 'All camera locations', included: false },
       { text: 'Priority support', included: false },
@@ -75,11 +77,12 @@ const TIERS = [
     features: [
       { text: 'All 45+ cameras', included: true },
       { text: 'Up to 4K HDR quality', included: true },
-      { text: 'DVR / 2-hour rewind', included: true },
+      { text: 'DVR / up to 7-day rewind', included: true },
       { text: 'Train sighting logging', included: true },
       { text: 'Community chat', included: true },
       { text: 'Ad-free viewing', included: true },
       { text: 'Multi-view (up to 16)', included: true },
+      { text: 'The Roundhouse photo archive', included: true },
       { text: 'iOS, Android, Apple TV, Roku, Fire TV', included: true },
       { text: 'All premium locations', included: true },
       { text: 'Priority support', included: true },
@@ -92,7 +95,7 @@ const TIERS = [
 const FAQS = [
   {
     q: 'Can I try before I subscribe?',
-    a: 'Absolutely! The Fireman tier is completely free. You get access to 14 live cameras with DVR and all core player features. No credit card required.',
+    a: 'Absolutely! The Fireman tier is completely free. You get access to 14 live cameras with up to 7-day DVR rewind and all core player features. No credit card required.',
   },
   {
     q: 'What payment methods do you accept?',
@@ -135,7 +138,7 @@ export default function PricingPage() {
           <span className="text-[#ff7a00]"> View.</span>
         </h1>
         <p className="text-lg text-white/50 max-w-2xl mx-auto mb-8">
-          Start free, upgrade anytime. Every plan includes DVR, train logging, and our custom player.
+          Start free, upgrade anytime. Every plan includes up to 7-day DVR, train logging, and our custom player.
         </p>
 
         {/* Billing Toggle */}
