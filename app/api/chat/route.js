@@ -52,6 +52,7 @@ export async function GET(request) {
         is_mod: msg.is_mod || false,
         is_system: msg.is_system || false,
         pinned: msg.pinned || false,
+        reactions: msg.reactions || {},
       }));
 
       return NextResponse.json({ ok: true, messages: formatted, room });
@@ -170,6 +171,7 @@ export async function POST(request) {
         is_mod: user.is_mod || false,
         is_system: false,
         pinned: false,
+        reactions: {},
         created_at: new Date(),
       };
 
@@ -311,6 +313,46 @@ export async function POST(request) {
       }
 
       return NextResponse.json({ ok: true });
+    }
+
+    // ── REACT TO MESSAGE (toggle emoji reaction) ──
+    if (action === 'react') {
+      const { user, message_id, emoji } = body;
+      if (!user?.username) return NextResponse.json({ ok: false, error: 'Must be logged in' }, { status: 401 });
+      if (!message_id || !emoji) return NextResponse.json({ ok: false, error: 'message_id and emoji required' }, { status: 400 });
+
+      // Validate emoji is one of the allowed set
+      const ALLOWED_EMOJIS = ['🚂', '👍', '🔥', '❤️', '👀', '🎉', '😂', '💯'];
+      if (!ALLOWED_EMOJIS.includes(emoji)) {
+        return NextResponse.json({ ok: false, error: 'Invalid emoji' }, { status: 400 });
+      }
+
+      const msg = await db.collection('chat_messages').findOne({ id: message_id });
+      if (!msg) return NextResponse.json({ ok: false, error: 'Message not found' }, { status: 404 });
+
+      const reactions = msg.reactions || {};
+      const users = reactions[emoji] || [];
+      const userIndex = users.indexOf(user.username);
+
+      if (userIndex >= 0) {
+        // Remove reaction (toggle off)
+        users.splice(userIndex, 1);
+        if (users.length === 0) {
+          delete reactions[emoji];
+        } else {
+          reactions[emoji] = users;
+        }
+      } else {
+        // Add reaction (toggle on)
+        reactions[emoji] = [...users, user.username];
+      }
+
+      await db.collection('chat_messages').updateOne(
+        { id: message_id },
+        { $set: { reactions } }
+      );
+
+      return NextResponse.json({ ok: true, reactions, message_id });
     }
 
     // ── CREATE / ENSURE ROOM ──

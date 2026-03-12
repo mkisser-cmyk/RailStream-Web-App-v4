@@ -118,8 +118,8 @@ export default function SightingsPage() {
   const [total, setTotal] = useState(0);
   const [user, setUser] = useState(null);
 
-  // Filters
-  const [filterCamera, setFilterCamera] = useState('');
+  // Filters - filterLocation stores unique town name (e.g. "Fostoria, Ohio") instead of camera_id
+  const [filterLocation, setFilterLocation] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterRailroad, setFilterRailroad] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -138,8 +138,8 @@ export default function SightingsPage() {
   // Editing
   const [editingId, setEditingId] = useState(null);
 
-  // Expanded image
-  const [expandedImage, setExpandedImage] = useState(null);
+  // Expanded image - stores full sighting for showing notes
+  const [expandedSighting, setExpandedSighting] = useState(null);
 
   // Hero parallax
   const [scrollY, setScrollY] = useState(0);
@@ -177,7 +177,7 @@ export default function SightingsPage() {
   const fetchSightings = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams({ page: page.toString(), limit: '20' });
-    if (filterCamera) params.set('camera_id', filterCamera);
+    if (filterLocation) params.set('camera_name', filterLocation);
     if (filterDate) params.set('date', filterDate);
     if (filterRailroad) params.set('railroad', filterRailroad);
 
@@ -193,7 +193,7 @@ export default function SightingsPage() {
       console.error('Failed to fetch sightings:', e);
     }
     setLoading(false);
-  }, [page, filterCamera, filterDate, filterRailroad]);
+  }, [page, filterLocation, filterDate, filterRailroad]);
 
   useEffect(() => { fetchSightings(); }, [fetchSightings]);
 
@@ -325,7 +325,10 @@ export default function SightingsPage() {
   };
 
   const isPaidMember = user && ['conductor', 'engineer', 'fireman', 'development', 'admin'].includes(user.tier || user.membership_tier);
-  const activeFilters = [filterCamera, filterDate, filterRailroad].filter(Boolean).length;
+  const activeFilters = [filterLocation, filterDate, filterRailroad].filter(Boolean).length;
+
+  // Compute unique locations from cameras (deduplicated by name)
+  const uniqueLocations = [...new Set(cameras.map(c => c.name))].sort();
 
   // Scroll-triggered refs for sections
   const [heroRef, heroVisible] = useScrollFadeIn();
@@ -597,16 +600,16 @@ export default function SightingsPage() {
             <button
               onClick={() => setFiltersOpen(!filtersOpen)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all duration-300 ${
-                filtersOpen || (filterCamera || filterDate)
+                filtersOpen || (filterLocation || filterDate)
                   ? 'bg-[#ff7a00]/10 text-[#ff7a00] border border-[#ff7a00]/20'
                   : 'bg-white/[0.03] text-white/40 hover:text-white/60 border border-white/[0.06] hover:border-white/[0.1]'
               }`}
             >
               <Filter className="w-3.5 h-3.5" />
               Advanced Filters
-              {(filterCamera || filterDate) && (
+              {(filterLocation || filterDate) && (
                 <span className="w-5 h-5 rounded-full bg-[#ff7a00] text-white text-[10px] flex items-center justify-center font-bold">
-                  {[filterCamera, filterDate].filter(Boolean).length}
+                  {[filterLocation, filterDate].filter(Boolean).length}
                 </span>
               )}
               <ChevronDown className={`w-3 h-3 transition-transform duration-300 ${filtersOpen ? 'rotate-180' : ''}`} />
@@ -614,7 +617,7 @@ export default function SightingsPage() {
 
             {activeFilters > 0 && (
               <button
-                onClick={() => { setFilterCamera(''); setFilterDate(''); setFilterRailroad(''); setPage(1); }}
+                onClick={() => { setFilterLocation(''); setFilterDate(''); setFilterRailroad(''); setPage(1); }}
                 className="flex items-center gap-1.5 text-[#ff7a00]/60 hover:text-[#ff7a00] text-xs font-medium transition-colors"
               >
                 <X className="w-3 h-3" /> Clear all filters
@@ -629,13 +632,13 @@ export default function SightingsPage() {
                 <div>
                   <label className="block text-white/30 text-[11px] uppercase tracking-wider font-semibold mb-2">Location</label>
                   <select
-                    value={filterCamera}
-                    onChange={(e) => { setFilterCamera(e.target.value); setPage(1); }}
+                    value={filterLocation}
+                    onChange={(e) => { setFilterLocation(e.target.value); setPage(1); }}
                     className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all"
                   >
                     <option value="">All Locations</option>
-                    {cameras.map(c => (
-                      <option key={c._id} value={c._id}>{c.name}</option>
+                    {uniqueLocations.map(loc => (
+                      <option key={loc} value={loc}>{loc}</option>
                     ))}
                   </select>
                 </div>
@@ -649,9 +652,9 @@ export default function SightingsPage() {
                   />
                 </div>
                 <div className="flex items-end">
-                  {(filterCamera || filterDate) && (
+                  {(filterLocation || filterDate) && (
                     <button
-                      onClick={() => { setFilterCamera(''); setFilterDate(''); setPage(1); }}
+                      onClick={() => { setFilterLocation(''); setFilterDate(''); setPage(1); }}
                       className="w-full text-[#ff7a00] hover:text-[#ff8c20] text-sm font-medium transition flex items-center gap-2 justify-center py-3 rounded-xl hover:bg-[#ff7a00]/5"
                     >
                       <X className="w-3.5 h-3.5" /> Reset Filters
@@ -755,7 +758,7 @@ export default function SightingsPage() {
                             {hasImage && (
                               <div
                                 className="w-44 md:w-56 flex-shrink-0 relative cursor-pointer overflow-hidden"
-                                onClick={() => setExpandedImage(hasImage)}
+                                onClick={() => setExpandedSighting(s)}
                               >
                                 <img
                                   src={hasImage}
@@ -1017,7 +1020,7 @@ export default function SightingsPage() {
                 >
                   <option value="">Select a camera...</option>
                   {cameras.map(c => (
-                    <option key={c._id} value={c._id}>{c.name}</option>
+                    <option key={c._id} value={c._id}>{c.name}{c.location ? ` — ${c.location}` : ''}</option>
                   ))}
                 </select>
               </div>
@@ -1138,22 +1141,77 @@ export default function SightingsPage() {
         </div>
       )}
 
-      {/* ====== EXPANDED IMAGE LIGHTBOX ====== */}
-      {expandedImage && (
+      {/* ====== EXPANDED IMAGE LIGHTBOX WITH NOTES ====== */}
+      {expandedSighting && (
         <div
           className="fixed inset-0 bg-black/95 backdrop-blur-xl z-50 flex items-center justify-center p-4 cursor-pointer"
-          onClick={() => setExpandedImage(null)}
+          onClick={() => setExpandedSighting(null)}
           style={{ animation: 'modalIn 0.2s ease-out' }}
         >
-          <div className="relative max-w-5xl w-full">
+          <div className="relative max-w-5xl w-full" onClick={e => e.stopPropagation()}>
             <img
-              src={expandedImage}
-              alt="Sighting snapshot"
-              className="w-full rounded-xl shadow-2xl shadow-black/50"
-              onClick={e => e.stopPropagation()}
+              src={expandedSighting.image_url || expandedSighting.imageUrl}
+              alt={`${expandedSighting.railroad} ${expandedSighting.train_id || 'train'}`}
+              className="w-full rounded-t-xl shadow-2xl shadow-black/50"
             />
+            {/* Sighting details below image */}
+            <div className="bg-[#0a0a0a] border border-white/[0.08] border-t-0 rounded-b-xl px-6 py-5">
+              <div className="flex items-center gap-3 flex-wrap mb-3">
+                <span
+                  className="inline-flex px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider"
+                  style={{
+                    background: (RR_COLORS[expandedSighting.railroad] || RR_COLORS.Other).bg,
+                    color: (RR_COLORS[expandedSighting.railroad] || RR_COLORS.Other).text,
+                    boxShadow: `0 2px 8px ${(RR_COLORS[expandedSighting.railroad] || RR_COLORS.Other).glow}`
+                  }}
+                >
+                  {expandedSighting.railroad}
+                </span>
+                {expandedSighting.train_id && (
+                  <span className="text-white font-bold text-base">{expandedSighting.train_id}</span>
+                )}
+                {expandedSighting.train_type && (
+                  <span className="text-white/30 text-sm">• {expandedSighting.train_type}</span>
+                )}
+                {expandedSighting.direction && (
+                  <span className="flex items-center gap-1 text-white/50 text-xs bg-white/[0.04] px-2.5 py-1 rounded-lg font-semibold">
+                    <Navigation className="w-3 h-3" />
+                    {expandedSighting.direction}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-4 text-xs text-white/40 mb-2">
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="w-3 h-3 text-white/20" />
+                  {expandedSighting.camera_name || expandedSighting.location || 'Unknown'}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Clock className="w-3 h-3 text-white/20" />
+                  {new Date(expandedSighting.sighting_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  {' at '}
+                  {new Date(expandedSighting.sighting_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+                </span>
+              </div>
+              {expandedSighting.locomotives && (
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-white/20 text-[11px] font-semibold uppercase tracking-wider">Power</span>
+                  <span className="text-white/50 font-mono text-xs bg-white/[0.03] px-2 py-0.5 rounded">{expandedSighting.locomotives}</span>
+                </div>
+              )}
+              {expandedSighting.notes && (
+                <p className="text-white/50 text-sm mt-3 leading-relaxed italic border-l-2 border-[#ff7a00]/30 pl-3">{expandedSighting.notes}</p>
+              )}
+              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/[0.04]">
+                <div className="w-5 h-5 rounded-full bg-white/[0.06] flex items-center justify-center text-[9px] font-bold text-white/30">
+                  {(expandedSighting.user || '?')[0].toUpperCase()}
+                </div>
+                <p className="text-white/30 text-[11px]">
+                  Spotted by <span className="text-white/50 font-medium">{expandedSighting.user}</span>
+                </p>
+              </div>
+            </div>
             <button
-              onClick={() => setExpandedImage(null)}
+              onClick={() => setExpandedSighting(null)}
               className="absolute top-4 right-4 p-2.5 rounded-xl bg-black/50 backdrop-blur-sm text-white/50 hover:text-white transition-colors border border-white/[0.1]"
             >
               <X className="w-5 h-5" />

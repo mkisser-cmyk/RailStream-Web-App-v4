@@ -1079,8 +1079,11 @@ async function handleRoute(request, { params }) {
         const db = await getMongoDb();
         const col = db.collection('train_sightings');
 
+        const camera_name = url.searchParams.get('camera_name');
+
         const query = {};
         if (camera_id) query.camera_id = camera_id;
+        if (camera_name) query.camera_name = camera_name;
         if (railroad) query.railroad = railroad;
         if (date) {
           const dayStart = new Date(date + 'T00:00:00Z');

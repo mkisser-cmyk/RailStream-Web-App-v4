@@ -19,11 +19,17 @@ function TierBadge({ tier, isAdmin, isMod, size = 'sm' }) {
   return <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold ${colors[tier] || 'bg-zinc-700 text-zinc-400'} ${size === 'xs' ? 'text-[9px] px-1' : ''}`}>{label}</span>;
 }
 
+// Quick emoji set for reactions
+const REACTION_EMOJIS = ['🚂', '👍', '🔥', '❤️', '👀', '🎉'];
+
 // ── Message component ──
-function ChatMessage({ msg, currentUser, onDelete, onMute, onBan }) {
+function ChatMessage({ msg, currentUser, onDelete, onMute, onBan, onReact }) {
   const [showMenu, setShowMenu] = useState(false);
+  const [showReactPicker, setShowReactPicker] = useState(false);
   const isOwn = msg.username === currentUser?.username;
   const canModerate = currentUser?.is_admin || currentUser?.is_mod;
+  const reactions = msg.reactions || {};
+  const hasReactions = Object.keys(reactions).length > 0;
 
   if (msg.is_system) {
     return (
@@ -54,39 +60,93 @@ function ChatMessage({ msg, currentUser, onDelete, onMute, onBan }) {
           <span className="text-[10px] text-white/30">{formatTime(msg.created_at)}</span>
         </div>
         <p className="text-sm text-white/80 break-words leading-relaxed">{msg.message}</p>
+        {/* Reactions display */}
+        {hasReactions && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {Object.entries(reactions).map(([emoji, users]) => {
+              const iReacted = users.includes(currentUser?.username);
+              return (
+                <button
+                  key={emoji}
+                  onClick={() => onReact && onReact(msg.id, emoji)}
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] transition-all ${
+                    iReacted
+                      ? 'bg-[#ff7a00]/15 border border-[#ff7a00]/30 text-[#ff7a00]'
+                      : 'bg-white/5 border border-white/5 text-white/60 hover:bg-white/10'
+                  }`}
+                  title={users.join(', ')}
+                >
+                  <span>{emoji}</span>
+                  <span className="font-semibold">{users.length}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
-      {/* Mod actions */}
-      {canModerate && !isOwn && (
-        <div className="relative flex-shrink-0">
-          <button
-            onClick={() => setShowMenu(!showMenu)}
-            className="p-1 text-white/20 hover:text-white/60 opacity-0 group-hover:opacity-100 transition"
-          >
-            <MoreHorizontal className="w-4 h-4" />
-          </button>
-          {showMenu && (
-            <div className="absolute right-0 top-6 z-50 bg-zinc-800 border border-white/10 rounded-lg shadow-xl py-1 min-w-[140px]"
-              onMouseLeave={() => setShowMenu(false)}>
-              <button onClick={() => { onDelete(msg.id); setShowMenu(false); }}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10">
-                <Trash2 className="w-3 h-3" /> Delete
-              </button>
-              <button onClick={() => { onMute(msg.username, 5); setShowMenu(false); }}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-yellow-400 hover:bg-yellow-500/10">
-                <VolumeX className="w-3 h-3" /> Mute 5 min
-              </button>
-              <button onClick={() => { onMute(msg.username, 60); setShowMenu(false); }}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-yellow-400 hover:bg-yellow-500/10">
-                <VolumeX className="w-3 h-3" /> Mute 1 hour
-              </button>
-              <button onClick={() => { onBan(msg.username); setShowMenu(false); }}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-500 hover:bg-red-500/10">
-                <Ban className="w-3 h-3" /> Ban
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Quick react + mod actions */}
+      <div className="relative flex-shrink-0 flex items-start gap-0.5">
+        {/* Quick react button */}
+        {currentUser && !msg.is_system && (
+          <div className="relative">
+            <button
+              onClick={() => setShowReactPicker(!showReactPicker)}
+              className="p-1 text-white/10 hover:text-white/40 opacity-0 group-hover:opacity-100 transition text-[13px]"
+              title="React"
+            >
+              😀
+            </button>
+            {showReactPicker && (
+              <div
+                className="absolute right-0 top-6 z-50 bg-zinc-800 border border-white/10 rounded-lg shadow-xl p-1.5 flex gap-0.5"
+                onMouseLeave={() => setShowReactPicker(false)}
+              >
+                {REACTION_EMOJIS.map(emoji => (
+                  <button
+                    key={emoji}
+                    onClick={() => { onReact && onReact(msg.id, emoji); setShowReactPicker(false); }}
+                    className="w-7 h-7 rounded hover:bg-white/10 flex items-center justify-center text-base transition-transform hover:scale-125"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {/* Mod actions menu */}
+        {canModerate && !isOwn && (
+          <div className="relative">
+            <button
+              onClick={() => setShowMenu(!showMenu)}
+              className="p-1 text-white/20 hover:text-white/60 opacity-0 group-hover:opacity-100 transition"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+            {showMenu && (
+              <div className="absolute right-0 top-6 z-50 bg-zinc-800 border border-white/10 rounded-lg shadow-xl py-1 min-w-[140px]"
+                onMouseLeave={() => setShowMenu(false)}>
+                <button onClick={() => { onDelete(msg.id); setShowMenu(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10">
+                  <Trash2 className="w-3 h-3" /> Delete
+                </button>
+                <button onClick={() => { onMute(msg.username, 5); setShowMenu(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-yellow-400 hover:bg-yellow-500/10">
+                  <VolumeX className="w-3 h-3" /> Mute 5 min
+                </button>
+                <button onClick={() => { onMute(msg.username, 60); setShowMenu(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-yellow-400 hover:bg-yellow-500/10">
+                  <VolumeX className="w-3 h-3" /> Mute 1 hour
+                </button>
+                <button onClick={() => { onBan(msg.username); setShowMenu(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-500 hover:bg-red-500/10">
+                  <Ban className="w-3 h-3" /> Ban
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -95,7 +155,7 @@ function formatTime(iso) {
   try {
     const d = new Date(iso);
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } catch { return ''; }
+  } catch (e) { return ''; }
 }
 
 // ── Main YardChat component ──
@@ -315,6 +375,33 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
     });
   };
 
+  // ── React to a message (toggle emoji) ──
+  const handleReact = async (messageId, emoji) => {
+    if (!user?.username) return;
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'react', user, message_id: messageId, emoji }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        // Update the message reactions locally
+        setMessages(prev => {
+          const roomMsgs = prev[activeRoom] || [];
+          return {
+            ...prev,
+            [activeRoom]: roomMsgs.map(m =>
+              m.id === messageId ? { ...m, reactions: data.reactions } : m
+            ),
+          };
+        });
+      }
+    } catch (e) {
+      console.error('Failed to react:', e);
+    }
+  };
+
   // ── Join a room from browse ──
   const handleJoinRoom = (roomId) => {
     if (!joinedRooms.includes(roomId)) {
@@ -458,6 +545,7 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
               onDelete={handleDelete}
               onMute={handleMute}
               onBan={handleBan}
+              onReact={handleReact}
             />
           ))
         )}
