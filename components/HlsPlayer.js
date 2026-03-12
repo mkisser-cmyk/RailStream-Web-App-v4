@@ -278,6 +278,7 @@ export default function HlsPlayer({
   poster = null,
   openReviewOps = 0,
   hideReviewButton = false,
+  adPlaying = false,
 }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
@@ -441,7 +442,7 @@ export default function HlsPlayer({
             console.log(`[HlsPlayer] Quality capped to ${hls.levels[capIdx].height}p (level ${capIdx}) for ${viewMode} mode`);
           }
         }
-        if (autoPlay) {
+        if (autoPlay && !adPlayingRef.current) {
           video.play().catch(() => setIsPlaying(false));
         }
       });
@@ -503,7 +504,7 @@ export default function HlsPlayer({
       video.src = url;
       video.addEventListener('loadedmetadata', () => {
         setIsLoading(false);
-        if (autoPlay) video.play().catch(() => setIsPlaying(false));
+        if (autoPlay && !adPlayingRef.current) video.play().catch(() => setIsPlaying(false));
       }, { once: true });
     } else {
       setError('Your browser does not support HLS playback.');
@@ -561,6 +562,26 @@ export default function HlsPlayer({
       setIsMuted(muted);
     }
   }, [muted]);
+
+  // ── Ad blocking: pause/mute video while ad is playing ──
+  const adPlayingRef = useRef(adPlaying);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const wasAdPlaying = adPlayingRef.current;
+    adPlayingRef.current = adPlaying;
+
+    if (adPlaying) {
+      // Ad started — pause and mute the stream
+      video.pause();
+      video.muted = true;
+    } else if (wasAdPlaying && !adPlaying) {
+      // Ad ended — resume playback and restore mute state
+      video.muted = muted;
+      setIsMuted(muted);
+      video.play().catch(() => {});
+    }
+  }, [adPlaying, muted]);
 
   // ── Video event listeners ──
   useEffect(() => {

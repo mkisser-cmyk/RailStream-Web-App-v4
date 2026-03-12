@@ -5,7 +5,7 @@ import json
 import os
 
 # Configuration
-BASE_URL = "https://sighting-log-debug.preview.emergentagent.com/api"
+BASE_URL = "https://preroll-fix.preview.emergentagent.com/api"
 TEST_USERNAME = "chicagotest"
 TEST_PASSWORD = "sZyE8cDFk"
 ATLANTA_CAMERA_ID = "699894a055761e18195294e3"

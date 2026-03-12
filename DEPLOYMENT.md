@@ -185,6 +185,92 @@ sudo certbot --nginx -d www.railstream.net -d railstream.net
 # Certbot will automatically configure Nginx
 ```
 
+### 5.1 Nginx Configuration with Client IP Forwarding
+
+Create or update the Nginx config to properly forward client IPs:
+
+```bash
+sudo nano /etc/nginx/sites-available/railstream
+```
+
+```nginx
+server {
+    listen 80;
+    server_name www.railstream.net railstream.net;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name www.railstream.net railstream.net;
+
+    # SSL (managed by Certbot)
+    ssl_certificate /etc/letsencrypt/live/www.railstream.net/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/www.railstream.net/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # === CRITICAL: Forward real client IPs ===
+    # These headers ensure your backend sees the actual client IP
+    # instead of 127.0.0.1 from the Nginx reverse proxy
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header Host $host;
+
+    # If behind Cloudflare or another CDN, also add:
+    # set_real_ip_from 103.21.244.0/22;
+    # set_real_ip_from 103.22.200.0/22;
+    # set_real_ip_from 103.31.4.0/22;
+    # set_real_ip_from 104.16.0.0/13;
+    # set_real_ip_from 104.24.0.0/14;
+    # set_real_ip_from 108.162.192.0/18;
+    # set_real_ip_from 131.0.72.0/22;
+    # set_real_ip_from 141.101.64.0/18;
+    # set_real_ip_from 162.158.0.0/15;
+    # set_real_ip_from 172.64.0.0/13;
+    # set_real_ip_from 173.245.48.0/20;
+    # set_real_ip_from 188.114.96.0/20;
+    # set_real_ip_from 190.93.240.0/20;
+    # set_real_ip_from 197.234.240.0/22;
+    # set_real_ip_from 198.41.128.0/17;
+    # real_ip_header CF-Connecting-IP;
+
+    # WebSocket support (for chat, etc.)
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+
+    # Timeouts
+    proxy_read_timeout 300s;
+    proxy_connect_timeout 75s;
+    proxy_send_timeout 300s;
+
+    # Buffering
+    proxy_buffering off;
+    proxy_request_buffering off;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+    }
+
+    # Larger body size for image uploads
+    client_max_body_size 50M;
+
+    # Access logging with real client IP
+    access_log /var/log/nginx/railstream_access.log;
+    error_log /var/log/nginx/railstream_error.log;
+}
+```
+
+Enable the config:
+```bash
+sudo ln -sf /etc/nginx/sites-available/railstream /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
 ---
 
 ## Part 6: Post-Setup Tasks

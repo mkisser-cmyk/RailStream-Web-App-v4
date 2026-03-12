@@ -112,7 +112,8 @@ const TIERS = {
   engineer: { label: 'Engineer', icon: Crown, color: 'from-purple-600 to-purple-500', price: '$12.95/mo', level: 3 },
 };
 
-const canAccess = (userTier, cameraTier) => {
+const canAccess = (userTier, cameraTier, isAdmin = false) => {
+  if (isAdmin) return true; // Admins can access everything
   if (cameraTier === 'fireman') return true;
   return (TIERS[userTier]?.level || 0) >= (TIERS[cameraTier]?.level || 0);
 };
@@ -919,7 +920,7 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
 // ============================================
 // CAMERA PICKER WITH FAVORITES & PRESETS
 // ============================================
-function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, favorites, setFavorites, presets, setPresets, onLoadPreset, onSavePreset, thumbnailMap, thumbTimestamp, targetSlot, setTargetSlot }) {
+function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmin, viewMode, favorites, setFavorites, presets, setPresets, onLoadPreset, onSavePreset, thumbnailMap, thumbTimestamp, targetSlot, setTargetSlot }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [showPresets, setShowPresets] = useState(false);
@@ -1179,7 +1180,7 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, viewMode, 
                   <ul className="space-y-0.5" role="list">
                     {cams.map(camera => {
                       const isSelected = selectedCameras.some(c => c?._id === camera._id);
-                      const hasAccess = canAccess(userTier, camera.min_tier);
+                      const hasAccess = canAccess(userTier, camera.min_tier, userIsAdmin);
                       const isStatusCamera = camera.status === 'offline' || camera.status === 'coming_soon';
                       // Locked cameras should be clickable for logged-out users (to show sign-in prompt)
                       // and for logged-in users who don't have access (to show upgrade prompt in player)
@@ -2104,6 +2105,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
             selectedCameras={selectedCameras}
             onSelect={handleSelectCamera}
             userTier={user?.membership_tier}
+            userIsAdmin={user?.is_admin}
             viewMode={viewMode}
             favorites={favorites}
             setFavorites={(f) => { setFavorites(f); storage.setFavorites(f); syncPrefsToServer(f, undefined); }}
@@ -2334,6 +2336,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                         onLogSighting={user ? (data) => handleLogSighting(selectedCameras[focusedSlot], data) : undefined}
                         initialSeekOffset={focusedSlot === 0 ? replaySeekOffset : 0}
                         onStatsUpdate={(stats) => { playerStatsRef.current[focusedSlot] = stats; }}
+                        adPlaying={prerollActive}
                       />
                     ) : state.loading ? (
                       <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="w-10 h-10 text-[#ff7a00] animate-spin" /></div>
@@ -2522,6 +2525,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                           onLogSighting={user && !isCompact ? (data) => handleLogSighting(selectedCameras[i], data) : undefined}
                           initialSeekOffset={i === 0 ? replaySeekOffset : 0}
                           onStatsUpdate={(stats) => { playerStatsRef.current[i] = stats; }}
+                          adPlaying={prerollActive}
                         />
                       ) : null}
                       
@@ -2994,7 +2998,7 @@ function CamerasPage({ cameras, user, onSelectCamera }) {
                   const isComingSoon = camera.status === 'coming_soon';
                   const isOffline = camera.status === 'offline';
                   const isStatusCamera = isComingSoon || isOffline;
-                  const hasAccess = !isComingSoon && canAccess(user?.membership_tier, camera.min_tier);
+                  const hasAccess = !isComingSoon && canAccess(user?.membership_tier, camera.min_tier, user?.is_admin);
                   
                   return (
                     <button
@@ -3435,6 +3439,53 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', cleanup);
   }, []);
 
+  // ── Auth session heartbeat / keep-alive ──
+  // Periodically validates the auth token with the server.
+  // If the token has expired, re-authenticate silently or prompt re-login.
+  useEffect(() => {
+    const validateSession = async () => {
+      const token = auth.getToken();
+      if (!token) return; // Not logged in — nothing to validate
+
+      try {
+        const res = await fetch('/api/auth/me', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          // Update user data in case tier or admin status changed server-side
+          if (data && data.username) {
+            const updatedUser = {
+              username: data.username,
+              membership_tier: data.membership_tier || data.tier,
+              is_admin: data.is_admin || false,
+              ...data,
+            };
+            auth.setUser(updatedUser);
+            setUser(updatedUser);
+          }
+        } else if (res.status === 401) {
+          // Token expired — clear auth and prompt re-login
+          console.log('[Auth Heartbeat] Token expired, prompting re-login');
+          auth.clear();
+          setUser(null);
+          toast.error('Your session has expired. Please sign in again.', { duration: 5000 });
+          setLoginOpen(true);
+        }
+      } catch (e) {
+        // Network error — don't log out, just skip this check
+        console.log('[Auth Heartbeat] Network error, skipping validation');
+      }
+    };
+
+    // Validate immediately on mount (checks if stored token is still valid)
+    validateSession();
+
+    // Then validate every 5 minutes
+    const interval = setInterval(validateSession, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Sync preferences to server (debounced)
   const syncPrefsToServer = useCallback(async (newFavs, newPresets) => {
     const token = auth.getToken();
@@ -3670,6 +3721,31 @@ export default function App() {
         }),
       });
       const data = await res.json();
+      
+      // Handle HTTP 401 — token is expired or invalid
+      if (res.status === 401) {
+        console.log('[loadCamera] Got 401 — token expired');
+        auth.clear();
+        setUser(null);
+        toast.error('Your session has expired. Please sign in again.', { duration: 5000 });
+        setLoginOpen(true);
+        setPlaybackStates(prev => ({
+          ...prev,
+          [slotIndex]: {
+            loading: false,
+            data: null,
+            error: null,
+            upgrade: {
+              required_tier: camera.min_tier || 'conductor',
+              user_tier: 'none',
+              upgrade_url: '/join',
+              needsSignIn: true,
+            },
+          },
+        }));
+        return;
+      }
+      
       if (data.ok && data.hls_url) {
         // Store session_id for heartbeat and cleanup
         if (data.session_id) {
@@ -3684,19 +3760,48 @@ export default function App() {
           },
         }));
       } else if (data.reason === 'upgrade_required') {
-        setPlaybackStates(prev => ({
-          ...prev,
-          [slotIndex]: {
-            loading: false,
-            data: null,
-            error: null,
-            upgrade: {
-              required_tier: data.required_tier || 'conductor',
-              user_tier: data.user_tier || 'fireman',
-              upgrade_url: data.upgrade_url || '/join',
+        // If user is locally known as admin or has sufficient tier, the token might be expired
+        // Re-validate auth before showing upgrade prompt
+        const localUser = auth.getUser();
+        const locallyHasAccess = localUser && (localUser.is_admin || canAccess(localUser.membership_tier, camera.min_tier, localUser.is_admin));
+        
+        if (locallyHasAccess) {
+          // Token might be expired — validate and retry
+          console.log('[loadCamera] Locally authorized user got upgrade_required — token may be expired, prompting re-login');
+          auth.clear();
+          setUser(null);
+          toast.error('Your session has expired. Please sign in again to access this camera.', { duration: 5000 });
+          setLoginOpen(true);
+          // Show sign-in prompt in the player slot
+          setPlaybackStates(prev => ({
+            ...prev,
+            [slotIndex]: {
+              loading: false,
+              data: null,
+              error: null,
+              upgrade: {
+                required_tier: camera.min_tier || data.required_tier || 'conductor',
+                user_tier: 'none',
+                upgrade_url: data.upgrade_url || '/join',
+                needsSignIn: true,
+              },
             },
-          },
-        }));
+          }));
+        } else {
+          setPlaybackStates(prev => ({
+            ...prev,
+            [slotIndex]: {
+              loading: false,
+              data: null,
+              error: null,
+              upgrade: {
+                required_tier: data.required_tier || 'conductor',
+                user_tier: data.user_tier || 'fireman',
+                upgrade_url: data.upgrade_url || '/join',
+              },
+            },
+          }));
+        }
       } else if (data.reason === 'concurrent_stream_limit') {
         setPlaybackStates(prev => ({
           ...prev,
