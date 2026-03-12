@@ -1270,7 +1270,7 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmi
 // ============================================
 
 // LAYOUTS MENU — Quick access to save/load multi-view presets
-function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCameras, slots }) {
+function LayoutsMenu({ presets, onSave, onLoad, onDelete, onUpdate, viewMode, selectedCameras, slots }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
@@ -1379,13 +1379,26 @@ function LayoutsMenu({ presets, onSave, onLoad, onDelete, viewMode, selectedCame
                       {preset.cameras?.filter(Boolean).length || 0} cameras &bull; {VIEW_LABELS[preset.viewMode] || '1'}-view
                     </p>
                   </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onDelete(i); toast.success('Layout deleted'); }}
-                    className="p-1 text-white/60 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
-                    aria-label={`Delete ${preset.name}`}
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                    {activeCams > 0 && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onUpdate(i); toast.success(`"${preset.name}" updated`); }}
+                        className="p-1.5 text-white/60 hover:text-[#ff7a00] transition"
+                        aria-label={`Update ${preset.name} with current cameras`}
+                        title="Update with current cameras"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDelete(i); toast.success('Layout deleted'); }}
+                      className="p-1.5 text-white/60 hover:text-red-400 transition"
+                      aria-label={`Delete ${preset.name}`}
+                      title="Delete layout"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -2087,15 +2100,31 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   };
 
   const handleLoadPreset = (preset) => {
-    // Stop all active sessions before switching
+    // Stop all active sessions first
     stopAllSessions();
-    setViewMode(preset.viewMode);
     setFocusedSlot(null);
-    setSelectedCameras([null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]);
-    setPlaybackStates({});
     setTargetSlot(null);
+    
+    // Switch view mode
+    setViewMode(preset.viewMode);
+    
+    // Clear cameras and playback states in one go, then immediately load preset cameras
+    // This avoids the "flash" of empty slots
+    const freshCameras = [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null];
+    const freshStates = {};
     preset.cameras.forEach((camera, i) => {
-      if (camera) setTimeout(() => loadCamera(camera, i), i * 200);
+      if (camera) {
+        freshCameras[i] = camera;
+        freshStates[i] = { loading: true, data: null, error: null };
+      }
+    });
+    setSelectedCameras(freshCameras);
+    setPlaybackStates(freshStates);
+    playerStatsRef.current = {};
+    
+    // Load camera streams with short stagger to avoid overwhelming the API
+    preset.cameras.forEach((camera, i) => {
+      if (camera) setTimeout(() => loadCamera(camera, i), i * 150);
     });
   };
 
@@ -2194,7 +2223,17 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                 onLoad={handleLoadPreset}
                 onDelete={(i) => {
                   const newPresets = presets.filter((_, idx) => idx !== i);
-                  updatePresets(newPresets);
+                  setPresets(newPresets);
+                }}
+                onUpdate={(i) => {
+                  const newPresets = [...presets];
+                  newPresets[i] = {
+                    ...newPresets[i],
+                    viewMode,
+                    cameras: selectedCameras.slice(0, slots),
+                    updatedAt: new Date().toISOString(),
+                  };
+                  setPresets(newPresets);
                 }}
                 viewMode={viewMode}
                 selectedCameras={selectedCameras}
