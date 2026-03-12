@@ -332,8 +332,6 @@ export default function SightingsPage() {
 
   // Scroll-triggered refs for sections
   const [heroRef, heroVisible] = useScrollFadeIn();
-  const [leaderRef, leaderVisible] = useScrollFadeIn();
-  const [feedRef, feedVisible] = useScrollFadeIn();
 
   return (
     <div className="min-h-screen bg-[#050505] text-white">
@@ -466,32 +464,30 @@ export default function SightingsPage() {
 
         {/* ====== LEADERBOARD ====== */}
         {stats?.leaderboard && stats.leaderboard.length > 0 && (
-          <div
-            ref={leaderRef}
-            className="mb-10"
-            style={{
-              opacity: leaderVisible ? 1 : 0,
-              transform: leaderVisible ? 'translateY(0)' : 'translateY(24px)',
-              transition: 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1) 200ms'
-            }}
-          >
+          <div className="mb-10 animate-in fade-in slide-in-from-bottom-3 duration-700">
             <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a0a]">
+              {/* Ambient glow */}
+              <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-96 h-40 bg-amber-500/[0.06] rounded-full blur-3xl" />
+
               {/* Header */}
-              <div className="px-6 py-4 border-b border-white/[0.06] flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                  <Trophy className="w-4 h-4 text-amber-400" />
+              <div className="relative px-6 py-4 border-b border-white/[0.06] flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-600/10 flex items-center justify-center border border-amber-500/20">
+                    <Trophy className="w-4.5 h-4.5 text-amber-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-white tracking-wide">Top Spotters</h2>
+                    <p className="text-white/25 text-[11px]">10 points per logged sighting</p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-sm font-bold text-white tracking-wide">Top Spotters</h2>
-                  <p className="text-white/30 text-[11px]">10 points per logged sighting</p>
-                </div>
+                <div className="text-[11px] text-white/20 font-medium uppercase tracking-wider">Leaderboard</div>
               </div>
 
               {/* Leaderboard entries */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
                 {stats.leaderboard.slice(0, 5).map((entry, idx) => {
                   const medalColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
-                  const medalGlows = ['rgba(255,215,0,0.3)', 'rgba(192,192,192,0.2)', 'rgba(205,127,50,0.2)'];
+                  const medalGlows = ['rgba(255,215,0,0.15)', 'rgba(192,192,192,0.1)', 'rgba(205,127,50,0.1)'];
                   const isMe = user && (entry.username === user.username || entry.username === user.name);
                   const maxSightings = stats.leaderboard[0]?.sightings || 1;
                   const barWidth = (entry.sightings / maxSightings) * 100;
@@ -501,38 +497,45 @@ export default function SightingsPage() {
                       key={entry.username}
                       className={`relative px-5 py-4 border-b sm:border-b-0 sm:border-r border-white/[0.04] last:border-r-0 last:border-b-0 transition-all duration-300 hover:bg-white/[0.02] ${
                         isMe ? 'bg-[#ff7a00]/[0.04]' : ''
-                      }`}
+                      } ${idx === 0 ? 'bg-amber-500/[0.03]' : ''}`}
                     >
                       {/* Progress bar background */}
                       <div
-                        className="absolute bottom-0 left-0 h-[3px] bg-gradient-to-r from-[#ff7a00]/40 to-[#ff7a00]/10 transition-all duration-700"
-                        style={{ width: `${barWidth}%` }}
+                        className="absolute bottom-0 left-0 h-[3px] transition-all duration-1000"
+                        style={{
+                          width: `${barWidth}%`,
+                          background: idx < 3
+                            ? `linear-gradient(to right, ${medalColors[idx]}66, ${medalColors[idx]}22)`
+                            : 'linear-gradient(to right, rgba(255,122,0,0.4), rgba(255,122,0,0.1))'
+                        }}
                       />
 
                       <div className="flex items-center gap-3">
                         {/* Rank badge */}
                         <div
-                          className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black flex-shrink-0 transition-transform duration-300 hover:scale-110"
+                          className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0"
                           style={idx < 3 ? {
-                            background: `linear-gradient(135deg, ${medalColors[idx]}, ${medalColors[idx]}88)`,
-                            color: idx === 0 ? '#000' : idx === 1 ? '#333' : '#fff',
+                            background: `linear-gradient(135deg, ${medalColors[idx]}30, ${medalColors[idx]}10)`,
+                            border: `1px solid ${medalColors[idx]}40`,
+                            color: medalColors[idx],
                             boxShadow: `0 4px 12px ${medalGlows[idx]}`
                           } : {
                             background: 'rgba(255,255,255,0.04)',
-                            color: 'rgba(255,255,255,0.5)'
+                            border: '1px solid rgba(255,255,255,0.04)',
+                            color: 'rgba(255,255,255,0.4)'
                           }}
                         >
-                          {idx < 3 ? ['🥇', '🥈', '🥉'][idx] : idx + 1}
+                          {idx < 3 ? ['🥇', '🥈', '🥉'][idx] : `#${idx + 1}`}
                         </div>
 
                         <div className="min-w-0 flex-1">
-                          <p className={`text-sm font-semibold truncate ${isMe ? 'text-[#ff7a00]' : 'text-white'}`}>
+                          <p className={`text-sm font-semibold truncate ${isMe ? 'text-[#ff7a00]' : idx === 0 ? 'text-amber-300' : 'text-white'}`}>
                             {entry.username}
                             {isMe && <span className="text-[10px] text-[#ff7a00]/50 ml-1.5">(you)</span>}
                           </p>
-                          <div className="flex items-center gap-2 mt-0.5">
+                          <div className="flex items-center gap-3 mt-0.5">
                             <span className="text-white/40 text-[11px]">{entry.sightings} sighting{entry.sightings !== 1 ? 's' : ''}</span>
-                            <span className="text-[#ff7a00]/50 text-[11px] font-bold">{entry.points} pts</span>
+                            <span className="text-amber-500/60 text-[11px] font-bold tabular-nums">{entry.points} pts</span>
                           </div>
                         </div>
                       </div>
@@ -667,7 +670,7 @@ export default function SightingsPage() {
         </div>
 
         {/* ====== SIGHTINGS FEED ====== */}
-        <div ref={feedRef}>
+        <div>
           {loading ? (
             <div className="flex flex-col items-center justify-center py-32">
               <div className="relative">
@@ -734,11 +737,10 @@ export default function SightingsPage() {
                         key={s._id}
                         className="group relative"
                         style={{
-                          opacity: feedVisible ? 1 : 0,
-                          transform: feedVisible ? 'translateY(0)' : 'translateY(16px)',
-                          transition: `all 0.6s cubic-bezier(0.16, 1, 0.3, 1) ${Math.min(idx * 80, 400)}ms`
+                          animation: `fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${Math.min(idx * 80, 400)}ms both`,
                         }}
                       >
+                        <style>{`@keyframes fadeInUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
                         {/* Timeline dot */}
                         <div
                           className="absolute left-[19px] top-6 w-[9px] h-[9px] rounded-full border-2 border-[#151515] z-10 hidden md:block transition-all duration-300 group-hover:scale-125"
