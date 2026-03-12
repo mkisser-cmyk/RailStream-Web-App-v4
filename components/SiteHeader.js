@@ -109,7 +109,8 @@ export default function SiteHeader({ currentPage = '', user: userProp = null, on
           {NAV_ITEMS.map(item => {
             const isActive = activePage === item.id || 
               (item.id === 'cameras' && activePage === 'cameras') ||
-              (item.id === 'sightings' && activePage === 'sightings');
+              (item.id === 'sightings' && activePage === 'sightings') ||
+              (item.id === 'roundhouse' && activePage === 'roundhouse');
 
             return (
               <Link

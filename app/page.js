@@ -185,6 +185,7 @@ function Navigation({ user, onLogin, onLogout, currentPage, setCurrentPage }) {
     { id: 'watch', label: 'Watch', href: null },
     { id: 'cameras', label: 'Cameras', href: '/cameras' },
     { id: 'sightings', label: 'Train Log', href: '/sightings' },
+    { id: 'roundhouse', label: 'The Roundhouse', href: '/roundhouse' },
   ];
 
   const aboutItems = [
@@ -1833,6 +1834,9 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   const [sightingSubmitting, setSightingSubmitting] = useState(false);
   const [sightingData, setSightingData] = useState({ railroad: '', train_id: '', direction: '', locomotives: '', train_type: '', notes: '' });
 
+  // Roundhouse quick-save from snapshot
+  const [roundhouseCapture, setRoundhouseCapture] = useState(null); // { imageData, cameraName, cameraLocation }
+
   // Ads system
   const [ads, setAds] = useState([]);
   const [showAdManager, setShowAdManager] = useState(false);
@@ -2402,6 +2406,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                         openReviewOps={reviewOpsCounter}
                         hideReviewButton={true}
                         onLogSighting={user ? (data) => handleLogSighting(selectedCameras[focusedSlot], data) : undefined}
+                        onSaveToRoundhouse={user ? (data) => setRoundhouseCapture({ ...data, cameraId: selectedCameras[focusedSlot] }) : undefined}
                         initialSeekOffset={focusedSlot === 0 ? replaySeekOffset : 0}
                         onStatsUpdate={(stats) => { playerStatsRef.current[focusedSlot] = stats; }}
                         adPlaying={prerollActive}
@@ -2603,6 +2608,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                           openReviewOps={viewMode === 'single' && i === 0 ? reviewOpsCounter : 0}
                           hideReviewButton={true}
                           onLogSighting={user && !isCompact ? (data) => handleLogSighting(selectedCameras[i], data) : undefined}
+                          onSaveToRoundhouse={user && !isCompact ? (data) => setRoundhouseCapture({ ...data, cameraId: selectedCameras[i] }) : undefined}
                           initialSeekOffset={i === 0 ? replaySeekOffset : 0}
                           onStatsUpdate={(stats) => { playerStatsRef.current[i] = stats; }}
                           adPlaying={prerollActive}
@@ -2981,6 +2987,184 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
           </div>
         </div>
       )}
+
+      {/* ========= ROUNDHOUSE QUICK-SAVE MODAL ========= */}
+      {roundhouseCapture && (
+        <RoundhouseQuickSave
+          capture={roundhouseCapture}
+          cameras={cameras}
+          user={user}
+          onClose={() => setRoundhouseCapture(null)}
+          onSaved={() => { setRoundhouseCapture(null); }}
+        />
+      )}
+    </div>
+  );
+}
+// ============================================
+// ROUNDHOUSE QUICK-SAVE COMPONENT
+// ============================================
+const ROUNDHOUSE_RAILROADS = ['CSX', 'NS', 'UP', 'BNSF', 'CN', 'CP', 'KCS', 'Amtrak', 'Other'];
+const ROUNDHOUSE_TAGS = [
+  { id: 'heritage', label: 'Heritage', icon: '👑' },
+  { id: 'rare_power', label: 'Rare Power', icon: '⚡' },
+  { id: 'foreign_power', label: 'Foreign Power', icon: '🔀' },
+  { id: 'meet', label: 'Meet', icon: '🤝' },
+  { id: 'night_shot', label: 'Night Shot', icon: '🌙' },
+  { id: 'weather', label: 'Weather', icon: '🌧️' },
+  { id: 'steam', label: 'Steam', icon: '💨' },
+  { id: 'passenger', label: 'Passenger', icon: '🚃' },
+  { id: 'scenery', label: 'Scenery', icon: '🏔️' },
+];
+
+function RoundhouseQuickSave({ capture, cameras, user, onClose, onSaved }) {
+  const [formData, setFormData] = useState({
+    railroad: '', locomotive_numbers: '', location: capture?.cameraName || '',
+    title: '', description: '', tags: [], source: 'camera_capture',
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [heritageDetected, setHeritageDetected] = useState(null);
+
+  const handleLocoChange = async (val) => {
+    setFormData(f => ({ ...f, locomotive_numbers: val }));
+    if (val.length > 3) {
+      try {
+        const res = await fetch(`/api/roundhouse?action=detect_heritage&locomotives=${encodeURIComponent(val)}`);
+        const data = await res.json();
+        if (data.ok && data.isHeritage) {
+          setHeritageDetected(data.units);
+          setFormData(f => ({ ...f, tags: f.tags.includes('heritage') ? f.tags : [...f.tags, 'heritage'] }));
+        } else {
+          setHeritageDetected(null);
+        }
+      } catch (e) { /* ignore */ }
+    } else {
+      setHeritageDetected(null);
+    }
+  };
+
+  const toggleTag = (tagId) => {
+    setFormData(f => ({ ...f, tags: f.tags.includes(tagId) ? f.tags.filter(t => t !== tagId) : [...f.tags, tagId] }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.railroad) { alert('Railroad is required'); return; }
+    setSubmitting(true);
+    const token = localStorage.getItem('railstream_token');
+
+    try {
+      const createRes = await fetch('/api/roundhouse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          action: 'create', ...formData,
+          camera_id: capture?.cameraId || null,
+          camera_name: capture?.cameraName || null,
+        }),
+      });
+      const createData = await createRes.json();
+      if (!createData.ok) { alert(createData.error || 'Failed'); setSubmitting(false); return; }
+
+      if (capture?.imageData) {
+        await fetch('/api/roundhouse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ action: 'upload_image', photo_id: createData.photo.id, image_data: capture.imageData }),
+        });
+      }
+      onSaved();
+    } catch (err) {
+      alert('Network error');
+    }
+    setSubmitting(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-[#0f0f0f] border border-white/[0.08] rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-white/[0.06] sticky top-0 bg-[#0f0f0f] z-10 rounded-t-2xl">
+          <h2 className="text-lg font-bold text-white flex items-center gap-3">
+            <span className="text-xl">🏛️</span> Save to Roundhouse
+          </h2>
+          <button onClick={onClose} className="text-white/30 hover:text-white transition p-2 rounded-xl hover:bg-white/[0.06]">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {capture?.imageData && (
+            <div className="relative rounded-xl overflow-hidden border border-white/[0.08]">
+              <img src={capture.imageData} alt="Camera capture" className="w-full aspect-video object-cover" />
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-3 py-2">
+                <p className="text-white text-xs font-medium">{capture.cameraName}</p>
+                <p className="text-[#ff7a00] text-[10px] font-semibold uppercase">Camera Capture</p>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Railroad *</label>
+            <select value={formData.railroad} onChange={e => setFormData(f => ({ ...f, railroad: e.target.value }))} required
+              className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all">
+              <option value="">Select...</option>
+              {ROUNDHOUSE_RAILROADS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Locomotive Number(s)</label>
+            <input type="text" value={formData.locomotive_numbers} onChange={e => handleLocoChange(e.target.value)}
+              placeholder="e.g., NS 1073, NS 9254"
+              className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/15" />
+            {heritageDetected && heritageDetected.length > 0 && (
+              <div className="mt-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center gap-2">
+                <span className="text-lg">👑</span>
+                <div>
+                  <p className="text-amber-400 text-xs font-bold">Heritage Unit Detected!</p>
+                  <p className="text-amber-400/60 text-[11px]">{heritageDetected.map(u => `${u.unit} — ${u.name}`).join(', ')}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Title</label>
+            <input type="text" value={formData.title} onChange={e => setFormData(f => ({ ...f, title: e.target.value }))}
+              placeholder="e.g., NS Heritage on Q335"
+              className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/15" />
+          </div>
+
+          <div>
+            <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Tags</label>
+            <div className="flex flex-wrap gap-1.5">
+              {ROUNDHOUSE_TAGS.map(tag => (
+                <button key={tag.id} type="button" onClick={() => toggleTag(tag.id)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all border flex items-center gap-1 ${
+                    formData.tags.includes(tag.id) ? 'border-white/20 text-white bg-white/[0.08]' : 'border-white/[0.04] text-white/30 bg-transparent'}`}>
+                  <span>{tag.icon}</span> {tag.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Description</label>
+            <textarea value={formData.description} onChange={e => setFormData(f => ({ ...f, description: e.target.value }))}
+              placeholder="Details about what you captured..." rows={2}
+              className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/15 resize-none" />
+          </div>
+
+          <button type="submit" disabled={submitting}
+            className="w-full bg-gradient-to-r from-[#ff7a00] to-[#ff5500] hover:from-[#ff8c20] hover:to-[#ff6620] disabled:from-[#ff7a00]/30 disabled:to-[#ff5500]/30 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl transition-all duration-300 text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#ff7a00]/10">
+            {submitting ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>
+            ) : (
+              <><span>🏛️</span> Save to The Roundhouse</>
+            )}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

@@ -272,6 +272,7 @@ export default function HlsPlayer({
   onPlaying,
   onError,
   onLogSighting,
+  onSaveToRoundhouse,
   onStatsUpdate,
   initialSeekOffset = 0,
   className = '',
@@ -300,6 +301,7 @@ export default function HlsPlayer({
   const [audioTracks, setAudioTracks] = useState([]);
   const [activeAudioTrack, setActiveAudioTrack] = useState(0);
   const [showAudioMenu, setShowAudioMenu] = useState(false);
+  const [showSnapshotMenu, setShowSnapshotMenu] = useState(false);
 
   // DVR / Timeline
   const [isLive, setIsLive] = useState(true);
@@ -1325,44 +1327,104 @@ export default function HlsPlayer({
               />
             </div>
 
-            {/* Snapshot (hidden in multi-view) */}
+            {/* Snapshot with dropdown (hidden in multi-view) */}
             {viewMode === 'single' && (
-            <button
-              onClick={() => {
-                if (!videoRef.current) return;
-                try {
-                  const video = videoRef.current;
-                  const canvas = document.createElement('canvas');
-                  canvas.width = video.videoWidth;
-                  canvas.height = video.videoHeight;
-                  const ctx = canvas.getContext('2d');
-                  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                  // Add watermark
-                  ctx.font = 'bold 16px sans-serif';
-                  ctx.fillStyle = 'rgba(255, 122, 0, 0.7)';
-                  ctx.textAlign = 'right';
-                  ctx.fillText('RailStream.net', canvas.width - 12, canvas.height - 12);
-                  // Add camera name
-                  ctx.textAlign = 'left';
-                  ctx.fillText(cameraName || 'RailStream', 12, canvas.height - 12);
-                  // Download
-                  const link = document.createElement('a');
-                  link.download = `railstream-${(cameraName || 'snapshot').replace(/[^a-z0-9]/gi, '-')}-${new Date().toISOString().slice(0,19).replace(/[T:]/g,'-')}.jpg`;
-                  link.href = canvas.toDataURL('image/jpeg', 0.92);
-                  link.click();
-                } catch (e) {
-                  console.error('Snapshot failed:', e);
-                }
-              }}
-              className="p-2 rounded-lg hover:bg-white/10 text-white transition-colors"
-              aria-label="Take snapshot"
-              title="Capture snapshot"
-            >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
-              </svg>
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowSnapshotMenu(!showSnapshotMenu)}
+                className="p-2 rounded-lg hover:bg-white/10 text-white transition-colors"
+                aria-label="Capture snapshot"
+                title="Capture snapshot"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
+                </svg>
+              </button>
+              {/* Snapshot dropdown menu */}
+              {showSnapshotMenu && (
+                <div
+                  className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-zinc-900/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl shadow-black/50 py-1.5 min-w-[200px] z-50"
+                  onMouseLeave={() => setShowSnapshotMenu(false)}
+                >
+                  {/* Save to PC */}
+                  <button
+                    onClick={() => {
+                      setShowSnapshotMenu(false);
+                      if (!videoRef.current) return;
+                      try {
+                        const video = videoRef.current;
+                        const canvas = document.createElement('canvas');
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        ctx.font = 'bold 16px sans-serif';
+                        ctx.fillStyle = 'rgba(255, 122, 0, 0.7)';
+                        ctx.textAlign = 'right';
+                        ctx.fillText('RailStream.net', canvas.width - 12, canvas.height - 12);
+                        ctx.textAlign = 'left';
+                        ctx.fillText(cameraName || 'RailStream', 12, canvas.height - 12);
+                        const link = document.createElement('a');
+                        link.download = `railstream-${(cameraName || 'snapshot').replace(/[^a-z0-9]/gi, '-')}-${new Date().toISOString().slice(0,19).replace(/[T:]/g,'-')}.jpg`;
+                        link.href = canvas.toDataURL('image/jpeg', 0.92);
+                        link.click();
+                      } catch (e) {
+                        console.error('Snapshot failed:', e);
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-white/80 hover:text-white hover:bg-white/5 transition-colors text-left"
+                  >
+                    <svg className="w-4 h-4 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                    </svg>
+                    <div>
+                      <span className="font-medium">Save to PC</span>
+                      <span className="block text-[11px] text-white/30">Download snapshot as JPG</span>
+                    </div>
+                  </button>
+
+                  {/* Save to Roundhouse */}
+                  {onSaveToRoundhouse && (
+                    <>
+                      <div className="mx-3 my-1 border-t border-white/[0.06]" />
+                      <button
+                        onClick={() => {
+                          setShowSnapshotMenu(false);
+                          if (!videoRef.current) return;
+                          try {
+                            const video = videoRef.current;
+                            const canvas = document.createElement('canvas');
+                            canvas.width = video.videoWidth;
+                            canvas.height = video.videoHeight;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                            ctx.font = 'bold 16px sans-serif';
+                            ctx.fillStyle = 'rgba(255, 122, 0, 0.7)';
+                            ctx.textAlign = 'right';
+                            ctx.fillText('RailStream.net', canvas.width - 12, canvas.height - 12);
+                            ctx.textAlign = 'left';
+                            ctx.fillText(cameraName || 'RailStream', 12, canvas.height - 12);
+                            const imageData = canvas.toDataURL('image/jpeg', 0.92);
+                            onSaveToRoundhouse({ imageData, cameraName, cameraLocation });
+                          } catch (e) {
+                            console.error('Roundhouse snapshot failed:', e);
+                            onSaveToRoundhouse({ imageData: null, cameraName, cameraLocation });
+                          }
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#ff7a00]/80 hover:text-[#ff7a00] hover:bg-[#ff7a00]/5 transition-colors text-left"
+                      >
+                        <span className="text-base">🏛️</span>
+                        <div>
+                          <span className="font-medium">Save to Roundhouse</span>
+                          <span className="block text-[11px] text-[#ff7a00]/30">Add to the photo archives</span>
+                        </div>
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
             )}
 
             {/* Log Train Sighting (hidden in multi-view) */}
@@ -1487,7 +1549,7 @@ export default function HlsPlayer({
 
               <div className="col-span-2 text-[#ff7a00] font-bold text-xs uppercase tracking-wider mt-3 mb-1">Tools</div>
               {[
-                ['📸', 'Capture snapshot'],
+                ['📸', 'Capture snapshot menu'],
                 ['✏️ Log', 'Log a train sighting'],
                 ['📐 Timeline', 'Hover to see thumbnails'],
                 ['⭐ Favorites', 'Bookmark cameras'],
