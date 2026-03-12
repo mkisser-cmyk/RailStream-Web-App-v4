@@ -119,6 +119,7 @@ export async function GET(request) {
       const heritageCount = await db.collection('roundhouse_photos').countDocuments({ is_heritage: true });
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
       const today = await db.collection('roundhouse_photos').countDocuments({ created_at: { $gte: todayStart } });
+      const collectionCount = await db.collection('roundhouse_collections').countDocuments({});
 
       const topContributors = await db.collection('roundhouse_photos').aggregate([
         { $group: { _id: '$username', count: { $sum: 1 } } },
@@ -137,6 +138,7 @@ export async function GET(request) {
         total,
         heritage_count: heritageCount,
         today,
+        collection_count: collectionCount,
         top_contributors: topContributors.map(t => ({ username: t._id, count: t.count })),
         top_railroads: topRailroads.map(t => ({ name: t._id, count: t.count })),
       });
@@ -158,6 +160,67 @@ export async function GET(request) {
       return NextResponse.json({ ok: true, ...result });
     }
 
+    // ── LIST COLLECTIONS ──
+    if (action === 'collections') {
+      const userId = url.searchParams.get('user') || '';
+      const query = {};
+      if (userId) query.username = userId;
+
+      const collections = await db.collection('roundhouse_collections')
+        .find(query)
+        .sort({ updated_at: -1 })
+        .toArray();
+
+      return NextResponse.json({
+        ok: true,
+        collections: collections.map(c => ({
+          id: c.id,
+          name: c.name,
+          description: c.description || '',
+          cover_image_url: c.cover_image_url || '',
+          username: c.username,
+          photo_count: c.photo_count || 0,
+          created_at: c.created_at,
+          updated_at: c.updated_at,
+        })),
+      });
+    }
+
+    // ── GET SINGLE COLLECTION WITH ITS PHOTOS ──
+    if (action === 'collection') {
+      const id = url.searchParams.get('id');
+      if (!id) return NextResponse.json({ ok: false, error: 'id required' }, { status: 400 });
+
+      const collection = await db.collection('roundhouse_collections').findOne({ id });
+      if (!collection) return NextResponse.json({ ok: false, error: 'Collection not found' }, { status: 404 });
+
+      const photos = await db.collection('roundhouse_photos')
+        .find({ collection_id: id })
+        .sort({ created_at: -1 })
+        .toArray();
+
+      return NextResponse.json({
+        ok: true,
+        collection: {
+          id: collection.id,
+          name: collection.name,
+          description: collection.description || '',
+          cover_image_url: collection.cover_image_url || '',
+          username: collection.username,
+          photo_count: collection.photo_count || 0,
+          created_at: collection.created_at,
+        },
+        photos: photos.map(p => ({
+          id: p.id, username: p.username, image_url: p.image_url, railroad: p.railroad,
+          locomotive_numbers: p.locomotive_numbers, location: p.location, camera_name: p.camera_name,
+          source: p.source, tags: p.tags || [], is_heritage: p.is_heritage || false,
+          heritage_info: p.heritage_info || '', title: p.title || '', description: p.description || '',
+          loco_model: p.loco_model || '', builder: p.builder || '', photo_date: p.photo_date || '',
+          likes: p.likes || 0, liked_by: p.liked_by || [], created_at: p.created_at,
+        })),
+      });
+    }
+
     // ── LIST PHOTOS (with search, filters, pagination) ──
     const page = parseInt(url.searchParams.get('page') || '1');
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '30'), 100);
@@ -167,7 +230,8 @@ export async function GET(request) {
     const source = url.searchParams.get('source') || '';
     const heritage = url.searchParams.get('heritage') || '';
     const user = url.searchParams.get('user') || '';
-    const sort = url.searchParams.get('sort') || 'newest'; // newest, oldest, most_liked
+    const collectionId = url.searchParams.get('collection_id') || '';
+    const sort = url.searchParams.get('sort') || 'newest';
 
     const query = {};
     if (railroad) query.railroad = railroad;
@@ -175,6 +239,7 @@ export async function GET(request) {
     if (source) query.source = source;
     if (heritage === 'true') query.is_heritage = true;
     if (user) query.username = user;
+    if (collectionId) query.collection_id = collectionId;
 
     if (search) {
       const searchRegex = { $regex: search, $options: 'i' };
@@ -186,6 +251,8 @@ export async function GET(request) {
         { railroad: searchRegex },
         { username: searchRegex },
         { heritage_info: searchRegex },
+        { loco_model: searchRegex },
+        { builder: searchRegex },
       ];
     }
 
@@ -220,6 +287,11 @@ export async function GET(request) {
         heritage_units: p.heritage_units || [],
         title: p.title || '',
         description: p.description || '',
+        loco_model: p.loco_model || '',
+        builder: p.builder || '',
+        photo_date: p.photo_date || '',
+        collection_id: p.collection_id || '',
+        collection_name: p.collection_name || '',
         likes: p.likes || 0,
         liked_by: p.liked_by || [],
         created_at: p.created_at,
@@ -276,6 +348,18 @@ export async function POST(request) {
         { $set: { image_url: imageUrl, updated_at: new Date() } }
       );
 
+      // Set as collection cover image if it's the first photo in the collection
+      const photoDoc = await db.collection('roundhouse_photos').findOne({ id: photo_id });
+      if (photoDoc?.collection_id) {
+        const coll = await db.collection('roundhouse_collections').findOne({ id: photoDoc.collection_id });
+        if (coll && !coll.cover_image_url) {
+          await db.collection('roundhouse_collections').updateOne(
+            { id: photoDoc.collection_id },
+            { $set: { cover_image_url: imageUrl } }
+          );
+        }
+      }
+
       return NextResponse.json({ ok: true, image_url: imageUrl });
     }
 
@@ -291,7 +375,10 @@ export async function POST(request) {
         return NextResponse.json({ ok: false, error: 'Paid membership required to post' }, { status: 403 });
       }
 
-      const { railroad, locomotive_numbers, location, camera_id, camera_name, source, tags, title, description } = body;
+      const {
+        railroad, locomotive_numbers, location, camera_id, camera_name, source, tags,
+        title, description, loco_model, builder, photo_date, collection_id, collection_name,
+      } = body;
 
       if (!railroad) return NextResponse.json({ ok: false, error: 'Railroad is required' }, { status: 400 });
 
@@ -314,6 +401,11 @@ export async function POST(request) {
         heritage_info: heritage.units.map(u => `${u.unit} — ${u.name}`).join(', '),
         title: title || '',
         description: description || '',
+        loco_model: loco_model || '',
+        builder: builder || '',
+        photo_date: photo_date || '',
+        collection_id: collection_id || '',
+        collection_name: collection_name || '',
         image_url: '', // Set after upload
         likes: 0,
         liked_by: [],
@@ -322,6 +414,19 @@ export async function POST(request) {
       };
 
       await db.collection('roundhouse_photos').insertOne(photo);
+
+      // ── Update collection photo count ──
+      if (collection_id) {
+        await db.collection('roundhouse_collections').updateOne(
+          { id: collection_id },
+          { $inc: { photo_count: 1 }, $set: { updated_at: new Date() } }
+        );
+        // Set cover image on collection if it's the first photo
+        const coll = await db.collection('roundhouse_collections').findOne({ id: collection_id });
+        if (coll && !coll.cover_image_url) {
+          // Cover will be set after image upload
+        }
+      }
 
       // ── Heritage Alert to Chat ──
       if (photo.is_heritage && heritage.units.length > 0) {
@@ -351,6 +456,30 @@ export async function POST(request) {
       }
 
       return NextResponse.json({ ok: true, photo: { ...photo } });
+    }
+
+    // ── CREATE COLLECTION ──
+    if (action === 'create_collection') {
+      const user = await verifyAuth(request);
+      if (!user) return NextResponse.json({ ok: false, error: 'Login required' }, { status: 401 });
+
+      const { name, description: desc } = body;
+      if (!name?.trim()) return NextResponse.json({ ok: false, error: 'Collection name is required' }, { status: 400 });
+
+      const collId = uuidv4();
+      const collection = {
+        id: collId,
+        name: name.trim(),
+        description: (desc || '').trim(),
+        cover_image_url: '',
+        username: user.username || user.name,
+        photo_count: 0,
+        created_at: new Date(),
+        updated_at: new Date(),
+      };
+
+      await db.collection('roundhouse_collections').insertOne(collection);
+      return NextResponse.json({ ok: true, collection });
     }
 
     // ── LIKE / UNLIKE PHOTO ──

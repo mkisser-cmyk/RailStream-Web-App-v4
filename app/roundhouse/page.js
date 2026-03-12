@@ -11,6 +11,7 @@ import {
   LayoutGrid, Check, ChevronsUpDown,
 } from 'lucide-react';
 import { RAILROADS, RAILROAD_CATEGORIES, getRailroad, getRailroadColor, getRailroadsByCategory, searchRailroads } from '@/lib/railroads';
+import { LOCO_MODELS, BUILDERS, getModelsByBuilder } from '@/lib/locomotive-models';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 
@@ -141,6 +142,53 @@ function RailroadCombobox({ value, onChange, placeholder = "Select railroad...",
   );
 }
 
+// Locomotive Model Combobox — searchable, grouped by builder
+function ModelCombobox({ value, onChange, placeholder = "Search models..." }) {
+  const [open, setOpen] = useState(false);
+  const grouped = getModelsByBuilder();
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" role="combobox" aria-expanded={open}
+          className={`w-full flex items-center justify-between bg-white/[0.03] border border-white/[0.08] text-sm rounded-xl px-4 py-3 transition-all hover:border-white/[0.15] focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 ${value ? 'text-white' : 'text-white/30'}`}>
+          {value || placeholder}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-white/20" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[340px] p-0 bg-[#111] border-white/[0.08] shadow-2xl shadow-black/50" align="start" sideOffset={6}>
+        <Command className="bg-transparent">
+          <CommandInput placeholder="Search by model name..." className="h-11 text-white placeholder:text-white/25" />
+          <CommandList className="max-h-[280px] overflow-y-auto scrollbar-thin">
+            <CommandEmpty className="py-6 text-center text-sm text-white/30">No model found.</CommandEmpty>
+            {value && (
+              <CommandItem onSelect={() => { onChange(''); setOpen(false); }}
+                className="mx-1 my-1 rounded-lg px-3 py-2 text-white/50 hover:text-white cursor-pointer data-[selected=true]:bg-white/[0.06]">
+                <X className="mr-2 h-3.5 w-3.5" /><span className="text-sm">Clear</span>
+              </CommandItem>
+            )}
+            {Object.entries(grouped).map(([builderId, { label, models }]) => (
+              <CommandGroup key={builderId} heading={label}
+                className="[&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.15em] [&_[cmdk-group-heading]]:text-white/25 [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2">
+                {models.map(m => (
+                  <CommandItem key={`${builderId}-${m.model}`} value={`${m.model} ${m.builder}`}
+                    onSelect={() => { onChange(m.model); setOpen(false); }}
+                    className="mx-1 rounded-lg px-3 py-1.5 cursor-pointer data-[selected=true]:bg-white/[0.06] flex items-center gap-2.5">
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${m.type === 'steam' ? 'bg-amber-500' : m.type === 'electric' ? 'bg-blue-400' : 'bg-emerald-500'}`} />
+                    <span className="text-white text-xs font-semibold">{m.model}</span>
+                    <span className="text-white/20 text-[10px] uppercase">{m.era}</span>
+                    {value === m.model && <Check className="h-3.5 w-3.5 text-[#ff7a00] ml-auto" />}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // Scroll fade-in hook
 function useScrollFadeIn() {
   const ref = useRef(null);
@@ -224,7 +272,8 @@ export default function RoundhousePage() {
   const [showUpload, setShowUpload] = useState(false);
   const [formData, setFormData] = useState({
     railroad: '', locomotive_numbers: '', location: '', source: 'trackside',
-    tags: [], title: '', description: '',
+    tags: [], title: '', description: '', loco_model: '', builder: '',
+    photo_date: '', collection_id: '', collection_name: '',
   });
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -232,6 +281,13 @@ export default function RoundhousePage() {
   const [heritageDetected, setHeritageDetected] = useState(null);
   const fileInputRef = useRef(null);
   const searchTimeoutRef = useRef(null);
+
+  // Collections
+  const [collections, setCollections] = useState([]);
+  const [showNewCollection, setShowNewCollection] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState('');
+  const [newCollectionDesc, setNewCollectionDesc] = useState('');
+  const [activeCollectionView, setActiveCollectionView] = useState(null); // collection being browsed
 
   // Lightbox
   const [selectedPhoto, setSelectedPhoto] = useState(null);
@@ -266,6 +322,7 @@ export default function RoundhousePage() {
     if (filterRailroad) params.set('railroad', filterRailroad);
     if (filterTag) params.set('tag', filterTag);
     if (filterHeritage) params.set('heritage', 'true');
+    if (activeCollectionView) params.set('collection_id', activeCollectionView.id);
 
     try {
       const res = await fetch(`/api/roundhouse?${params}`);
@@ -279,7 +336,7 @@ export default function RoundhousePage() {
       console.error('Fetch roundhouse error:', e);
     }
     setLoading(false);
-  }, [page, searchQuery, filterRailroad, filterTag, filterHeritage, sortBy]);
+  }, [page, searchQuery, filterRailroad, filterTag, filterHeritage, sortBy, activeCollectionView]);
 
   useEffect(() => { fetchPhotos(); }, [fetchPhotos]);
 
@@ -288,6 +345,14 @@ export default function RoundhousePage() {
     fetch('/api/roundhouse?action=stats')
       .then(r => r.json())
       .then(data => { if (data.ok) setStats(data); })
+      .catch(() => {});
+  }, []);
+
+  // Fetch collections
+  useEffect(() => {
+    fetch('/api/roundhouse?action=collections')
+      .then(r => r.json())
+      .then(data => { if (data.ok) setCollections(data.collections || []); })
       .catch(() => {});
   }, []);
 
@@ -370,10 +435,19 @@ export default function RoundhousePage() {
 
       if (uploadData.ok) {
         setShowUpload(false);
-        setFormData({ railroad: '', locomotive_numbers: '', location: '', source: 'trackside', tags: [], title: '', description: '' });
+        setFormData({
+          railroad: '', locomotive_numbers: '', location: '', source: 'trackside',
+          tags: [], title: '', description: '', loco_model: '', builder: '',
+          photo_date: '', collection_id: '', collection_name: '',
+        });
         setImageFile(null);
         setImagePreview(null);
         setHeritageDetected(null);
+        // Refresh collections
+        fetch('/api/roundhouse?action=collections')
+          .then(r => r.json())
+          .then(data => { if (data.ok) setCollections(data.collections || []); })
+          .catch(() => {});
         fetchPhotos();
       } else {
         alert('Photo created but image upload failed');
@@ -503,7 +577,7 @@ export default function RoundhousePage() {
 
             {isPaidMember && (
               <button
-                onClick={() => { setShowUpload(true); setHeritageDetected(null); setFormData({ railroad: '', locomotive_numbers: '', location: '', source: 'trackside', tags: [], title: '', description: '' }); setImageFile(null); setImagePreview(null); }}
+                onClick={() => { setShowUpload(true); setHeritageDetected(null); setFormData({ railroad: '', locomotive_numbers: '', location: '', source: 'trackside', tags: [], title: '', description: '', loco_model: '', builder: '', photo_date: '', collection_id: '', collection_name: '' }); setImageFile(null); setImagePreview(null); setShowNewCollection(false); }}
                 className="group relative flex items-center gap-3 bg-gradient-to-r from-[#ff7a00] to-[#ff5500] hover:from-[#ff8c20] hover:to-[#ff6620] text-white px-7 py-4 rounded-xl font-bold text-sm transition-all duration-300 hover:scale-[1.03] shadow-lg shadow-[#ff7a00]/20 hover:shadow-[#ff7a00]/40 self-start md:self-auto"
               >
                 <Upload className="w-5 h-5" />
@@ -523,6 +597,65 @@ export default function RoundhousePage() {
             <StatCard icon={Flame} label="Added Today" value={stats.today || 0} valueColor="text-[#ff7a00]" delay={200} />
             <StatCard icon={Trophy} label="Top Contributor" value={stats.top_contributors?.[0]?.username || '—'}
               subtitle={stats.top_contributors?.[0] ? `${stats.top_contributors[0].count} photos` : null} delay={300} />
+          </div>
+        )}
+
+        {/* ====== COLLECTIONS ====== */}
+        {collections.length > 0 && (
+          <div className="mb-10">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2.5">
+                <LayoutGrid className="w-5 h-5 text-[#ff7a00]" />
+                Collections
+                <span className="text-white/20 text-sm font-normal">({collections.length})</span>
+              </h2>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+              {collections.slice(0, 10).map(coll => (
+                <button key={coll.id}
+                  onClick={() => {
+                    setActiveCollectionView(activeCollectionView?.id === coll.id ? null : coll);
+                    if (activeCollectionView?.id !== coll.id) {
+                      // Filter photos to this collection
+                      setFilterRailroad(''); setFilterTag(''); setFilterHeritage(false);
+                      setSearchInput(''); setSearchQuery('');
+                    }
+                    setPage(1);
+                  }}
+                  className={`group relative overflow-hidden rounded-xl border transition-all duration-300 text-left ${
+                    activeCollectionView?.id === coll.id
+                      ? 'border-[#ff7a00]/40 bg-[#ff7a00]/[0.08] shadow-lg shadow-[#ff7a00]/10'
+                      : 'border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12] hover:bg-white/[0.04]'
+                  }`}
+                >
+                  {coll.cover_image_url ? (
+                    <div className="aspect-[16/9] overflow-hidden">
+                      <img src={coll.cover_image_url} alt={coll.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                    </div>
+                  ) : (
+                    <div className="aspect-[16/9] bg-gradient-to-br from-white/[0.04] to-white/[0.01] flex items-center justify-center">
+                      <Grid3X3 className="w-8 h-8 text-white/10" />
+                    </div>
+                  )}
+                  <div className="absolute bottom-0 left-0 right-0 p-3">
+                    <p className="text-white text-xs font-bold truncate">{coll.name}</p>
+                    <p className="text-white/40 text-[10px] mt-0.5">{coll.photo_count} photo{coll.photo_count !== 1 ? 's' : ''} · by {coll.username}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+            {activeCollectionView && (
+              <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-[#ff7a00]/[0.06] border border-[#ff7a00]/20">
+                <Grid3X3 className="w-4 h-4 text-[#ff7a00]" />
+                <span className="text-white text-xs font-semibold">Viewing collection: {activeCollectionView.name}</span>
+                <button onClick={() => { setActiveCollectionView(null); setPage(1); }}
+                  className="ml-auto text-[#ff7a00]/60 hover:text-[#ff7a00] transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -922,6 +1055,103 @@ export default function RoundhousePage() {
                 </div>
               </div>
 
+              {/* Locomotive Model + Builder */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Locomotive Model</label>
+                  <ModelCombobox
+                    value={formData.loco_model}
+                    onChange={(val) => {
+                      setFormData(f => ({ ...f, loco_model: val }));
+                      // Auto-set builder from model selection
+                      const matchedModel = LOCO_MODELS.find(m => m.model === val);
+                      if (matchedModel && !formData.builder) {
+                        setFormData(f => ({ ...f, builder: matchedModel.builder, loco_model: val }));
+                      }
+                    }}
+                    placeholder="Search models..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Builder</label>
+                  <select value={formData.builder}
+                    onChange={e => setFormData(f => ({ ...f, builder: e.target.value }))}
+                    className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all">
+                    <option value="" className="bg-[#111] text-white/40">Select builder...</option>
+                    {BUILDERS.map(b => <option key={b.id} value={b.id} className="bg-[#111] text-white">{b.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Photo Date */}
+              <div>
+                <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Photo Date</label>
+                <input type="date" value={formData.photo_date}
+                  onChange={e => setFormData(f => ({ ...f, photo_date: e.target.value }))}
+                  className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all [color-scheme:dark]" />
+              </div>
+
+              {/* Collection */}
+              <div>
+                <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Collection</label>
+                {!showNewCollection ? (
+                  <div className="space-y-2">
+                    <select value={formData.collection_id}
+                      onChange={e => {
+                        const coll = collections.find(c => c.id === e.target.value);
+                        setFormData(f => ({ ...f, collection_id: e.target.value, collection_name: coll?.name || '' }));
+                      }}
+                      className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all">
+                      <option value="" className="bg-[#111] text-white/40">No collection</option>
+                      {collections.map(c => <option key={c.id} value={c.id} className="bg-[#111] text-white">{c.name} ({c.photo_count} photos)</option>)}
+                    </select>
+                    <button type="button" onClick={() => setShowNewCollection(true)}
+                      className="flex items-center gap-1.5 text-[#ff7a00]/60 hover:text-[#ff7a00] text-xs font-medium transition-colors">
+                      <Plus className="w-3 h-3" /> Create new collection
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2 p-3 rounded-xl border border-[#ff7a00]/20 bg-[#ff7a00]/[0.03]">
+                    <input type="text" value={newCollectionName}
+                      onChange={e => setNewCollectionName(e.target.value)}
+                      placeholder="Collection name..."
+                      className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-lg px-3 py-2 focus:border-[#ff7a00]/50 focus:outline-none transition-all placeholder:text-white/15" />
+                    <input type="text" value={newCollectionDesc}
+                      onChange={e => setNewCollectionDesc(e.target.value)}
+                      placeholder="Description (optional)..."
+                      className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-lg px-3 py-2 focus:border-[#ff7a00]/50 focus:outline-none transition-all placeholder:text-white/15" />
+                    <div className="flex gap-2">
+                      <button type="button" onClick={async () => {
+                        if (!newCollectionName.trim()) return;
+                        const token = localStorage.getItem('railstream_token');
+                        try {
+                          const res = await fetch('/api/roundhouse', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                            body: JSON.stringify({ action: 'create_collection', name: newCollectionName, description: newCollectionDesc }),
+                          });
+                          const data = await res.json();
+                          if (data.ok) {
+                            setCollections(prev => [data.collection, ...prev]);
+                            setFormData(f => ({ ...f, collection_id: data.collection.id, collection_name: data.collection.name }));
+                            setNewCollectionName('');
+                            setNewCollectionDesc('');
+                            setShowNewCollection(false);
+                          }
+                        } catch (e) { console.error(e); }
+                      }}
+                        className="px-4 py-1.5 bg-[#ff7a00] text-white rounded-lg text-xs font-bold hover:bg-[#ff8c20] transition-colors">
+                        Create
+                      </button>
+                      <button type="button" onClick={() => setShowNewCollection(false)}
+                        className="px-4 py-1.5 bg-white/[0.06] text-white/50 rounded-lg text-xs font-semibold hover:text-white transition-colors">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Tags */}
               <div>
                 <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Tags</label>
@@ -1029,17 +1259,42 @@ export default function RoundhousePage() {
               </div>
 
               {/* Metadata */}
-              <div className="flex items-center gap-4 text-xs text-white/40 mb-3">
+              <div className="flex items-center gap-4 flex-wrap text-xs text-white/40 mb-3">
                 {selectedPhoto.location && (
                   <span className="flex items-center gap-1.5"><MapPin className="w-3 h-3 text-white/20" />{selectedPhoto.location}</span>
                 )}
+                {selectedPhoto.photo_date && (
+                  <span className="flex items-center gap-1.5">
+                    <Camera className="w-3 h-3 text-white/20" />
+                    Photo: {new Date(selectedPhoto.photo_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                )}
                 <span className="flex items-center gap-1.5">
                   <Clock className="w-3 h-3 text-white/20" />
-                  {new Date(selectedPhoto.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                  {' at '}
-                  {new Date(selectedPhoto.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                  Uploaded {new Date(selectedPhoto.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                 </span>
               </div>
+
+              {/* Locomotive details row */}
+              {(selectedPhoto.loco_model || selectedPhoto.builder || selectedPhoto.collection_name) && (
+                <div className="flex items-center gap-3 flex-wrap text-xs mb-3">
+                  {selectedPhoto.loco_model && (
+                    <span className="bg-emerald-500/10 text-emerald-400/80 px-2.5 py-1 rounded-lg font-semibold">
+                      {selectedPhoto.loco_model}
+                    </span>
+                  )}
+                  {selectedPhoto.builder && (
+                    <span className="bg-blue-500/10 text-blue-400/60 px-2.5 py-1 rounded-lg font-semibold">
+                      Built by {selectedPhoto.builder}
+                    </span>
+                  )}
+                  {selectedPhoto.collection_name && (
+                    <span className="bg-[#ff7a00]/10 text-[#ff7a00]/70 px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1">
+                      <Grid3X3 className="w-3 h-3" /> {selectedPhoto.collection_name}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Tags */}
               {selectedPhoto.tags?.length > 0 && (
