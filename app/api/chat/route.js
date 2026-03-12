@@ -66,21 +66,46 @@ export async function GET(request) {
         .sort({ type: 1, name: 1 })
         .toArray();
 
-      // Get online counts per room (active in last 60 seconds)
-      const cutoff = new Date(Date.now() - 60000);
+      // Get online counts per room (active in last 90 seconds via presence heartbeat)
+      const presenceCutoff = new Date(Date.now() - 90000);
       const presenceCounts = await db.collection('chat_presence')
         .aggregate([
-          { $match: { last_seen: { $gt: cutoff } } },
+          { $match: { last_seen: { $gt: presenceCutoff } } },
           { $group: { _id: '$room_id', count: { $sum: 1 }, users: { $push: { username: '$username', tier: '$tier', is_admin: '$is_admin', is_mod: '$is_mod' } } } },
+        ])
+        .toArray();
+
+      // Also get recent message activity (last 5 min) as a fallback for online detection
+      const messageCutoff = new Date(Date.now() - 300000);
+      const recentAuthors = await db.collection('chat_messages')
+        .aggregate([
+          { $match: { created_at: { $gt: messageCutoff }, is_system: { $ne: true } } },
+          { $group: { _id: { room_id: '$room_id', username: '$username' }, tier: { $last: '$tier' }, is_admin: { $last: '$is_admin' }, is_mod: { $last: '$is_mod' } } },
         ])
         .toArray();
 
       const countMap = {};
       const usersMap = {};
+      
+      // Start with presence data
       presenceCounts.forEach(p => {
         countMap[p._id] = p.count;
         usersMap[p._id] = p.users;
       });
+
+      // Merge in message-activity users that aren't already in presence
+      recentAuthors.forEach(a => {
+        const roomId = a._id.room_id;
+        const username = a._id.username;
+        if (!usersMap[roomId]) usersMap[roomId] = [];
+        const existing = usersMap[roomId].find(u => u.username === username);
+        if (!existing) {
+          usersMap[roomId].push({ username, tier: a.tier || 'guest', is_admin: a.is_admin || false, is_mod: a.is_mod || false });
+        }
+      });
+
+      // Recount
+      Object.keys(usersMap).forEach(k => { countMap[k] = usersMap[k].length; });
 
       const formatted = rooms.map(r => ({
         id: r.id,
@@ -176,6 +201,22 @@ export async function POST(request) {
       };
 
       await db.collection('chat_messages').insertOne(newMsg);
+
+      // ── Auto-update presence when user sends a message ──
+      await db.collection('chat_presence').updateOne(
+        { username: user.username, room_id: roomId },
+        {
+          $set: {
+            username: user.username,
+            tier: user.membership_tier || 'guest',
+            is_admin: user.is_admin || false,
+            is_mod: user.is_mod || false,
+            room_id: roomId,
+            last_seen: new Date(),
+          },
+        },
+        { upsert: true }
+      );
 
       return NextResponse.json({
         ok: true,

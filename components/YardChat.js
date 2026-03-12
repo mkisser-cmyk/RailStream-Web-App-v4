@@ -311,7 +311,7 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
     };
 
     sendPresence();
-    const interval = setInterval(sendPresence, 30000);
+    const interval = setInterval(sendPresence, 20000); // Every 20 seconds
     return () => clearInterval(interval);
   }, [user, joinedRooms]);
 
