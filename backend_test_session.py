@@ -5,7 +5,7 @@ import json
 import os
 
 # Configuration
-BASE_URL = "https://sightings-redesign.preview.emergentagent.com/api"
+BASE_URL = "https://rail-photo-hub.preview.emergentagent.com/api"
 TEST_USERNAME = "chicagotest"
 TEST_PASSWORD = "sZyE8cDFk"
 ATLANTA_CAMERA_ID = "699894a055761e18195294e3"

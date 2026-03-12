@@ -8,10 +8,11 @@ import {
   Radio, ChevronDown, ChevronLeft, ChevronRight, Eye, Image, Star,
   TrendingUp, Award, BarChart3, Zap, ArrowUpRight, Flame, Trophy,
   Navigation, Tag, AlertTriangle, Sparkles, ExternalLink, Grid3X3,
-  LayoutGrid,
+  LayoutGrid, Check, ChevronsUpDown,
 } from 'lucide-react';
-
-const RAILROADS = ['CSX', 'NS', 'UP', 'BNSF', 'CN', 'CP', 'KCS', 'Amtrak', 'Other'];
+import { RAILROADS, RAILROAD_CATEGORIES, getRailroad, getRailroadColor, getRailroadsByCategory, searchRailroads } from '@/lib/railroads';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 
 // Protected image component - prevents right-click, drag, save + adds watermark
 function ProtectedImage({ src, alt, className, style, onError, noWatermark }) {
@@ -49,17 +50,98 @@ const PHOTO_TAGS = [
   { id: 'scenery', label: 'Scenery', icon: '🏔️', color: '#22c55e' },
 ];
 
-const RR_COLORS = {
-  CSX: { bg: '#0033A0', text: '#fff', glow: 'rgba(0,51,160,0.4)' },
-  NS: { bg: '#1a1a1a', text: '#fff', border: '#555', glow: 'rgba(100,100,100,0.3)' },
-  UP: { bg: '#FFD100', text: '#000', glow: 'rgba(255,209,0,0.4)' },
-  BNSF: { bg: '#FF6600', text: '#fff', glow: 'rgba(255,102,0,0.4)' },
-  CN: { bg: '#E21836', text: '#fff', glow: 'rgba(226,24,54,0.4)' },
-  CP: { bg: '#E21836', text: '#fff', glow: 'rgba(226,24,54,0.4)' },
-  KCS: { bg: '#006747', text: '#fff', glow: 'rgba(0,103,71,0.4)' },
-  Amtrak: { bg: '#1B3A6B', text: '#fff', glow: 'rgba(27,58,107,0.4)' },
-  Other: { bg: '#444', text: '#fff', glow: 'rgba(68,68,68,0.3)' },
-};
+// Quick-access railroad marks for filter chips
+const QUICK_FILTER_MARKS = ['BNSF', 'CN', 'CPKC', 'CSX', 'KCS', 'NS', 'UP', 'AMTK'];
+
+// Railroad Combobox — searchable, grouped dropdown
+function RailroadCombobox({ value, onChange, placeholder = "Select railroad...", triggerClassName, mode = "form" }) {
+  const [open, setOpen] = useState(false);
+  const grouped = getRailroadsByCategory();
+  const selected = value ? getRailroad(value) : null;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          role="combobox"
+          aria-expanded={open}
+          className={triggerClassName || `w-full flex items-center justify-between bg-white/[0.03] border border-white/[0.08] text-sm rounded-xl px-4 py-3 transition-all hover:border-white/[0.15] focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 ${value ? 'text-white' : 'text-white/30'}`}
+        >
+          {selected ? (
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="w-3 h-3 rounded-[3px] flex-shrink-0 ring-1 ring-white/10" style={{ background: selected.color }} />
+              <span className="font-bold text-white truncate">{selected.mark}</span>
+              <span className="text-white/40 truncate hidden sm:inline">{selected.name}</span>
+              {selected.mergedInto && <span className="text-white/20 text-[10px] truncate hidden md:inline">→ {selected.mergedInto}</span>}
+            </div>
+          ) : (
+            <span>{placeholder}</span>
+          )}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-white/20" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[380px] p-0 bg-[#111] border-white/[0.08] shadow-2xl shadow-black/50"
+        align="start"
+        sideOffset={6}
+      >
+        <Command className="bg-transparent">
+          <CommandInput
+            placeholder="Search by name, mark, or merged-into..."
+            className="h-11 text-white placeholder:text-white/25"
+          />
+          <CommandList className="max-h-[340px] overflow-y-auto scrollbar-thin">
+            <CommandEmpty className="py-8 text-center text-sm text-white/30">No railroad found.</CommandEmpty>
+            {value && mode === 'filter' && (
+              <CommandItem
+                onSelect={() => { onChange(''); setOpen(false); }}
+                className="mx-1 my-1 rounded-lg px-3 py-2.5 text-white/50 hover:text-white cursor-pointer data-[selected=true]:bg-white/[0.06]"
+              >
+                <X className="mr-2 h-3.5 w-3.5" />
+                <span className="text-sm">Clear selection</span>
+              </CommandItem>
+            )}
+            {RAILROAD_CATEGORIES.map(cat => {
+              const items = grouped[cat.id];
+              if (!items?.length) return null;
+              return (
+                <CommandGroup
+                  key={cat.id}
+                  heading={cat.label}
+                  className="[&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.15em] [&_[cmdk-group-heading]]:text-white/25 [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2"
+                >
+                  {items.map(rr => {
+                    const isSelected = value === rr.mark;
+                    return (
+                      <CommandItem
+                        key={`${cat.id}-${rr.mark}`}
+                        value={`${rr.mark} ${rr.name} ${rr.mergedInto || ''}`}
+                        onSelect={() => {
+                          onChange(isSelected && mode === 'filter' ? '' : rr.mark);
+                          setOpen(false);
+                        }}
+                        className="mx-1 rounded-lg px-3 py-2 cursor-pointer data-[selected=true]:bg-white/[0.06] flex items-center gap-2.5"
+                      >
+                        <span className="w-3.5 h-3.5 rounded-[3px] flex-shrink-0 ring-1 ring-inset ring-white/10" style={{ background: rr.color }} />
+                        <span className="font-bold text-white text-xs w-12 flex-shrink-0">{rr.mark}</span>
+                        <span className="text-white/60 text-xs truncate flex-1">{rr.name}</span>
+                        {rr.mergedInto && (
+                          <span className="text-white/20 text-[10px] flex-shrink-0 hidden sm:inline">→ {rr.mergedInto}</span>
+                        )}
+                        {isSelected && <Check className="h-4 w-4 text-[#ff7a00] flex-shrink-0 ml-auto" />}
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              );
+            })}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 // Scroll fade-in hook
 function useScrollFadeIn() {
@@ -448,24 +530,41 @@ export default function RoundhousePage() {
 
         {/* ====== FILTERS ====== */}
         <div className="mb-8 space-y-4">
-          {/* Railroad chips */}
+          {/* Railroad chips — Class I quick filters + Browse All combobox */}
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={() => { setFilterRailroad(''); setPage(1); }}
               className={`px-4 py-2 rounded-full text-xs font-bold tracking-wide uppercase transition-all duration-300 ${!filterRailroad ? 'bg-white text-black shadow-lg shadow-white/10' : 'bg-white/[0.04] text-white/50 hover:bg-white/[0.08] border border-white/[0.06]'}`}>
               All
             </button>
-            {RAILROADS.filter(r => r !== 'Other').map(r => {
-              const rr = RR_COLORS[r];
-              const active = filterRailroad === r;
+            {QUICK_FILTER_MARKS.map(mark => {
+              const rr = getRailroadColor(mark);
+              const rrData = getRailroad(mark);
+              const active = filterRailroad === mark;
               return (
-                <button key={r} onClick={() => { setFilterRailroad(active ? '' : r); setPage(1); }}
+                <button key={mark} onClick={() => { setFilterRailroad(active ? '' : mark); setPage(1); }}
                   className="px-4 py-2 rounded-full text-xs font-bold tracking-wide uppercase transition-all duration-300 border"
                   style={active ? { background: rr.bg, color: rr.text, borderColor: rr.bg, boxShadow: `0 4px 16px ${rr.glow}` }
-                    : { background: 'transparent', color: 'rgba(255,255,255,0.4)', borderColor: 'rgba(255,255,255,0.06)' }}>
-                  {r}
+                    : { background: 'transparent', color: 'rgba(255,255,255,0.4)', borderColor: 'rgba(255,255,255,0.06)' }}
+                  title={rrData.name}>
+                  {mark}
                 </button>
               );
             })}
+
+            <div className="w-px h-5 bg-white/10 mx-1" />
+
+            {/* Browse ALL railroads — Combobox */}
+            <RailroadCombobox
+              value={!QUICK_FILTER_MARKS.includes(filterRailroad) ? filterRailroad : ''}
+              onChange={(val) => { setFilterRailroad(val); setPage(1); }}
+              placeholder="Browse all railroads..."
+              mode="filter"
+              triggerClassName={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold tracking-wide transition-all duration-300 border ${
+                filterRailroad && !QUICK_FILTER_MARKS.includes(filterRailroad)
+                  ? 'bg-[#ff7a00]/15 text-[#ff7a00] border-[#ff7a00]/30 shadow-lg shadow-[#ff7a00]/10'
+                  : 'bg-white/[0.04] text-white/40 border-white/[0.06] hover:bg-white/[0.08] hover:text-white/60'
+              }`}
+            />
 
             <div className="w-px h-5 bg-white/10 mx-1" />
 
@@ -477,7 +576,7 @@ export default function RoundhousePage() {
             </button>
           </div>
 
-          {/* Tag chips */}
+          {/* Tag chips + Sort */}
           <div className="flex flex-wrap items-center gap-2">
             {PHOTO_TAGS.filter(t => t.id !== 'heritage').map(tag => {
               const active = filterTag === tag.id;
@@ -552,7 +651,7 @@ export default function RoundhousePage() {
             {/* Masonry grid using CSS columns */}
             <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4">
               {photos.map((photo, idx) => {
-                const rrStyle = RR_COLORS[photo.railroad] || RR_COLORS.Other;
+                const rrStyle = getRailroadColor(photo.railroad);
                 const isLiked = photo.liked_by?.includes(user?.username);
                 const isOwn = user && photo.username === (user.username || user.name);
 
@@ -778,11 +877,12 @@ export default function RoundhousePage() {
               {/* Railroad */}
               <div>
                 <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Railroad *</label>
-                <select value={formData.railroad} onChange={e => setFormData(f => ({ ...f, railroad: e.target.value }))} required
-                  className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all">
-                  <option value="">Select...</option>
-                  {RAILROADS.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
+                <RailroadCombobox
+                  value={formData.railroad}
+                  onChange={(val) => setFormData(f => ({ ...f, railroad: val }))}
+                  placeholder="Search or browse railroads..."
+                  mode="form"
+                />
               </div>
 
               {/* Locomotive Numbers + Heritage detection */}
@@ -903,7 +1003,7 @@ export default function RoundhousePage() {
                 <div>
                   <div className="flex items-center gap-2.5 flex-wrap mb-2">
                     <span className="inline-flex px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider"
-                      style={{ background: (RR_COLORS[selectedPhoto.railroad] || RR_COLORS.Other).bg, color: (RR_COLORS[selectedPhoto.railroad] || RR_COLORS.Other).text, boxShadow: `0 2px 8px ${(RR_COLORS[selectedPhoto.railroad] || RR_COLORS.Other).glow}` }}>
+                      style={{ background: getRailroadColor(selectedPhoto.railroad).bg, color: getRailroadColor(selectedPhoto.railroad).text, boxShadow: `0 2px 8px ${getRailroadColor(selectedPhoto.railroad).glow}` }}>
                       {selectedPhoto.railroad}
                     </span>
                     {selectedPhoto.locomotive_numbers && (
