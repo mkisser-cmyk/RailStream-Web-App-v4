@@ -10,7 +10,6 @@ export default function ChatPopoutPage() {
     const u = auth.getUser();
     if (u) setUser(u);
 
-    // Listen for auth changes from the main window
     const handleStorage = (e) => {
       if (e.key === 'railstream_user') {
         const u = auth.getUser();
@@ -21,12 +20,19 @@ export default function ChatPopoutPage() {
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
+  const handleDock = () => {
+    // Signal the main window to re-open the chat panel
+    localStorage.setItem('railstream_dock_chat', Date.now().toString());
+    window.close();
+  };
+
   return (
     <div className="h-screen w-screen bg-zinc-900">
       <YardChat
         user={user}
         isPopout={true}
-        onClose={() => window.close()}
+        onClose={handleDock}
+        onDock={handleDock}
       />
     </div>
   );

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   MessageCircle, Send, Users, X, ExternalLink, Hash, ChevronDown,
   Shield, ShieldCheck, Crown, Pin, Trash2, VolumeX, Ban, MoreHorizontal,
-  Radio, ChevronRight,
+  Radio, ChevronRight, PanelRightOpen,
 } from 'lucide-react';
 
 // ── Tier badge component ──
@@ -99,7 +99,7 @@ function formatTime(iso) {
 }
 
 // ── Main YardChat component ──
-export default function YardChat({ user, selectedCameras = [], isPopout = false, onClose, onPopout }) {
+export default function YardChat({ user, selectedCameras = [], isPopout = false, onClose, onPopout, onDock }) {
   const [activeRoom, setActiveRoom] = useState('the-yard');
   const [rooms, setRooms] = useState([{ id: 'the-yard', name: 'The Yard', type: 'global', online_count: 0, online_users: [], pinned_message: null }]);
   const [joinedRooms, setJoinedRooms] = useState(['the-yard']);
@@ -343,6 +343,11 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
           <button onClick={() => setShowOnline(!showOnline)} className="p-1.5 text-white/50 hover:text-white/80 transition" title="Who's Online">
             <Users className="w-4 h-4" />
           </button>
+          {isPopout && onDock && (
+            <button onClick={onDock} className="p-1.5 text-white/50 hover:text-[#ff7a00] transition" title="Dock Chat Back">
+              <PanelRightOpen className="w-4 h-4" />
+            </button>
+          )}
           {!isPopout && onPopout && (
             <button onClick={onPopout} className="p-1.5 text-white/50 hover:text-white/80 transition" title="Pop Out Chat">
               <ExternalLink className="w-4 h-4" />

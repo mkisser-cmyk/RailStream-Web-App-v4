@@ -1811,6 +1811,17 @@ function CompanionAdPanel({ ads }) {
 function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, setPlaybackStates, loadCamera, removeCamera, stopAllSessions, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp, replaySeekOffset = 0, clearReplaySeek, playerStatsRef, onStatusCamera, onLogin }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(true);
+
+  // Listen for "dock chat back" signal from pop-out window
+  useEffect(() => {
+    const handleStorage = (e) => {
+      if (e.key === 'railstream_dock_chat') {
+        setChatOpen(true);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
   const [isMuted, setIsMuted] = useState(false);
   const [mutedSlots, setMutedSlots] = useState({}); // { slotIndex: true/false } — per-slot mute state
   const [focusedSlot, setFocusedSlot] = useState(null); // For click-to-fullscreen
