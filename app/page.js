@@ -3251,9 +3251,24 @@ function RoundhouseQuickSave({ capture, cameras, user, onClose, onSaved }) {
   const [formData, setFormData] = useState({
     railroad: '', locomotive_numbers: '', location: capture?.cameraName || '',
     title: '', description: '', tags: [], power_types: [], source: 'camera_capture',
+    collection_id: '', collection_name: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [heritageDetected, setHeritageDetected] = useState(null);
+
+  // Collections
+  const [collections, setCollections] = useState([]);
+  const [showNewCollection, setShowNewCollection] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState('');
+  const [newCollectionDesc, setNewCollectionDesc] = useState('');
+
+  // Fetch collections on mount
+  useEffect(() => {
+    fetch('/api/roundhouse?action=collections')
+      .then(r => r.json())
+      .then(data => { if (data.ok) setCollections(data.collections || []); })
+      .catch(() => {});
+  }, []);
 
   const handleLocoChange = async (val) => {
     setFormData(f => ({ ...f, locomotive_numbers: val }));
@@ -3312,7 +3327,7 @@ function RoundhouseQuickSave({ capture, cameras, user, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-[#0f0f0f] border border-white/[0.1] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#0f0f0f] border border-white/[0.1] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b border-white/[0.1] sticky top-0 bg-[#0f0f0f] z-10 rounded-t-2xl">
           <h2 className="text-lg font-bold text-white flex items-center gap-3">
             <span className="text-xl">🏛️</span> Save to Roundhouse
@@ -3390,6 +3405,67 @@ function RoundhouseQuickSave({ capture, cameras, user, onClose, onSaved }) {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Collection */}
+          <div>
+            <label className="block text-white/80 text-[11px] uppercase tracking-wider font-semibold mb-2">Collection</label>
+            {!showNewCollection ? (
+              <div className="space-y-2">
+                <select value={formData.collection_id}
+                  onChange={e => {
+                    const coll = collections.find(c => c.id === e.target.value);
+                    setFormData(f => ({ ...f, collection_id: e.target.value, collection_name: coll?.name || '' }));
+                  }}
+                  className="w-full bg-white/[0.05] border border-white/[0.12] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all">
+                  <option value="" className="bg-[#111]">No collection</option>
+                  {collections.map(c => <option key={c.id} value={c.id} className="bg-[#111]">{c.name} ({c.photo_count} photos)</option>)}
+                </select>
+                <button type="button" onClick={() => setShowNewCollection(true)}
+                  className="flex items-center gap-1.5 text-[#ff7a00]/70 hover:text-[#ff7a00] text-xs font-medium transition-colors">
+                  <Plus className="w-3 h-3" /> Create new collection
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2 p-3 rounded-xl border border-[#ff7a00]/20 bg-[#ff7a00]/[0.03]">
+                <input type="text" value={newCollectionName}
+                  onChange={e => setNewCollectionName(e.target.value)}
+                  placeholder="Collection name (e.g., UP Locomotives, Freight Cars)..."
+                  className="w-full bg-white/[0.05] border border-white/[0.12] text-white text-sm rounded-lg px-3 py-2 focus:border-[#ff7a00]/50 focus:outline-none transition-all placeholder:text-white/40" />
+                <input type="text" value={newCollectionDesc}
+                  onChange={e => setNewCollectionDesc(e.target.value)}
+                  placeholder="Description (optional)..."
+                  className="w-full bg-white/[0.05] border border-white/[0.12] text-white text-sm rounded-lg px-3 py-2 focus:border-[#ff7a00]/50 focus:outline-none transition-all placeholder:text-white/40" />
+                <div className="flex gap-2">
+                  <button type="button" onClick={async () => {
+                    if (!newCollectionName.trim()) return;
+                    const token = localStorage.getItem('railstream_token');
+                    try {
+                      const res = await fetch('/api/roundhouse', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                        body: JSON.stringify({ action: 'create_collection', name: newCollectionName, description: newCollectionDesc }),
+                      });
+                      const data = await res.json();
+                      if (data.ok) {
+                        setCollections(prev => [data.collection, ...prev]);
+                        setFormData(f => ({ ...f, collection_id: data.collection.id, collection_name: data.collection.name }));
+                        setNewCollectionName('');
+                        setNewCollectionDesc('');
+                        setShowNewCollection(false);
+                      }
+                    } catch (e) { console.error(e); }
+                  }}
+                    className="px-4 py-1.5 bg-[#ff7a00] text-white rounded-lg text-xs font-bold hover:bg-[#ff8c20] transition-colors">
+                    Create
+                  </button>
+                  <button type="button" onClick={() => setShowNewCollection(false)}
+                    className="px-4 py-1.5 bg-white/[0.06] text-white/60 rounded-lg text-xs font-semibold hover:text-white transition-colors">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div>

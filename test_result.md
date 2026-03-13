@@ -559,11 +559,52 @@ agent_communication:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 15
+  test_sequence: 16
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Heritage Alert CAM-only + SSE broadcast"
+    - "Roundhouse Collection support for Camera Captures"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
+
+  - task: "Heritage Alert CAM-only + SSE broadcast"
+    implemented: true
+    working: true
+    file: "/app/app/api/roundhouse/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented heritage alert system that only triggers for camera captures (source=camera_capture), NOT trackside uploads. Alert broadcasts via shared SSE chatBus to 'The Yard' chat room with RoundhouseBot posting system messages."
+      - working: false
+        agent: "testing"
+        comment: "Database connectivity issue found - roundhouse API using default database while chat API using 'railstream' database. Heritage alerts were being posted to wrong database."
+      - working: true
+        agent: "testing"
+        comment: "✅ HERITAGE ALERT SYSTEM VERIFIED: Fixed database mismatch by updating roundhouse API to use same database name as chat API (process.env.DB_NAME || 'railstream'). Conducted comprehensive testing with 8/8 tests passing (100% success rate). Key findings: 1) Camera capture with heritage unit (NS 1073) correctly triggers chat alert with message '👑 HERITAGE UNIT ON CAM! NS 1073 (Southern Railway) spotted on [camera] — captured by [user]! Check The Roundhouse for the photo.', 2) Trackside upload with same heritage unit correctly does NOT trigger alert (CAM-only filtering working), 3) Heritage detection working perfectly (NS 1073 → Southern Railway), 4) SSE broadcast to 'The Yard' chat room functioning correctly, 5) RoundhouseBot system messages posting successfully. Heritage alert system is working exactly as specified - only camera captures trigger alerts."
+
+  - task: "Roundhouse Collection support for Camera Captures"
+    implemented: true
+    working: true
+    file: "/app/app/api/roundhouse/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Added collection support to RoundhouseQuickSave modal for camera captures. Users can add cam captures to existing collections or create new ones. API supports POST create_collection and photo creation with collection_id."
+      - working: true
+        agent: "testing"
+        comment: "✅ ROUNDHOUSE COLLECTIONS VERIFIED: Conducted comprehensive testing with 100% success rate. All collection functionality working correctly: 1) POST /api/roundhouse action=create_collection successfully creates collections (tested 'UP Locomotives Test' with description), returns {ok: true, collection: {id, name, description, username, photo_count, created_at}}, 2) POST /api/roundhouse action=create with collection_id successfully adds photos to collections, properly sets collection_id and collection_name fields, 3) GET /api/roundhouse?action=collections correctly lists collections with photo counts, 4) Photo count incrementation working (verified collection shows photo_count: 1 after adding photo), 5) Collection creation and photo association working seamlessly. Collections fully operational for camera captures."
+
+agent_communication:
+  - agent: "main"
+    message: "Implemented two features: 1) Heritage Unit Alerts now only fire for camera captures (source=camera_capture), NOT trackside uploads. Alert is broadcast via shared SSE chatBus for real-time delivery. 2) Added collection support to the RoundhouseQuickSave modal (camera captures) - users can now add cam captures to existing collections or create new ones. Created shared chat-bus module at /app/lib/chat-bus.js. Modified files: /app/app/api/roundhouse/route.js (CAM-only heritage alert + SSE broadcast), /app/app/api/chat/route.js (uses shared bus), /app/app/page.js (collection UI in RoundhouseQuickSave). Please test: 1) POST /api/roundhouse create with source=camera_capture and heritage loco should trigger chat alert. 2) POST /api/roundhouse create with source=trackside and heritage loco should NOT trigger alert. 3) POST /api/roundhouse create_collection works. Test credentials: chicagotest / sZyE8cDFk (Engineer tier)"
+  - agent: "testing"
+    message: "✅ ROUNDHOUSE HERITAGE ALERT & COLLECTIONS TESTING COMPLETE: Conducted comprehensive testing of both requested features with 100% success rate (8/8 tests passed). KEY FINDINGS: 1) HERITAGE ALERTS - Camera capture with heritage unit (NS 1073) correctly triggers chat alert to 'The Yard' with RoundhouseBot message '👑 HERITAGE UNIT ON CAM! NS 1073 (Southern Railway) spotted on Fostoria Cam 1 — captured by chicagotest! Check The Roundhouse for the photo.' Trackside upload with same heritage unit correctly does NOT trigger alert (CAM-only filtering working perfectly). 2) COLLECTIONS - Successfully created collection 'UP Locomotives Test', added photo UP 1943 to collection, verified photo_count incrementation. 3) DATABASE FIX - Identified and resolved critical database mismatch issue where roundhouse API was using default database while chat API used 'railstream' database, causing heritage alerts to be posted to wrong location. Updated roundhouse getDb() to use same database name. Both heritage alert system and collections functionality working exactly as specified in review request."

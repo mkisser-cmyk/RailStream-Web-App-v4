@@ -4,7 +4,7 @@
 import { NextResponse } from 'next/server';
 import { MongoClient } from 'mongodb';
 import { v4 as uuidv4 } from 'uuid';
-import { EventEmitter } from 'events';
+import { chatBus, relayToOtherWorkers, isClusterWorker } from '@/lib/chat-bus';
 
 const MONGO_URL = process.env.MONGO_URL || 'mongodb://localhost:27017';
 const DB_NAME = process.env.DB_NAME || 'railstream';
@@ -23,41 +23,6 @@ let roomsCache = null;
 let roomsCacheTime = 0;
 const ROOMS_CACHE_TTL = 15000;
 let yardEnsured = false;
-
-// ── SSE Event Bus — in-memory pub/sub for real-time chat ──
-// At 500 users: 500 listeners on a single EventEmitter (Node.js handles this easily)
-// For horizontal scaling: swap to Redis pub/sub
-const chatBus = new EventEmitter();
-chatBus.setMaxListeners(2000);
-
-// ── Cross-Worker Message Relay (for clustered production server) ──
-// When running with server.js (multi-core clustering), each worker has its own
-// chatBus and connectedClients. Messages need to be relayed between workers so
-// SSE clients on any worker see every chat message.
-//
-// Flow: Worker A receives POST → emits locally → sends to master → master relays
-//       to Workers B, C, D → they emit locally → their SSE clients receive it.
-const isClusterWorker = typeof process.send === 'function';
-
-function relayToOtherWorkers(event, data) {
-  if (isClusterWorker) {
-    try {
-      process.send({ _relay: true, event, data });
-    } catch (e) {
-      // Worker might be shutting down
-    }
-  }
-}
-
-// Listen for relayed messages from master (originated by other workers)
-if (isClusterWorker) {
-  process.on('message', (packet) => {
-    if (packet && packet._relay && packet.event && packet.data) {
-      // Emit on local chatBus so SSE clients connected to THIS worker see it
-      chatBus.emit(packet.event, packet.data);
-    }
-  });
-}
 
 // ── Connected clients tracking (replaces chat_presence DB for online status) ──
 // Map: username -> { rooms: Set, connectedAt, tier, is_admin, is_mod }

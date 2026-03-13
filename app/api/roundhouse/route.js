@@ -4,6 +4,7 @@ import { MongoClient } from 'mongodb';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
+import { chatBus, relayToOtherWorkers } from '@/lib/chat-bus';
 
 let _client = null;
 async function getDb() {
@@ -11,7 +12,7 @@ async function getDb() {
     _client = new MongoClient(process.env.MONGO_URL);
     await _client.connect();
   }
-  return _client.db();
+  return _client.db(process.env.DB_NAME || 'railstream');
 }
 
 // ── Heritage Unit Database ──
@@ -428,15 +429,16 @@ export async function POST(request) {
         }
       }
 
-      // ── Heritage Alert to Chat ──
-      if (photo.is_heritage && heritage.units.length > 0) {
+      // ── Heritage Alert to Chat (CAMERA CAPTURES ONLY) ──
+      if (photo.is_heritage && heritage.units.length > 0 && source === 'camera_capture') {
         try {
-          const alertMsg = `🚨 HERITAGE ALERT! ${heritage.units.map(u => `${u.unit} (${u.name})`).join(', ')} spotted at ${location || 'unknown location'} by ${photo.username}! Check The Roundhouse for the photo.`;
+          const cameraLabel = camera_name || location || 'a RailStream camera';
+          const alertMsg = `👑 HERITAGE UNIT ON CAM! ${heritage.units.map(u => `${u.unit} (${u.name})`).join(', ')} spotted on ${cameraLabel} — captured by ${photo.username}! Check The Roundhouse for the photo.`;
 
           // Post to The Yard chat
           const yardRoom = await db.collection('chat_rooms').findOne({ name: 'The Yard' });
           if (yardRoom) {
-            await db.collection('chat_messages').insertOne({
+            const systemMsg = {
               id: uuidv4(),
               room_id: yardRoom.id,
               username: 'RoundhouseBot',
@@ -445,10 +447,19 @@ export async function POST(request) {
               is_admin: false,
               is_mod: false,
               is_system: true,
+              is_heritage_alert: true,
+              heritage_units: heritage.units,
+              photo_id: photoId,
               pinned: false,
               reactions: {},
               created_at: new Date(),
-            });
+            };
+            await db.collection('chat_messages').insertOne(systemMsg);
+
+            // ── Broadcast via SSE so all connected chat users see it instantly ──
+            const msgPayload = { ...systemMsg, created_at: systemMsg.created_at.toISOString() };
+            chatBus.emit('chat:message', msgPayload);
+            relayToOtherWorkers('chat:message', msgPayload);
           }
         } catch (chatErr) {
           console.error('Heritage chat alert failed:', chatErr);
