@@ -1000,14 +1000,8 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmi
 
   // Group cameras by state, sorted alphabetically
   const groupedCameras = {};
-  if (filter !== 'favorites' && favoritesCameras.length > 0) {
-    const favFiltered = favoritesCameras.filter(c => 
-      (!search || c.name?.toLowerCase().includes(search.toLowerCase()) || c.location?.toLowerCase().includes(search.toLowerCase()))
-    );
-    if (favFiltered.length > 0) groupedCameras['★ Favorites'] = favFiltered;
-  }
   
-  filtered.filter(c => filter === 'favorites' || !favorites.includes(c._id)).forEach(cam => {
+  filtered.forEach(cam => {
     const state = filter === 'favorites' ? '★ Favorites' : getState(cam);
     if (!groupedCameras[state]) groupedCameras[state] = [];
     groupedCameras[state].push(cam);
@@ -1238,12 +1232,12 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmi
                                 <p className="text-xs text-white/70 truncate">{camera.location}</p>
                                 {hasRadio && (
                                   <p className="flex items-center gap-1 mt-0.5">
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-600/20 text-emerald-400 text-[9px] font-bold uppercase tracking-wider" title="Railroad Radio Available">
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-600/20 text-emerald-400 text-[9px] font-bold uppercase tracking-wider" title="Railroad Radio Equipped">
                                       <span className="relative flex h-1.5 w-1.5">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-50"></span>
                                         <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
                                       </span>
-                                      Scanner Radio
+                                      RR Radio
                                     </span>
                                   </p>
                                 )}

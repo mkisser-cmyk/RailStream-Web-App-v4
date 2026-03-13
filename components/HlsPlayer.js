@@ -1272,8 +1272,8 @@ export default function HlsPlayer({
                 <button
                   onClick={() => setShowAudioMenu(!showAudioMenu)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors text-sm font-bold ${showAudioMenu ? 'bg-[#ff7a00] text-white' : 'bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 ring-1 ring-emerald-500/30'}`}
-                  aria-label="Railroad Radio — switch audio track"
-                  title="Railroad Radio — switch audio track"
+                  aria-label="RR Radio — switch audio track"
+                  title="RR Radio — switch audio track"
                 >
                   <span className="relative flex h-2.5 w-2.5 mr-0.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-50"></span>
@@ -1291,7 +1291,7 @@ export default function HlsPlayer({
                 {showAudioMenu && (
                   <div className="absolute bottom-full right-0 mb-2 bg-[#1a1a1a] border border-white/10 rounded-lg shadow-xl overflow-hidden min-w-[180px]">
                     <div className="px-3 py-2 border-b border-white/10 flex items-center gap-2">
-                      <span className="text-emerald-400 text-xs font-black uppercase tracking-wider">📻 Railroad Radio</span>
+                      <span className="text-emerald-400 text-xs font-black uppercase tracking-wider">📻 RR Radio</span>
                     </div>
                     {audioTracks.map((track) => (
                       <button
