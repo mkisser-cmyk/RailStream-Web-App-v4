@@ -537,6 +537,54 @@ export async function POST(request) {
       return NextResponse.json({ ok: true });
     }
 
+    // ── UPDATE PHOTO ──
+    if (action === 'update') {
+      const user = await verifyAuth(request);
+      if (!user) return NextResponse.json({ ok: false, error: 'Login required' }, { status: 401 });
+
+      const { photo_id, railroad, locomotive_numbers, location, tags, title, description, loco_model, builder, photo_date, collection_id, collection_name } = body;
+      if (!photo_id) return NextResponse.json({ ok: false, error: 'photo_id required' }, { status: 400 });
+
+      const photo = await db.collection('roundhouse_photos').findOne({ id: photo_id });
+      if (!photo) return NextResponse.json({ ok: false, error: 'Not found' }, { status: 404 });
+
+      const username = user.username || user.name;
+      const isAdmin = user.is_admin || user.membership_tier === 'admin';
+      if (photo.username !== username && !isAdmin) {
+        return NextResponse.json({ ok: false, error: 'Not authorized' }, { status: 403 });
+      }
+
+      // Build update object — only include fields that were provided
+      const update = { updated_at: new Date() };
+      if (railroad !== undefined) update.railroad = railroad;
+      if (locomotive_numbers !== undefined) {
+        update.locomotive_numbers = locomotive_numbers;
+        // Re-detect heritage
+        const heritage = detectHeritage(locomotive_numbers);
+        update.is_heritage = heritage.isHeritage || (tags || photo.tags || []).includes('heritage');
+        update.heritage_units = heritage.units;
+        update.heritage_info = heritage.units.map(u => `${u.unit} — ${u.name}`).join(', ');
+      }
+      if (location !== undefined) update.location = location;
+      if (tags !== undefined) update.tags = tags;
+      if (title !== undefined) update.title = title;
+      if (description !== undefined) update.description = description;
+      if (loco_model !== undefined) update.loco_model = loco_model;
+      if (builder !== undefined) update.builder = builder;
+      if (photo_date !== undefined) update.photo_date = photo_date;
+      if (collection_id !== undefined) update.collection_id = collection_id;
+      if (collection_name !== undefined) update.collection_name = collection_name;
+
+      await db.collection('roundhouse_photos').updateOne(
+        { id: photo_id },
+        { $set: update }
+      );
+
+      // Return the full updated photo
+      const updatedPhoto = await db.collection('roundhouse_photos').findOne({ id: photo_id });
+      return NextResponse.json({ ok: true, photo: updatedPhoto });
+    }
+
     return NextResponse.json({ ok: false, error: 'Unknown action' }, { status: 400 });
   } catch (err) {
     console.error('Roundhouse POST error:', err);

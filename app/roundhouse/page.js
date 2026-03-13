@@ -8,7 +8,7 @@ import {
   Radio, ChevronDown, ChevronLeft, ChevronRight, Eye, Image, Star,
   TrendingUp, Award, BarChart3, Zap, ArrowUpRight, Flame, Trophy,
   Navigation, Tag, AlertTriangle, Sparkles, ExternalLink, Grid3X3,
-  LayoutGrid, Check, ChevronsUpDown,
+  LayoutGrid, Check, ChevronsUpDown, Pencil, Save,
 } from 'lucide-react';
 import { RAILROADS, RAILROAD_CATEGORIES, getRailroad, getRailroadColor, getRailroadsByCategory, searchRailroads } from '@/lib/railroads';
 import { LOCO_MODELS, BUILDERS, getModelsByBuilder } from '@/lib/locomotive-models';
@@ -291,6 +291,57 @@ export default function RoundhousePage() {
 
   // Lightbox
   const [selectedPhoto, setSelectedPhoto] = useState(null);
+  
+  // Edit mode
+  const [editMode, setEditMode] = useState(false);
+  const [editData, setEditData] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  const startEdit = (photo) => {
+    setEditData({
+      railroad: photo.railroad || '',
+      locomotive_numbers: photo.locomotive_numbers || '',
+      location: photo.location || '',
+      tags: photo.tags || [],
+      title: photo.title || '',
+      description: photo.description || '',
+      loco_model: photo.loco_model || '',
+      builder: photo.builder || '',
+      photo_date: photo.photo_date || '',
+      collection_id: photo.collection_id || '',
+      collection_name: photo.collection_name || '',
+    });
+    setEditMode(true);
+  };
+
+  const cancelEdit = () => {
+    setEditMode(false);
+    setEditData({});
+  };
+
+  const saveEdit = async () => {
+    if (!selectedPhoto) return;
+    setSaving(true);
+    try {
+      const token = localStorage.getItem('railstream_token');
+      const res = await fetch('/api/roundhouse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ action: 'update', photo_id: selectedPhoto.id, ...editData }),
+      });
+      const data = await res.json();
+      if (data.ok && data.photo) {
+        setSelectedPhoto(data.photo);
+        setPhotos(prev => prev.map(p => p.id === data.photo.id ? data.photo : p));
+        setEditMode(false);
+      } else {
+        alert(data.error || 'Failed to update');
+      }
+    } catch (e) {
+      alert('Error saving changes');
+    }
+    setSaving(false);
+  };
 
   // Scroll ref
   const [heroRef, heroVisible] = useScrollFadeIn();
@@ -949,7 +1000,7 @@ export default function RoundhousePage() {
       {/* ====== UPLOAD MODAL ====== */}
       {showUpload && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4" onClick={() => setShowUpload(false)}>
-          <div className="bg-[#0f0f0f] border border-white/[0.08] rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl"
+          <div className="bg-[#0f0f0f] border border-white/[0.08] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
             onClick={e => e.stopPropagation()} style={{ animation: 'modalIn 0.3s cubic-bezier(0.16,1,0.3,1)' }}>
             <style>{`@keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }`}</style>
 
@@ -1195,7 +1246,7 @@ export default function RoundhousePage() {
       {/* ====== PHOTO LIGHTBOX ====== */}
       {selectedPhoto && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-50 flex items-center justify-center p-4"
-          onClick={() => setSelectedPhoto(null)} style={{ animation: 'modalIn 0.2s ease-out' }}>
+          onClick={() => { setSelectedPhoto(null); setEditMode(false); }} style={{ animation: 'modalIn 0.2s ease-out' }}>
           <div className="relative max-w-5xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             {/* Heritage banner */}
             {selectedPhoto.is_heritage && (
@@ -1224,6 +1275,111 @@ export default function RoundhousePage() {
 
             {/* Details panel */}
             <div className="bg-[#0a0a0a] border border-white/[0.08] border-t-0 rounded-b-xl px-6 py-5">
+              {editMode ? (
+                /* ── EDIT MODE ── */
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Pencil className="w-4 h-4 text-[#ff7a00]" />
+                    <h3 className="text-white font-semibold">Edit Post</h3>
+                  </div>
+
+                  {/* Railroad */}
+                  <div>
+                    <label className="text-white/40 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Railroad *</label>
+                    <RailroadCombobox value={editData.railroad} onChange={(v) => setEditData(d => ({ ...d, railroad: v }))} placeholder="Search or browse railroads..." />
+                  </div>
+
+                  {/* Locomotive Numbers */}
+                  <div>
+                    <label className="text-white/40 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Locomotive Number(s)</label>
+                    <input type="text" value={editData.locomotive_numbers} onChange={e => setEditData(d => ({ ...d, locomotive_numbers: e.target.value }))}
+                      className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/20"
+                      placeholder="e.g., NS 1073, NS 9254" />
+                  </div>
+
+                  {/* Title + Location */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-white/40 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Title</label>
+                      <input type="text" value={editData.title} onChange={e => setEditData(d => ({ ...d, title: e.target.value }))}
+                        className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/20"
+                        placeholder="e.g., NS Heritage on Q335" />
+                    </div>
+                    <div>
+                      <label className="text-white/40 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Location</label>
+                      <input type="text" value={editData.location} onChange={e => setEditData(d => ({ ...d, location: e.target.value }))}
+                        className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/20"
+                        placeholder="e.g., Fostoria, Ohio" />
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <label className="text-white/40 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Description</label>
+                    <textarea value={editData.description} onChange={e => setEditData(d => ({ ...d, description: e.target.value }))}
+                      className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/20 resize-none"
+                      rows={3} placeholder="Add details, context, or notes about this sighting..." />
+                  </div>
+
+                  {/* Model + Builder */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-white/40 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Locomotive Model</label>
+                      <ModelCombobox value={editData.loco_model} onChange={(val) => {
+                        setEditData(d => ({ ...d, loco_model: val }));
+                        const matchedModel = LOCO_MODELS.find(m => m.model === val);
+                        if (matchedModel && !editData.builder) {
+                          setEditData(d => ({ ...d, builder: matchedModel.builder, loco_model: val }));
+                        }
+                      }} placeholder="Search models..." />
+                    </div>
+                    <div>
+                      <label className="text-white/40 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Builder</label>
+                      <select value={editData.builder} onChange={e => setEditData(d => ({ ...d, builder: e.target.value }))}
+                        className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none">
+                        <option value="" className="bg-[#111] text-white/40">Select builder...</option>
+                        {BUILDERS.map(b => <option key={b.id} value={b.id} className="bg-[#111] text-white">{b.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Photo Date */}
+                  <div>
+                    <label className="text-white/40 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Photo Date</label>
+                    <input type="date" value={editData.photo_date} onChange={e => setEditData(d => ({ ...d, photo_date: e.target.value }))}
+                      className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none" />
+                  </div>
+
+                  {/* Tags */}
+                  <div>
+                    <label className="text-white/40 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Tags</label>
+                    <div className="flex flex-wrap gap-2">
+                      {PHOTO_TAGS.map(tag => (
+                        <button key={tag.id} type="button"
+                          onClick={() => setEditData(d => ({ ...d, tags: d.tags.includes(tag.id) ? d.tags.filter(t => t !== tag.id) : [...d.tags, tag.id] }))}
+                          className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${editData.tags.includes(tag.id) ? 'border-[#ff7a00]/40 bg-[#ff7a00]/10 text-white' : 'border-white/[0.06] bg-white/[0.02] text-white/40 hover:bg-white/[0.05]'}`}>
+                          {tag.icon} {tag.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Save / Cancel */}
+                  <div className="flex items-center gap-3 pt-2">
+                    <button onClick={saveEdit} disabled={saving}
+                      className="flex-1 flex items-center justify-center gap-2 bg-[#ff7a00] hover:bg-[#e06800] text-black font-bold py-3 rounded-xl transition-colors disabled:opacity-50">
+                      <Save className="w-4 h-4" />
+                      {saving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                    <button onClick={cancelEdit}
+                      className="px-6 py-3 rounded-xl border border-white/[0.08] text-white/50 hover:text-white hover:bg-white/[0.05] transition-all font-medium">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* ── VIEW MODE ── */
+                <>
               {/* Title + Railroad */}
               <div className="flex items-start justify-between gap-4 mb-4">
                 <div>
@@ -1334,16 +1490,24 @@ export default function RoundhousePage() {
                   <span className="text-white/50 text-sm font-medium">{selectedPhoto.username}</span>
                 </div>
                 {(user && (selectedPhoto.username === (user.username || user.name) || user.is_admin)) && (
-                  <button onClick={() => handleDelete(selectedPhoto.id)}
-                    className="text-red-400/50 hover:text-red-400 text-xs transition-colors">
-                    Delete
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => startEdit(selectedPhoto)}
+                      className="flex items-center gap-1.5 text-[#ff7a00]/60 hover:text-[#ff7a00] text-xs transition-colors">
+                      <Pencil className="w-3.5 h-3.5" /> Edit
+                    </button>
+                    <button onClick={() => handleDelete(selectedPhoto.id)}
+                      className="text-red-400/50 hover:text-red-400 text-xs transition-colors">
+                      Delete
+                    </button>
+                  </div>
                 )}
               </div>
+                </>
+              )}
             </div>
 
             {/* Close button */}
-            <button onClick={() => setSelectedPhoto(null)}
+            <button onClick={() => { setSelectedPhoto(null); setEditMode(false); }}
               className="absolute top-4 right-4 p-2.5 rounded-xl bg-black/50 backdrop-blur-sm text-white/50 hover:text-white transition-colors border border-white/[0.1]">
               <X className="w-5 h-5" />
             </button>
