@@ -654,7 +654,7 @@ export default function HlsPlayer({
       }
     };
 
-    timeUpdateRef.current = setInterval(updateTime, 500);
+    timeUpdateRef.current = setInterval(updateTime, 2000); // Every 2s (was 500ms — lighter on CPU)
     return () => clearInterval(timeUpdateRef.current);
   }, []);
 

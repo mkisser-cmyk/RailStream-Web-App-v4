@@ -3938,7 +3938,7 @@ export default function App() {
         })
         .catch(() => {});
       });
-    }, 30000);
+    }, 60000); // Heartbeat every 60s (was 30s — reduced for lower server load)
     return () => clearInterval(interval);
   }, [selectedCameras]);
 
@@ -4302,13 +4302,14 @@ export default function App() {
       }
     };
     fetchMapping();
+    // Refresh thumbnail timestamps every 30s (was 5s — major CPU hog!)
     const interval = setInterval(() => {
       if (active) {
-        setThumbTimestamp(Date.now()); // Just update timestamp to force img reload
+        setThumbTimestamp(Date.now());
       }
-    }, 5000);
-    // Re-fetch mapping every 60 seconds (in case new cameras come online)
-    const mapInterval = setInterval(fetchMapping, 60000);
+    }, 30000);
+    // Re-fetch mapping every 2 minutes (in case new cameras come online)
+    const mapInterval = setInterval(fetchMapping, 120000);
     return () => { active = false; clearInterval(interval); clearInterval(mapInterval); };
   }, []);
 

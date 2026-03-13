@@ -1069,8 +1069,7 @@ async function handleRoute(request, { params }) {
           status: 200,
           headers: {
             'Content-Type': 'image/jpeg',
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
+            'Cache-Control': 'public, max-age=30', // Browser caches for 30s — matches server-side studio cache
           },
         });
       } catch (error) {
