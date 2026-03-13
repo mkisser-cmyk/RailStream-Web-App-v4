@@ -1,8 +1,10 @@
 // The Yard Chat — Backend API
 // Supports: rooms, messages, presence (who's online), moderation, pinned messages
+// SSE (Server-Sent Events) for real-time push — eliminates polling
 import { NextResponse } from 'next/server';
 import { MongoClient } from 'mongodb';
 import { v4 as uuidv4 } from 'uuid';
+import { EventEmitter } from 'events';
 
 const MONGO_URL = process.env.MONGO_URL || 'mongodb://localhost:27017';
 const DB_NAME = process.env.DB_NAME || 'railstream';
@@ -19,14 +21,163 @@ async function getDb() {
 // ── Server-side cache for rooms data (reduces DB load dramatically) ──
 let roomsCache = null;
 let roomsCacheTime = 0;
-const ROOMS_CACHE_TTL = 15000; // 15 seconds — rooms data is shared across all users
-let yardEnsured = false; // One-time flag for the-yard room creation
+const ROOMS_CACHE_TTL = 15000;
+let yardEnsured = false;
+
+// ── SSE Event Bus — in-memory pub/sub for real-time chat ──
+// At 500 users: 500 listeners on a single EventEmitter (Node.js handles this easily)
+// For horizontal scaling: swap to Redis pub/sub
+const chatBus = new EventEmitter();
+chatBus.setMaxListeners(2000);
+
+// ── Connected clients tracking (replaces chat_presence DB for online status) ──
+// Map: username -> { rooms: Set, connectedAt, tier, is_admin, is_mod }
+const connectedClients = new Map();
+
+function getOnlineUsersForRoom(roomId) {
+  const users = [];
+  connectedClients.forEach((info, username) => {
+    if (info.rooms.has(roomId)) {
+      users.push({ username, tier: info.tier, is_admin: info.is_admin, is_mod: info.is_mod });
+    }
+  });
+  return users;
+}
+
+function broadcastPresenceUpdate(roomId) {
+  const users = getOnlineUsersForRoom(roomId);
+  chatBus.emit('presence', { room_id: roomId, online_users: users, online_count: users.length });
+}
 
 // ── GET: Fetch messages, rooms, or presence ──
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action') || 'messages';
+
+    // ── SSE STREAM — Real-time push (replaces polling) ──
+    if (action === 'stream') {
+      const username = searchParams.get('user');
+      const tier = searchParams.get('tier') || 'guest';
+      const isAdmin = searchParams.get('is_admin') === 'true';
+      const roomsParam = searchParams.get('rooms') || 'the-yard';
+      const userRooms = new Set(roomsParam.split(',').filter(Boolean));
+
+      // Register this client as connected
+      connectedClients.set(username || `anon-${Date.now()}`, {
+        rooms: userRooms,
+        tier,
+        is_admin: isAdmin,
+        is_mod: false,
+        connectedAt: Date.now(),
+      });
+
+      // Broadcast presence update for all joined rooms
+      userRooms.forEach(roomId => broadcastPresenceUpdate(roomId));
+
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          const send = (event, data) => {
+            try {
+              controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+            } catch (e) { /* connection closed */ }
+          };
+
+          // Send initial presence for all rooms
+          userRooms.forEach(roomId => {
+            const users = getOnlineUsersForRoom(roomId);
+            send('presence', { room_id: roomId, online_users: users, online_count: users.length });
+          });
+
+          // Listen for new messages
+          const onMessage = (msg) => {
+            if (userRooms.has(msg.room_id)) {
+              send('message', msg);
+            }
+          };
+          chatBus.on('chat:message', onMessage);
+
+          // Listen for presence changes
+          const onPresence = (data) => {
+            if (userRooms.has(data.room_id)) {
+              send('presence', data);
+            }
+          };
+          chatBus.on('presence', onPresence);
+
+          // Listen for room updates (join/leave requests from this client)
+          const onRoomUpdate = (data) => {
+            if (data.username === username) {
+              if (data.action === 'join') {
+                userRooms.add(data.room_id);
+                const clientInfo = connectedClients.get(username);
+                if (clientInfo) clientInfo.rooms.add(data.room_id);
+                broadcastPresenceUpdate(data.room_id);
+                const users = getOnlineUsersForRoom(data.room_id);
+                send('presence', { room_id: data.room_id, online_users: users, online_count: users.length });
+              } else if (data.action === 'leave') {
+                userRooms.delete(data.room_id);
+                const clientInfo = connectedClients.get(username);
+                if (clientInfo) clientInfo.rooms.delete(data.room_id);
+                broadcastPresenceUpdate(data.room_id);
+              }
+            }
+          };
+          chatBus.on('room:update', onRoomUpdate);
+
+          // Listen for moderation events
+          const onModeration = (data) => {
+            if (userRooms.has(data.room_id) || data.room_id === '*') {
+              send('moderation', data);
+            }
+          };
+          chatBus.on('moderation', onModeration);
+
+          // Listen for pin events
+          const onPin = (data) => {
+            if (userRooms.has(data.room_id)) {
+              send('pin', data);
+            }
+          };
+          chatBus.on('pin', onPin);
+
+          // Keep-alive every 30 seconds (prevents proxy timeouts)
+          const keepAlive = setInterval(() => {
+            try {
+              controller.enqueue(encoder.encode(': keepalive\n\n'));
+            } catch (e) {
+              clearInterval(keepAlive);
+            }
+          }, 30000);
+
+          // Cleanup on disconnect
+          request.signal.addEventListener('abort', () => {
+            clearInterval(keepAlive);
+            chatBus.off('chat:message', onMessage);
+            chatBus.off('presence', onPresence);
+            chatBus.off('room:update', onRoomUpdate);
+            chatBus.off('moderation', onModeration);
+            chatBus.off('pin', onPin);
+
+            // Remove from connected clients
+            connectedClients.delete(username || `anon-${Date.now()}`);
+            // Broadcast updated presence
+            userRooms.forEach(roomId => broadcastPresenceUpdate(roomId));
+          });
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no', // Disable nginx buffering
+        },
+      });
+    }
+
     const db = await getDb();
 
     // ── GET MESSAGES ──
@@ -66,29 +217,24 @@ export async function GET(request) {
 
     // ── GET ROOMS ──
     if (action === 'rooms') {
-      // Piggyback presence update: if username is provided, update their presence
-      // Throttled: only write if we have user info (the actual write is lightweight)
+      // Piggyback presence (for non-SSE clients as fallback)
       const presenceUser = searchParams.get('user');
       const presenceTier = searchParams.get('tier') || 'guest';
       const presenceAdmin = searchParams.get('is_admin') === 'true';
       const presenceRooms = searchParams.get('rooms');
       if (presenceUser) {
+        // Register in connectedClients map (covers non-SSE clients too)
         const roomIds = presenceRooms ? presenceRooms.split(',').filter(Boolean) : ['the-yard'];
-        // Single bulkWrite for all rooms (efficient)
-        const bulkOps = roomIds.map(roomId => ({
-          updateOne: {
-            filter: { username: presenceUser, room_id: roomId },
-            update: {
-              $set: { username: presenceUser, tier: presenceTier, is_admin: presenceAdmin, is_mod: false, room_id: roomId, last_seen: new Date() },
-            },
-            upsert: true,
-          },
-        }));
-        // Fire-and-forget — don't await, don't block the response
-        db.collection('chat_presence').bulkWrite(bulkOps).catch(() => {});
+        connectedClients.set(presenceUser, {
+          rooms: new Set(roomIds),
+          tier: presenceTier,
+          is_admin: presenceAdmin,
+          is_mod: false,
+          connectedAt: Date.now(),
+        });
       }
 
-      // Auto-ensure "the-yard" once per server lifecycle (not every request!)
+      // Auto-ensure "the-yard" once per server lifecycle
       if (!yardEnsured) {
         await db.collection('chat_rooms').updateOne(
           { id: 'the-yard' },
@@ -98,42 +244,32 @@ export async function GET(request) {
         yardEnsured = true;
       }
 
-      // Serve from cache if fresh (shared across ALL users — huge DB savings)
+      // Serve from cache if fresh
       const now = Date.now();
       if (roomsCache && (now - roomsCacheTime) < ROOMS_CACHE_TTL) {
-        return NextResponse.json(roomsCache);
+        // Update online counts from in-memory connectedClients (instant, no DB)
+        const freshResponse = { ...roomsCache, rooms: roomsCache.rooms.map(r => ({
+          ...r,
+          online_count: getOnlineUsersForRoom(r.id).length,
+          online_users: getOnlineUsersForRoom(r.id),
+        }))};
+        return NextResponse.json(freshResponse);
       }
 
-      // Cache miss — rebuild rooms data from DB
+      // Cache miss — get rooms from DB (online data from memory, NOT from DB)
       const rooms = await db.collection('chat_rooms').find({}).sort({ type: 1, name: 1 }).toArray();
-
-      // Single aggregation for presence (last 5 min)
-      const presenceCutoff = new Date(now - 300000);
-      const presenceCounts = await db.collection('chat_presence')
-        .aggregate([
-          { $match: { last_seen: { $gt: presenceCutoff } } },
-          { $group: { _id: '$room_id', count: { $sum: 1 }, users: { $push: { username: '$username', tier: '$tier', is_admin: '$is_admin', is_mod: '$is_mod' } } } },
-        ])
-        .toArray();
-
-      const countMap = {};
-      const usersMap = {};
-      presenceCounts.forEach(p => {
-        countMap[p._id] = p.count;
-        usersMap[p._id] = p.users;
-      });
 
       const formatted = rooms.map(r => ({
         id: r.id,
         name: r.name,
         type: r.type,
         camera_id: r.camera_id || null,
-        online_count: countMap[r.id] || 0,
-        online_users: usersMap[r.id] || [],
+        online_count: getOnlineUsersForRoom(r.id).length,
+        online_users: getOnlineUsersForRoom(r.id),
         pinned_message: r.pinned_message || null,
       }));
 
-      // Cache the response
+      // Cache the base response (online counts are added fresh each time)
       const response = { ok: true, rooms: formatted };
       roomsCache = response;
       roomsCacheTime = now;
@@ -226,21 +362,8 @@ export async function POST(request) {
 
       await db.collection('chat_messages').insertOne(newMsg);
 
-      // ── Auto-update presence when user sends a message ──
-      await db.collection('chat_presence').updateOne(
-        { username: user.username, room_id: roomId },
-        {
-          $set: {
-            username: user.username,
-            tier: user.membership_tier || 'guest',
-            is_admin: user.is_admin || false,
-            is_mod: user.is_mod || false,
-            room_id: roomId,
-            last_seen: new Date(),
-          },
-        },
-        { upsert: true }
-      );
+      // ── Broadcast message via SSE to all connected clients ──
+      chatBus.emit('chat:message', { ...newMsg, created_at: newMsg.created_at.toISOString() });
 
       return NextResponse.json({
         ok: true,

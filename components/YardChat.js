@@ -228,74 +228,168 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
     });
   }, [selectedCameras]);
 
-  // ── Fetch rooms list ──
+  // ── SSE (Server-Sent Events) for real-time chat — replaces polling ──
+  const eventSourceRef = useRef(null);
+  const sseConnectedRef = useRef(false);
   const fetchRoomsRef = useRef(null);
-  useEffect(() => {
-    const fetchRooms = () => {
-      // Build URL with piggyback presence info (acts as backup heartbeat)
-      let url = '/api/chat?action=rooms';
-      if (user?.username) {
-        url += `&user=${encodeURIComponent(user.username)}`;
-        url += `&tier=${encodeURIComponent(user.membership_tier || 'guest')}`;
-        url += `&is_admin=${user.is_admin || false}`;
-        url += `&rooms=${encodeURIComponent(joinedRooms.join(','))}`;
-      }
-      fetch(url)
-        .then(r => r.json())
-        .then(data => {
-          if (data.ok && data.rooms) {
-            // Merge server rooms with auto-joined location rooms
-            const serverRooms = data.rooms;
-            const locationMap = {};
-            selectedCameras.filter(Boolean).forEach(cam => {
-              const cityName = cam.name || cam.location || 'Unknown';
-              const slug = cityName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-              const roomId = `loc-${slug}`;
-              if (!locationMap[roomId]) {
-                locationMap[roomId] = { id: roomId, name: cityName, type: 'location', online_count: 0, online_users: [], pinned_message: null };
-              }
-            });
-            // Merge: server data takes priority
-            const roomMap = {};
-            Object.values(locationMap).forEach(r => { roomMap[r.id] = r; });
-            serverRooms.forEach(r => { roomMap[r.id] = r; });
-            // Always ensure The Yard is present
-            if (!roomMap['the-yard']) {
-              roomMap['the-yard'] = { id: 'the-yard', name: 'The Yard', type: 'global', online_count: 0, online_users: [], pinned_message: null };
-            }
-            // Filter out old per-camera rooms (cam-*) from the displayed list
-            const filtered = Object.values(roomMap).filter(r => !r.id.startsWith('cam-'));
-            setRooms(filtered);
-          }
-        })
-        .catch(() => {});
-    };
-    fetchRoomsRef.current = fetchRooms;
-    fetchRooms();
-    const interval = setInterval(fetchRooms, 15000); // Poll rooms every 15s (presence piggyback included)
 
-    // Refresh immediately when tab becomes visible (handles browser throttling)
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') fetchRooms();
+  // Initial room list fetch (one-time, then SSE pushes updates)
+  const fetchRoomsOnce = useCallback(() => {
+    let url = '/api/chat?action=rooms';
+    if (user?.username) {
+      url += `&user=${encodeURIComponent(user.username)}`;
+      url += `&tier=${encodeURIComponent(user.membership_tier || 'guest')}`;
+      url += `&is_admin=${user.is_admin || false}`;
+      url += `&rooms=${encodeURIComponent(joinedRooms.join(','))}`;
+    }
+    fetch(url)
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok && data.rooms) {
+          const serverRooms = data.rooms;
+          const locationMap = {};
+          selectedCameras.filter(Boolean).forEach(cam => {
+            const cityName = cam.name || cam.location || 'Unknown';
+            const slug = cityName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            const roomId = `loc-${slug}`;
+            if (!locationMap[roomId]) {
+              locationMap[roomId] = { id: roomId, name: cityName, type: 'location', online_count: 0, online_users: [], pinned_message: null };
+            }
+          });
+          const roomMap = {};
+          Object.values(locationMap).forEach(r => { roomMap[r.id] = r; });
+          serverRooms.forEach(r => { roomMap[r.id] = r; });
+          if (!roomMap['the-yard']) {
+            roomMap['the-yard'] = { id: 'the-yard', name: 'The Yard', type: 'global', online_count: 0, online_users: [], pinned_message: null };
+          }
+          const filtered = Object.values(roomMap).filter(r => !r.id.startsWith('cam-'));
+          setRooms(filtered);
+        }
+      })
+      .catch(() => {});
+  }, [selectedCameras, user, joinedRooms]);
+  fetchRoomsRef.current = fetchRoomsOnce;
+
+  // Connect SSE stream
+  useEffect(() => {
+    if (!user?.username) return;
+
+    // Build SSE URL
+    const sseUrl = `/api/chat?action=stream&user=${encodeURIComponent(user.username)}&tier=${encodeURIComponent(user.membership_tier || 'guest')}&is_admin=${user.is_admin || false}&rooms=${encodeURIComponent(joinedRooms.join(','))}`;
+
+    // Close previous connection
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+
+    const es = new EventSource(sseUrl);
+    eventSourceRef.current = es;
+
+    es.addEventListener('message', (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        setMessages(prev => {
+          const existing = prev[msg.room_id] || [];
+          if (existing.some(m => m.id === msg.id)) return prev; // Dedupe
+          const merged = [...existing, msg].slice(-200);
+          return { ...prev, [msg.room_id]: merged };
+        });
+        // Update last fetch timestamp
+        lastFetchRef.current[msg.room_id] = msg.created_at;
+        setTimeout(scrollToBottom, 100);
+      } catch (err) { /* ignore parse errors */ }
+    });
+
+    es.addEventListener('presence', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        setRooms(prev => prev.map(r =>
+          r.id === data.room_id
+            ? { ...r, online_count: data.online_count, online_users: data.online_users }
+            : r
+        ));
+      } catch (err) { /* ignore */ }
+    });
+
+    es.addEventListener('moderation', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === 'delete' && data.message_id) {
+          setMessages(prev => {
+            const updated = { ...prev };
+            Object.keys(updated).forEach(roomId => {
+              updated[roomId] = (updated[roomId] || []).filter(m => m.id !== data.message_id);
+            });
+            return updated;
+          });
+        }
+      } catch (err) { /* ignore */ }
+    });
+
+    es.addEventListener('pin', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        setRooms(prev => prev.map(r =>
+          r.id === data.room_id ? { ...r, pinned_message: data.pinned_message } : r
+        ));
+      } catch (err) { /* ignore */ }
+    });
+
+    es.onopen = () => {
+      sseConnectedRef.current = true;
+      console.log('[YardChat] SSE connected');
     };
-    document.addEventListener('visibilitychange', handleVisibility);
+
+    es.onerror = () => {
+      sseConnectedRef.current = false;
+      // EventSource auto-reconnects, but we should refresh rooms on reconnect
+    };
 
     return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibility);
+      es.close();
+      sseConnectedRef.current = false;
     };
-  }, [selectedCameras, user, joinedRooms]);
+  }, [user, joinedRooms, scrollToBottom]);
 
-  // ── Poll messages for active room ──
+  // Fetch initial rooms + messages (one-time on mount + when rooms change)
+  useEffect(() => {
+    fetchRoomsOnce();
+  }, [fetchRoomsOnce]);
+
+  // Fetch initial message history for active room
   useEffect(() => {
     if (!activeRoom) return;
+    // Only fetch if we don't have messages yet
+    if (messages[activeRoom]?.length > 0) return;
 
-    const fetchMessages = () => {
+    fetch(`/api/chat?action=messages&room=${activeRoom}&limit=50`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok && data.messages?.length > 0) {
+          setMessages(prev => {
+            const existing = prev[activeRoom] || [];
+            const existingIds = new Set(existing.map(m => m.id));
+            const newMsgs = data.messages.filter(m => !existingIds.has(m.id));
+            if (newMsgs.length === 0) return prev;
+            return { ...prev, [activeRoom]: [...existing, ...newMsgs].slice(-200) };
+          });
+          const lastMsg = data.messages[data.messages.length - 1];
+          if (lastMsg) lastFetchRef.current[activeRoom] = lastMsg.created_at;
+          setTimeout(scrollToBottom, 100);
+        }
+      })
+      .catch(() => {});
+  }, [activeRoom, scrollToBottom]);
+
+  // Fallback polling — only if SSE is not connected (e.g., browser doesn't support it)
+  useEffect(() => {
+    if (!activeRoom) return;
+    const fallbackInterval = setInterval(() => {
+      if (sseConnectedRef.current) return; // SSE is working, no need to poll
       const after = lastFetchRef.current[activeRoom];
       const url = after
         ? `/api/chat?action=messages&room=${activeRoom}&after=${encodeURIComponent(after)}`
         : `/api/chat?action=messages&room=${activeRoom}&limit=50`;
-
       fetch(url)
         .then(r => r.json())
         .then(data => {
@@ -305,8 +399,7 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
               const existingIds = new Set(existing.map(m => m.id));
               const newMsgs = data.messages.filter(m => !existingIds.has(m.id));
               if (newMsgs.length === 0) return prev;
-              const merged = [...existing, ...newMsgs].slice(-200); // Keep last 200
-              return { ...prev, [activeRoom]: merged };
+              return { ...prev, [activeRoom]: [...existing, ...newMsgs].slice(-200) };
             });
             const lastMsg = data.messages[data.messages.length - 1];
             if (lastMsg) lastFetchRef.current[activeRoom] = lastMsg.created_at;
@@ -314,20 +407,9 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
           }
         })
         .catch(() => {});
-    };
-
-    // Initial fetch (full history)
-    if (!lastFetchRef.current[activeRoom]) {
-      fetchMessages();
-    }
-
-    const interval = setInterval(fetchMessages, 5000); // Poll messages every 5s (reduced from 3s for performance)
-    return () => clearInterval(interval);
+    }, 10000); // Slower fallback poll (10s)
+    return () => clearInterval(fallbackInterval);
   }, [activeRoom, scrollToBottom]);
-
-  // ── Presence is handled via piggyback on room polling (no separate heartbeat needed) ──
-  // When rooms are fetched (every 15s), user info is sent along and presence is updated server-side.
-  // This eliminates a separate set of POST requests entirely.
 
   // ── Send message ──
   const handleSend = async () => {
