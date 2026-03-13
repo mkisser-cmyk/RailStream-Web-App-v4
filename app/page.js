@@ -1842,7 +1842,7 @@ function CompanionAdPanel({ ads }) {
 
 // WATCH PAGE
 // ============================================
-function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, setPlaybackStates, loadCamera, removeCamera, stopAllSessions, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp, replaySeekOffset = 0, clearReplaySeek, playerStatsRef, onStatusCamera, onLogin }) {
+function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, setPlaybackStates, loadCamera, removeCamera, stopAllSessions, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp, replaySeekOffset = 0, clearReplaySeek, playerStatsRef, activeSessionsRef, onStatusCamera, onLogin }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(true);
 
@@ -1861,6 +1861,80 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
   const [focusedSlot, setFocusedSlot] = useState(null); // For click-to-fullscreen
   const [targetSlot, setTargetSlot] = useState(null); // For pick-where-to-place
   const [reviewOpsCounter, setReviewOpsCounter] = useState(0); // Trigger Review Ops in player
+
+  // Drag-and-swap state for camera tiles
+  const [dragSourceSlot, setDragSourceSlot] = useState(null);
+  const [dragOverSlot, setDragOverSlot] = useState(null);
+
+  const handleDragStart = (e, slotIndex) => {
+    setDragSourceSlot(slotIndex);
+    e.dataTransfer.effectAllowed = 'move';
+    // Store slot index for cross-component DnD
+    e.dataTransfer.setData('text/plain', String(slotIndex));
+    // Make the drag image semi-transparent
+    if (e.target) {
+      e.target.style.opacity = '0.5';
+    }
+  };
+
+  const handleDragEnd = (e) => {
+    setDragSourceSlot(null);
+    setDragOverSlot(null);
+    if (e.target) {
+      e.target.style.opacity = '1';
+    }
+  };
+
+  const handleDragOver = (e, slotIndex) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverSlot !== slotIndex) {
+      setDragOverSlot(slotIndex);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    // Only clear if we're actually leaving the slot (not entering a child)
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDragOverSlot(null);
+    }
+  };
+
+  const handleDrop = (e, targetIndex) => {
+    e.preventDefault();
+    setDragOverSlot(null);
+    const sourceIndex = dragSourceSlot ?? parseInt(e.dataTransfer.getData('text/plain'), 10);
+    if (isNaN(sourceIndex) || sourceIndex === targetIndex) {
+      setDragSourceSlot(null);
+      return;
+    }
+    // Swap the cameras between source and target slots
+    const sourceCamera = selectedCameras[sourceIndex];
+    const targetCamera = selectedCameras[targetIndex];
+    const sourceState = playbackStates[sourceIndex];
+    const targetState = playbackStates[targetIndex];
+
+    // Update cameras
+    const newCameras = [...selectedCameras];
+    newCameras[sourceIndex] = targetCamera;
+    newCameras[targetIndex] = sourceCamera;
+    setSelectedCameras(newCameras);
+
+    // Swap playback states so streams follow their cameras
+    const newStates = { ...playbackStates };
+    newStates[sourceIndex] = targetState || {};
+    newStates[targetIndex] = sourceState || {};
+    setPlaybackStates(newStates);
+
+    // Swap active session refs
+    const srcSession = activeSessionsRef.current[sourceIndex];
+    const tgtSession = activeSessionsRef.current[targetIndex];
+    activeSessionsRef.current[sourceIndex] = tgtSession;
+    activeSessionsRef.current[targetIndex] = srcSession;
+
+    setDragSourceSlot(null);
+    toast.success('Cameras swapped', { duration: 1500 });
+  };
 
   // Train sighting log
   const [sightingForm, setSightingForm] = useState(null); // { imageData, sightingTime, cameraId, cameraName, cameraLocation }
@@ -2538,7 +2612,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
             {Array.from({ length: slots }).map((_, i) => {
               const camera = selectedCameras[i];
               const state = playbackStates[i] || {};
-              const isCompact = viewMode === 'nine' || viewMode === 'sixteen';
+              const isCompact = viewMode === 'nine' || viewMode === 'sixteen' || (viewMode === 'main5' && i > 0);
               
               // Slot label for main5 layout
               const slotLabel = viewMode === 'main5' 
@@ -2548,11 +2622,17 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
               return (
                 <div 
                   key={i} 
-                  className={`relative bg-zinc-900 rounded overflow-hidden group ${camera && viewMode !== 'single' ? 'cursor-pointer' : ''}`}
+                  className={`relative bg-zinc-900 rounded overflow-hidden group ${camera && viewMode !== 'single' ? 'cursor-pointer' : ''} ${dragOverSlot === i && dragSourceSlot !== i ? 'ring-2 ring-[#ff7a00] ring-offset-1 ring-offset-black' : ''} ${dragSourceSlot === i ? 'opacity-50' : ''}`}
                   style={viewMode === 'main5' && i === 0 ? { gridColumn: 'span 2', gridRow: 'span 2' } : undefined}
                   role="region"
                   aria-label={camera ? `Camera ${i + 1}: ${camera.name}` : `Empty slot ${i + 1}`}
                   onDoubleClick={() => handleTileFocus(i)}
+                  draggable={!!camera && viewMode !== 'single'}
+                  onDragStart={(e) => camera && handleDragStart(e, i)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={(e) => handleDragOver(e, i)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, i)}
                 >
                   {camera ? (
                     <>
@@ -4571,6 +4651,7 @@ export default function App() {
             replaySeekOffset={replaySeekOffset}
             clearReplaySeek={() => setReplaySeekOffset(0)}
             playerStatsRef={playerStatsRef}
+            activeSessionsRef={activeSessionsRef}
             onStatusCamera={setStatusModal}
             onLogin={() => setLoginOpen(true)}
           />
