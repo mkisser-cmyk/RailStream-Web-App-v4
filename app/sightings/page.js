@@ -386,7 +386,8 @@ export default function SightingsPage() {
     const now = Date.now() / 1000;
     const secsAgo = Math.floor(now - sightingTs);
     if (secsAgo > 604800 || secsAgo < 0) return null;
-    return `/?watch=${s.camera_id}&seek=${secsAgo}`;
+    // view=single forces the Watch page to single-cam mode for DVR review
+    return `/?watch=${s.camera_id}&seek=${secsAgo}&view=single`;
   };
 
   const isPaidMember = user && ['conductor', 'engineer', 'fireman', 'development', 'admin'].includes(user.tier || user.membership_tier);

@@ -429,7 +429,7 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
   const onlineCount = Math.max(activeRoomData.online_count, mergedOnlineUsers.length);
 
   return (
-    <div className={`flex flex-col bg-zinc-900/95 ${isPopout ? 'h-screen' : 'h-full'} border-l border-white/5`}>
+    <div className={`flex flex-col bg-zinc-900/95 ${isPopout ? 'h-screen' : 'h-full'} border-l border-white/5 relative`}>
       {/* ── Header ── */}
       <div className="flex items-center justify-between px-3 py-2.5 bg-zinc-800/80 border-b border-white/5">
         <div className="flex items-center gap-2">

@@ -4166,6 +4166,15 @@ export default function App() {
         console.log(`[Replay] Loading camera ${camera.name}, seek offset: ${seekSecs}s`);
         setCurrentPage('watch');
         
+        // Force single-cam view when coming from a replay/review link
+        const viewParam = params.get('view');
+        if (viewParam === 'single') {
+          setViewMode('single');
+          // Clear other camera slots for clean single-cam view
+          setSelectedCameras([null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]);
+          setPlaybackStates({});
+        }
+        
         if (seekSecs > 300) {
           // For sightings more than 5 minutes ago, store the DVR offset
           // The player will build a timeshift URL from this
