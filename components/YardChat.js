@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   MessageCircle, Send, Users, X, ExternalLink, Hash, ChevronDown,
   Shield, ShieldCheck, Crown, Pin, Trash2, VolumeX, Ban, MoreHorizontal,
@@ -415,6 +415,37 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
   const activeMessages = messages[activeRoom] || [];
   const visibleRooms = rooms.filter(r => joinedRooms.includes(r.id));
 
+  // ── Client-side online detection: derive active users from recent messages ──
+  // This is a fallback in case server-side presence tracking has issues
+  const derivedOnline = useMemo(() => {
+    const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+    const userMap = {};
+    // Count unique non-system authors from recent messages
+    activeMessages.forEach(m => {
+      if (m.is_system) return;
+      const msgTime = new Date(m.created_at).getTime();
+      if (msgTime > fiveMinAgo) {
+        userMap[m.username] = { username: m.username, tier: m.tier || 'guest', is_admin: m.is_admin || false, is_mod: m.is_mod || false };
+      }
+    });
+    return Object.values(userMap);
+  }, [activeMessages]);
+
+  // Merge server online users with client-derived online users (union)
+  const mergedOnlineUsers = useMemo(() => {
+    const serverUsers = activeRoomData.online_users || [];
+    const merged = {};
+    serverUsers.forEach(u => { merged[u.username] = u; });
+    derivedOnline.forEach(u => { if (!merged[u.username]) merged[u.username] = u; });
+    // Also add self if logged in
+    if (user?.username && !merged[user.username]) {
+      merged[user.username] = { username: user.username, tier: user.membership_tier || 'guest', is_admin: user.is_admin || false, is_mod: user.is_mod || false };
+    }
+    return Object.values(merged);
+  }, [activeRoomData.online_users, derivedOnline, user]);
+
+  const onlineCount = Math.max(activeRoomData.online_count, mergedOnlineUsers.length);
+
   return (
     <div className={`flex flex-col bg-zinc-900/95 ${isPopout ? 'h-screen' : 'h-full'} border-l border-white/5`}>
       {/* ── Header ── */}
@@ -423,7 +454,7 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
           <MessageCircle className="w-4 h-4 text-[#ff7a00]" />
           <span className="text-sm font-bold text-white">The Yard</span>
           <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full font-bold">
-            {activeRoomData.online_count} online
+            {onlineCount} online
           </span>
         </div>
         <div className="flex items-center gap-1">
@@ -501,16 +532,16 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
       {showOnline && (
         <div className="bg-zinc-800 border-b border-white/10 max-h-48 overflow-y-auto">
           <div className="px-3 py-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
-            Online in {activeRoomData.name} ({activeRoomData.online_count})
+            Online in {activeRoomData.name} ({onlineCount})
           </div>
-          {(activeRoomData.online_users || []).map((u, i) => (
+          {mergedOnlineUsers.map((u, i) => (
             <div key={i} className="flex items-center gap-2 px-3 py-1.5">
               <div className="w-2 h-2 rounded-full bg-green-500" />
               <span className="text-sm text-white/80">{u.username}</span>
               <TierBadge tier={u.tier} isAdmin={u.is_admin} isMod={u.is_mod} size="xs" />
             </div>
           ))}
-          {(activeRoomData.online_users || []).length === 0 && (
+          {mergedOnlineUsers.length === 0 && (
             <div className="px-3 py-3 text-xs text-white/30 text-center">No one else here yet</div>
           )}
         </div>
