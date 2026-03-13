@@ -4293,6 +4293,8 @@ export default function App() {
   // Fetch studio thumbnail mapping (rarely changes) + batch thumbnails (every 5s for train spotting)
   useEffect(() => {
     let active = true;
+    let lastEtag = null; // Track ETag for conditional requests (304 = no data transfer)
+
     // Mapping: catalogCameraId -> studioSiteId (changes rarely)
     const fetchMapping = async () => {
       try {
@@ -4303,15 +4305,22 @@ export default function App() {
         }
       } catch (e) { /* Silent fail */ }
     };
-    // Batch thumbnails: ALL thumbnails in ONE request (studioSiteId -> data URI)
+    // Batch thumbnails: ALL thumbnails in ONE request, with ETag for zero-cost unchanged responses
     const fetchBatchThumbnails = async () => {
       try {
-        const res = await fetch('/api/studio/thumbnails-batch');
+        const headers = {};
+        if (lastEtag) headers['If-None-Match'] = lastEtag;
+        const res = await fetch('/api/studio/thumbnails-batch', { headers });
+        // 304 = nothing changed, keep current thumbnails (zero bytes transferred!)
+        if (res.status === 304) return;
         const data = await res.json();
         if (data.ok && data.thumbnails && active) {
           setThumbnailSrcs(data.thumbnails);
           setThumbTimestamp(data.timestamp || Date.now());
         }
+        // Store ETag for next request
+        const etag = res.headers.get('etag');
+        if (etag) lastEtag = etag;
       } catch (e) { /* Silent fail */ }
     };
 

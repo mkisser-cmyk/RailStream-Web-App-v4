@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { MongoClient } from 'mongodb';
 import crypto from 'crypto';
+import sharp from 'sharp';
 
 const API_BASE = process.env.RAILSTREAM_API_URL || 'https://api.railstream.net';
 const ADMIN_USER = process.env.RAILSTREAM_ADMIN_USER;
@@ -174,10 +175,30 @@ async function getStudioToken() {
 }
 
 // Fetch studio sites with caching (10-second TTL for fresh thumbnails)
-// Pre-decodes thumbnail base64 into Buffers for zero-cost serving
-let thumbnailBufferCache = {}; // siteId -> Buffer (pre-decoded)
-let thumbnailDataUriCache = null; // { data: { siteId: "data:image/jpeg;base64,..." }, timestamp }
+// Pre-decodes AND compresses thumbnails using sharp for minimal payload
+let thumbnailBufferCache = {}; // siteId -> Buffer (compressed)
+let thumbnailDataUriCache = null; // Pre-serialized response string
 let thumbnailDataUriCacheTime = 0;
+let thumbnailEtag = ''; // ETag for conditional requests
+
+// Thumbnail compression settings (balance quality vs size)
+const THUMB_WIDTH = 320;
+const THUMB_HEIGHT = 180;
+const THUMB_QUALITY = 55; // JPEG quality — 55 is good for small previews
+
+async function compressThumbnail(base64Data) {
+  try {
+    const inputBuffer = Buffer.from(base64Data, 'base64');
+    const compressed = await sharp(inputBuffer)
+      .resize(THUMB_WIDTH, THUMB_HEIGHT, { fit: 'cover' })
+      .jpeg({ quality: THUMB_QUALITY, mozjpeg: true })
+      .toBuffer();
+    return compressed;
+  } catch (e) {
+    // If sharp fails (corrupt image), return original
+    return Buffer.from(base64Data, 'base64');
+  }
+}
 
 async function fetchStudioSites() {
   const now = Date.now();
@@ -195,15 +216,17 @@ async function fetchStudioSites() {
   
   // Separate thumbnails from site data and sanitize
   const thumbnails = {};
-  const newBufferCache = {};
+  const compressionPromises = [];
   const sanitizedSites = sites.map(site => {
     // Store thumbnail separately
     if (site.health?.preview_image) {
       thumbnails[site.id] = site.health.preview_image;
-      // Pre-decode base64 to Buffer for fast serving
-      try {
-        newBufferCache[site.id] = Buffer.from(site.health.preview_image, 'base64');
-      } catch (e) { /* skip bad data */ }
+      // Queue compression
+      compressionPromises.push(
+        compressThumbnail(site.health.preview_image).then(buf => {
+          thumbnailBufferCache[site.id] = buf;
+        })
+      );
     }
     // Return sanitized site data (no passwords, IPs, API keys)
     return {
@@ -238,10 +261,13 @@ async function fetchStudioSites() {
     };
   });
 
-  thumbnailBufferCache = newBufferCache;
-  // Invalidate data URI cache so it rebuilds with fresh data
+  // Compress all thumbnails in parallel (non-blocking, ~150ms for 27 images)
+  await Promise.all(compressionPromises);
+  
+  // Invalidate data URI cache so it rebuilds with fresh compressed data
   thumbnailDataUriCache = null;
   thumbnailDataUriCacheTime = 0;
+  thumbnailEtag = `"thumb-${now}"`;
   
   studioSitesCache = { data: sanitizedSites, thumbnails, fetchedAt: now };
   return studioSitesCache;
@@ -1057,8 +1083,7 @@ async function handleRoute(request, { params }) {
       }
     }
 
-    // GET /api/studio/thumbnail?id=SITE_ID — Serve a live preview image for a site
-    // Uses pre-decoded buffer cache for zero-cost serving
+    // GET /api/studio/thumbnail?id=SITE_ID — Serve a compressed live preview image
     if (route === '/studio/thumbnail' && method === 'GET') {
       const url = new URL(request.url);
       const siteId = url.searchParams.get('id');
@@ -1066,49 +1091,67 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ error: 'id parameter required' }, { status: 400 }));
       }
       try {
-        await fetchStudioSites(); // Ensure cache is fresh
-        // Serve from pre-decoded buffer cache (no base64 decode per request!)
+        await fetchStudioSites();
         const buffer = thumbnailBufferCache[siteId];
         if (!buffer) {
           const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
-          return new NextResponse(pixel, {
-            status: 200,
-            headers: { 'Content-Type': 'image/gif', 'Cache-Control': 'public, max-age=5' },
-          });
+          return new NextResponse(pixel, { status: 200, headers: { 'Content-Type': 'image/gif', 'Cache-Control': 'public, max-age=5' } });
         }
         return new NextResponse(buffer, {
           status: 200,
-          headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=5' },
+          headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=5', 'ETag': thumbnailEtag },
         });
       } catch (error) {
-        console.error('Studio thumbnail error:', error);
         return handleCORS(NextResponse.json({ error: 'Failed to fetch thumbnail' }, { status: 502 }));
       }
     }
 
-    // GET /api/studio/thumbnails-batch — Returns ALL thumbnails as data URIs in ONE request
-    // This is the preferred endpoint: 1 request instead of 46 individual image requests
+    // GET /api/studio/thumbnails-batch — Returns ALL thumbnails as compressed data URIs in ONE request
+    // Optimizations: sharp compression, pre-stringified cache, ETag/304 conditional
     if (route === '/studio/thumbnails-batch' && method === 'GET') {
       try {
-        const now = Date.now();
-        // Serve from cache if data URI cache is fresh (matches studio cache TTL)
-        if (thumbnailDataUriCache && (now - thumbnailDataUriCacheTime) < 10000) {
-          return handleCORS(NextResponse.json(thumbnailDataUriCache, {
-            headers: { 'Cache-Control': 'public, max-age=5' },
-          }));
+        // Check ETag — if client already has this version, return 304 (zero bytes)
+        const ifNoneMatch = request.headers.get('if-none-match');
+        if (ifNoneMatch && ifNoneMatch === thumbnailEtag && thumbnailDataUriCache) {
+          return new Response(null, {
+            status: 304,
+            headers: { 'ETag': thumbnailEtag, 'Cache-Control': 'public, max-age=5' },
+          });
         }
+
+        const now = Date.now();
+        // Serve pre-stringified response from cache
+        if (thumbnailDataUriCache && (now - thumbnailDataUriCacheTime) < 10000) {
+          return new Response(thumbnailDataUriCache, {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'public, max-age=5',
+              'ETag': thumbnailEtag,
+            },
+          });
+        }
+
         const cache = await fetchStudioSites();
-        // Build data URI map from raw base64 (browser handles data URIs natively)
+        // Build data URI map from COMPRESSED Buffers (much smaller than original)
         const dataUris = {};
-        Object.entries(cache.thumbnails).forEach(([siteId, base64]) => {
-          dataUris[siteId] = `data:image/jpeg;base64,${base64}`;
+        Object.entries(thumbnailBufferCache).forEach(([siteId, buffer]) => {
+          dataUris[siteId] = `data:image/jpeg;base64,${buffer.toString('base64')}`;
         });
+
         const response = { ok: true, thumbnails: dataUris, timestamp: now };
-        thumbnailDataUriCache = response;
+        // Pre-stringify once — subsequent requests serve this string directly (zero JSON.stringify cost)
+        thumbnailDataUriCache = JSON.stringify(response);
         thumbnailDataUriCacheTime = now;
-        return handleCORS(NextResponse.json(response, {
-          headers: { 'Cache-Control': 'public, max-age=5' },
-        }));
+
+        return new Response(thumbnailDataUriCache, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'public, max-age=5',
+            'ETag': thumbnailEtag,
+          },
+        });
       } catch (error) {
         console.error('Thumbnails batch error:', error);
         return handleCORS(NextResponse.json({ error: 'Failed to fetch thumbnails' }, { status: 502 }));
