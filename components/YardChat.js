@@ -415,34 +415,16 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
   const activeMessages = messages[activeRoom] || [];
   const visibleRooms = rooms.filter(r => joinedRooms.includes(r.id));
 
-  // ── Client-side online detection: derive active users from recent messages ──
-  // This is a fallback in case server-side presence tracking has issues
-  const derivedOnline = useMemo(() => {
-    const fiveMinAgo = Date.now() - 5 * 60 * 1000;
-    const userMap = {};
-    // Count unique non-system authors from recent messages
-    activeMessages.forEach(m => {
-      if (m.is_system) return;
-      const msgTime = new Date(m.created_at).getTime();
-      if (msgTime > fiveMinAgo) {
-        userMap[m.username] = { username: m.username, tier: m.tier || 'guest', is_admin: m.is_admin || false, is_mod: m.is_mod || false };
-      }
-    });
-    return Object.values(userMap);
-  }, [activeMessages]);
-
-  // Merge server online users with client-derived online users (union)
+  // Merge server online users with self (always show yourself as online if logged in)
   const mergedOnlineUsers = useMemo(() => {
     const serverUsers = activeRoomData.online_users || [];
     const merged = {};
     serverUsers.forEach(u => { merged[u.username] = u; });
-    derivedOnline.forEach(u => { if (!merged[u.username]) merged[u.username] = u; });
-    // Also add self if logged in
     if (user?.username && !merged[user.username]) {
       merged[user.username] = { username: user.username, tier: user.membership_tier || 'guest', is_admin: user.is_admin || false, is_mod: user.is_mod || false };
     }
     return Object.values(merged);
-  }, [activeRoomData.online_users, derivedOnline, user]);
+  }, [activeRoomData.online_users, user]);
 
   const onlineCount = Math.max(activeRoomData.online_count, mergedOnlineUsers.length);
 

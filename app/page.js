@@ -1876,6 +1876,57 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
     });
   }, []);
 
+  // ── Background Radio Detection ──
+  // Probes each camera's HLS master playlist to detect audio tracks
+  // Runs on mount and every 20 minutes so radio badges are always up-to-date
+  useEffect(() => {
+    if (!cameras || cameras.length === 0) return;
+
+    const probeRadio = async () => {
+      const token = auth.getToken();
+      if (!token) return; // Only probe when logged in
+
+      for (const cam of cameras) {
+        try {
+          // Get the stream URL for this camera
+          const authRes = await fetch('/api/playback/authorize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ camera_id: cam._id, device_id: 'radio-probe' }),
+          });
+          if (!authRes.ok) continue;
+          const authData = await authRes.json();
+          const streamUrl = authData.stream_url || authData.url;
+          if (!streamUrl) continue;
+
+          // Fetch the master playlist (just the text, not the video)
+          const m3u8Res = await fetch(streamUrl);
+          if (!m3u8Res.ok) continue;
+          const m3u8Text = await m3u8Res.text();
+
+          // Check if the playlist contains multiple audio tracks
+          // HLS master playlists use #EXT-X-MEDIA:TYPE=AUDIO for audio tracks
+          const audioLines = m3u8Text.split('\n').filter(l => l.includes('#EXT-X-MEDIA') && l.includes('TYPE=AUDIO'));
+          const hasRadio = audioLines.length > 1; // More than 1 audio track = has radio
+
+          handleRadioDetected(cam._id, hasRadio);
+        } catch {
+          // Silently skip cameras that can't be probed
+        }
+      }
+    };
+
+    // Initial probe after a short delay (let auth settle)
+    const initialTimeout = setTimeout(probeRadio, 10000);
+    // Re-probe every 20 minutes
+    const interval = setInterval(probeRadio, 20 * 60 * 1000);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
+  }, [cameras, handleRadioDetected]);
+
   // Ads system
   const [ads, setAds] = useState([]);
   const [showAdManager, setShowAdManager] = useState(false);
@@ -3869,8 +3920,8 @@ export default function App() {
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
-    // Also refresh proactively every 10 minutes to stay ahead of token expiry
-    const interval = setInterval(validateSession, 10 * 60 * 1000);
+    // Also refresh proactively every 3 minutes to keep user active in upstream API
+    const interval = setInterval(validateSession, 3 * 60 * 1000);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
