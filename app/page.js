@@ -923,7 +923,7 @@ function HomePage({ cameras, onStartWatching, onLogin, user }) {
 // ============================================
 // CAMERA PICKER WITH FAVORITES & PRESETS
 // ============================================
-function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmin, viewMode, favorites, setFavorites, presets, setPresets, onLoadPreset, onSavePreset, thumbnailMap, thumbTimestamp, targetSlot, setTargetSlot, radioMap = {} }) {
+function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmin, viewMode, favorites, setFavorites, presets, setPresets, onLoadPreset, onSavePreset, thumbnailMap, thumbnailSrcs, thumbTimestamp, targetSlot, setTargetSlot, radioMap = {} }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [showPresets, setShowPresets] = useState(false);
@@ -1219,8 +1219,10 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmi
                               aria-label={`${isStatusCamera ? camera.status === 'offline' ? 'Offline' : 'Coming soon' : hasAccess ? 'Select' : !userTier ? 'Sign in required' : 'Upgrade required'} ${camera.name}`}
                             >
                               <div className="relative w-16 h-10 rounded overflow-hidden flex-shrink-0">
-                                {thumbnailMap?.[camera._id] ? (
-                                  <img src={`/api/studio/thumbnail?id=${thumbnailMap[camera._id]}&_t=${thumbTimestamp}`} alt="" className="w-full h-full object-cover" />
+                                {thumbnailMap?.[camera._id] && thumbnailSrcs?.[thumbnailMap[camera._id]] ? (
+                                  <img src={thumbnailSrcs[thumbnailMap[camera._id]]} alt="" className="w-full h-full object-cover" />
+                                ) : thumbnailMap?.[camera._id] ? (
+                                  <img src={`/api/studio/thumbnail?id=${thumbnailMap[camera._id]}`} alt="" className="w-full h-full object-cover" />
                                 ) : (
                                   <img src={camera.thumbnail_path} alt="" className="w-full h-full object-cover" />
                                 )}
@@ -1858,7 +1860,7 @@ function CompanionAdPanel({ ads }) {
 
 // WATCH PAGE
 // ============================================
-function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, setPlaybackStates, loadCamera, removeCamera, stopAllSessions, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbTimestamp, replaySeekOffset = 0, clearReplaySeek, playerStatsRef, activeSessionsRef, onStatusCamera, onLogin }) {
+function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setSelectedCameras, playbackStates, setPlaybackStates, loadCamera, removeCamera, stopAllSessions, favorites, setFavorites, presets, setPresets, thumbnailMap, thumbnailSrcs, thumbTimestamp, replaySeekOffset = 0, clearReplaySeek, playerStatsRef, activeSessionsRef, onStatusCamera, onLogin }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(true);
 
@@ -2355,6 +2357,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
             onLoadPreset={handleLoadPreset}
             onSavePreset={handleSavePreset}
             thumbnailMap={thumbnailMap}
+            thumbnailSrcs={thumbnailSrcs}
             thumbTimestamp={thumbTimestamp}
             targetSlot={targetSlot}
             setTargetSlot={setTargetSlot}
@@ -3867,6 +3870,7 @@ export default function App() {
   
   // Live thumbnail mapping from studio (studioSiteId -> catalogCameraId)
   const [thumbnailMap, setThumbnailMap] = useState({}); // catalogCameraId -> studioSiteId
+  const [thumbnailSrcs, setThumbnailSrcs] = useState({}); // studioSiteId -> data:image URI
   const [thumbTimestamp, setThumbTimestamp] = useState(Date.now());
 
   // Active session tracking for heartbeat and cleanup
@@ -4286,31 +4290,38 @@ export default function App() {
     }
   }, [cameras, loading]);
 
-  // Fetch studio thumbnail mapping and poll every 5 seconds
+  // Fetch studio thumbnail mapping (rarely changes) + batch thumbnails (every 5s for train spotting)
   useEffect(() => {
     let active = true;
+    // Mapping: catalogCameraId -> studioSiteId (changes rarely)
     const fetchMapping = async () => {
       try {
         const res = await fetch('/api/studio/thumbnails-map');
         const data = await res.json();
         if (data.ok && data.mapping && active) {
           setThumbnailMap(data.mapping);
-          setThumbTimestamp(Date.now());
         }
-      } catch (e) {
-        // Silent fail - thumbnails are a nice-to-have
-      }
+      } catch (e) { /* Silent fail */ }
     };
+    // Batch thumbnails: ALL thumbnails in ONE request (studioSiteId -> data URI)
+    const fetchBatchThumbnails = async () => {
+      try {
+        const res = await fetch('/api/studio/thumbnails-batch');
+        const data = await res.json();
+        if (data.ok && data.thumbnails && active) {
+          setThumbnailSrcs(data.thumbnails);
+          setThumbTimestamp(data.timestamp || Date.now());
+        }
+      } catch (e) { /* Silent fail */ }
+    };
+
     fetchMapping();
-    // Refresh thumbnail timestamps every 30s (was 5s — major CPU hog!)
-    const interval = setInterval(() => {
-      if (active) {
-        setThumbTimestamp(Date.now());
-      }
-    }, 30000);
-    // Re-fetch mapping every 2 minutes (in case new cameras come online)
+    fetchBatchThumbnails();
+    // Batch thumbnails every 5s (1 request replaces 46 individual image requests!)
+    const batchInterval = setInterval(fetchBatchThumbnails, 5000);
+    // Re-fetch mapping every 2 minutes
     const mapInterval = setInterval(fetchMapping, 120000);
-    return () => { active = false; clearInterval(interval); clearInterval(mapInterval); };
+    return () => { active = false; clearInterval(batchInterval); clearInterval(mapInterval); };
   }, []);
 
   const loadCamera = async (camera, slotIndex) => {
@@ -4664,6 +4675,7 @@ export default function App() {
             presets={presets}
             setPresets={updatePresets}
             thumbnailMap={thumbnailMap}
+            thumbnailSrcs={thumbnailSrcs}
             thumbTimestamp={thumbTimestamp}
             replaySeekOffset={replaySeekOffset}
             clearReplaySeek={() => setReplaySeekOffset(0)}

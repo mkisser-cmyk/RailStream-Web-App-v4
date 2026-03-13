@@ -173,10 +173,15 @@ async function getStudioToken() {
   return data.access_token;
 }
 
-// Fetch studio sites with caching (5-second TTL)
+// Fetch studio sites with caching (10-second TTL for fresh thumbnails)
+// Pre-decodes thumbnail base64 into Buffers for zero-cost serving
+let thumbnailBufferCache = {}; // siteId -> Buffer (pre-decoded)
+let thumbnailDataUriCache = null; // { data: { siteId: "data:image/jpeg;base64,..." }, timestamp }
+let thumbnailDataUriCacheTime = 0;
+
 async function fetchStudioSites() {
   const now = Date.now();
-  if (studioSitesCache.data && (now - studioSitesCache.fetchedAt) < 30000) {
+  if (studioSitesCache.data && (now - studioSitesCache.fetchedAt) < 10000) {
     return studioSitesCache;
   }
   const token = await getStudioToken();
@@ -190,10 +195,15 @@ async function fetchStudioSites() {
   
   // Separate thumbnails from site data and sanitize
   const thumbnails = {};
+  const newBufferCache = {};
   const sanitizedSites = sites.map(site => {
     // Store thumbnail separately
     if (site.health?.preview_image) {
       thumbnails[site.id] = site.health.preview_image;
+      // Pre-decode base64 to Buffer for fast serving
+      try {
+        newBufferCache[site.id] = Buffer.from(site.health.preview_image, 'base64');
+      } catch (e) { /* skip bad data */ }
     }
     // Return sanitized site data (no passwords, IPs, API keys)
     return {
@@ -228,6 +238,11 @@ async function fetchStudioSites() {
     };
   });
 
+  thumbnailBufferCache = newBufferCache;
+  // Invalidate data URI cache so it rebuilds with fresh data
+  thumbnailDataUriCache = null;
+  thumbnailDataUriCacheTime = 0;
+  
   studioSitesCache = { data: sanitizedSites, thumbnails, fetchedAt: now };
   return studioSitesCache;
 }
@@ -1043,6 +1058,7 @@ async function handleRoute(request, { params }) {
     }
 
     // GET /api/studio/thumbnail?id=SITE_ID — Serve a live preview image for a site
+    // Uses pre-decoded buffer cache for zero-cost serving
     if (route === '/studio/thumbnail' && method === 'GET') {
       const url = new URL(request.url);
       const siteId = url.searchParams.get('id');
@@ -1050,31 +1066,52 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ error: 'id parameter required' }, { status: 400 }));
       }
       try {
-        const cache = await fetchStudioSites();
-        const imageData = cache.thumbnails[siteId];
-        if (!imageData) {
-          // Return a 1x1 transparent pixel as fallback
+        await fetchStudioSites(); // Ensure cache is fresh
+        // Serve from pre-decoded buffer cache (no base64 decode per request!)
+        const buffer = thumbnailBufferCache[siteId];
+        if (!buffer) {
           const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
           return new NextResponse(pixel, {
             status: 200,
-            headers: {
-              'Content-Type': 'image/gif',
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-            },
+            headers: { 'Content-Type': 'image/gif', 'Cache-Control': 'public, max-age=5' },
           });
         }
-        // The preview_image is raw JPEG base64 data
-        const imageBuffer = Buffer.from(imageData, 'base64');
-        return new NextResponse(imageBuffer, {
+        return new NextResponse(buffer, {
           status: 200,
-          headers: {
-            'Content-Type': 'image/jpeg',
-            'Cache-Control': 'public, max-age=30', // Browser caches for 30s — matches server-side studio cache
-          },
+          headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=5' },
         });
       } catch (error) {
         console.error('Studio thumbnail error:', error);
         return handleCORS(NextResponse.json({ error: 'Failed to fetch thumbnail' }, { status: 502 }));
+      }
+    }
+
+    // GET /api/studio/thumbnails-batch — Returns ALL thumbnails as data URIs in ONE request
+    // This is the preferred endpoint: 1 request instead of 46 individual image requests
+    if (route === '/studio/thumbnails-batch' && method === 'GET') {
+      try {
+        const now = Date.now();
+        // Serve from cache if data URI cache is fresh (matches studio cache TTL)
+        if (thumbnailDataUriCache && (now - thumbnailDataUriCacheTime) < 10000) {
+          return handleCORS(NextResponse.json(thumbnailDataUriCache, {
+            headers: { 'Cache-Control': 'public, max-age=5' },
+          }));
+        }
+        const cache = await fetchStudioSites();
+        // Build data URI map from raw base64 (browser handles data URIs natively)
+        const dataUris = {};
+        Object.entries(cache.thumbnails).forEach(([siteId, base64]) => {
+          dataUris[siteId] = `data:image/jpeg;base64,${base64}`;
+        });
+        const response = { ok: true, thumbnails: dataUris, timestamp: now };
+        thumbnailDataUriCache = response;
+        thumbnailDataUriCacheTime = now;
+        return handleCORS(NextResponse.json(response, {
+          headers: { 'Cache-Control': 'public, max-age=5' },
+        }));
+      } catch (error) {
+        console.error('Thumbnails batch error:', error);
+        return handleCORS(NextResponse.json({ error: 'Failed to fetch thumbnails' }, { status: 502 }));
       }
     }
 
