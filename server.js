@@ -47,9 +47,6 @@ if (cluster.isPrimary) {
   function spawnWorker(id) {
     const worker = cluster.fork({
       WORKER_ID: String(id),
-      // Only worker 0 fetches and compresses thumbnails
-      // Other workers receive compressed data via IPC from the leader
-      THUMBNAIL_LEADER: id === 0 ? 'true' : 'false',
     });
 
     worker.on('message', (msg) => {
@@ -64,20 +61,9 @@ if (cluster.isPrimary) {
           }
         }
       }
-      
-      // ── Thumbnail Data Relay ──
-      // Leader worker sends compressed thumbnails → master relays to all other workers
-      if (msg._thumbnailBroadcast) {
-        for (const wid in cluster.workers) {
-          const target = cluster.workers[wid];
-          if (target && target !== worker && !target.isDead()) {
-            try { target.send(msg); } catch (e) { /* Worker may be shutting down */ }
-          }
-        }
-      }
     });
 
-    console.log(`[Master] Worker ${worker.process.pid} started (id=${id}${id === 0 ? ', thumbnail leader' : ''})`);
+    console.log(`[Master] Worker ${worker.process.pid} started (id=${id})`);
     return worker;
   }
 
