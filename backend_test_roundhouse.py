@@ -11,7 +11,7 @@ from datetime import datetime
 import uuid
 
 # Test configuration
-BASE_URL = "https://rail-photo-hub.preview.emergentagent.com/api"
+BASE_URL = "https://railroad-radio.preview.emergentagent.com/api"
 TEST_CREDENTIALS = {
     "username": "chicagotest",
     "password": "sZyE8cDFk"
