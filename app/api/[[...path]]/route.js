@@ -415,7 +415,59 @@ async function handleRoute(request, { params }) {
         headers: { 'X-API-Key': API_KEY },
       });
       const data = await res.json();
+      
+      // Merge in radio detection status from local DB
+      try {
+        const db = await getMongoDb();
+        const radioEntries = await db.collection('camera_radio').find({}).toArray();
+        const radioMap = {};
+        radioEntries.forEach(r => { radioMap[r.camera_id] = true; });
+        
+        // Attach has_radio flag to each camera
+        if (Array.isArray(data)) {
+          data.forEach(cam => { cam.has_radio = !!radioMap[cam._id]; });
+        }
+      } catch (err) {
+        console.error('Radio merge error:', err);
+      }
+      
       return handleCORS(NextResponse.json(data));
+    }
+
+    // Cameras: Report radio detection — saves that a camera has scanner audio
+    if (route === '/cameras/radio' && method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const { camera_id, has_radio } = body;
+      if (!camera_id) return handleCORS(NextResponse.json({ error: 'camera_id required' }, { status: 400 }));
+      
+      try {
+        const db = await getMongoDb();
+        if (has_radio) {
+          await db.collection('camera_radio').updateOne(
+            { camera_id },
+            { $set: { camera_id, has_radio: true, detected_at: new Date() } },
+            { upsert: true }
+          );
+        } else {
+          await db.collection('camera_radio').deleteOne({ camera_id });
+        }
+        return handleCORS(NextResponse.json({ ok: true }));
+      } catch (err) {
+        return handleCORS(NextResponse.json({ error: 'Failed' }, { status: 500 }));
+      }
+    }
+
+    // Cameras: Get radio status for all cameras
+    if (route === '/cameras/radio' && method === 'GET') {
+      try {
+        const db = await getMongoDb();
+        const entries = await db.collection('camera_radio').find({}).toArray();
+        const radioMap = {};
+        entries.forEach(r => { radioMap[r.camera_id] = true; });
+        return handleCORS(NextResponse.json({ ok: true, radio: radioMap }));
+      } catch {
+        return handleCORS(NextResponse.json({ ok: true, radio: {} }));
+      }
     }
 
     // Cameras: Get single camera (by _id from catalog)

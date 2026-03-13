@@ -964,7 +964,7 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmi
       c.location?.toLowerCase().includes(search.toLowerCase());
     let matchesFilter = true;
     if (filter === 'favorites') matchesFilter = favorites.includes(c._id);
-    else if (filter === 'radio') matchesFilter = radioMap[c._id] || !!c.radio_code;
+    else if (filter === 'radio') matchesFilter = radioMap[c._id] || c.has_radio || !!c.radio_code;
     else if (filter !== 'all') matchesFilter = c.min_tier === filter;
     return matchesSearch && matchesFilter;
   });
@@ -1196,7 +1196,7 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmi
                       // and for logged-in users who don't have access (to show upgrade prompt in player)
                       const isClickable = hasAccess || isStatusCamera || true; // Always clickable
                       const isFavorite = favorites.includes(camera._id);
-                      const hasRadio = radioMap[camera._id] || !!camera.radio_code;
+                      const hasRadio = radioMap[camera._id] || camera.has_radio || !!camera.radio_code;
                       
                       return (
                         <li key={camera._id}>
@@ -1234,19 +1234,19 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmi
                                 )}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm text-white truncate flex items-center gap-1.5">
-                                  {camera.name}
-                                  {hasRadio && (
-                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-600/20 text-emerald-400 text-[9px] font-bold uppercase tracking-wider flex-shrink-0" title="Railroad Radio Available">
+                                <p className="text-sm text-white truncate">{camera.name}</p>
+                                <p className="text-xs text-white/70 truncate">{camera.location}</p>
+                                {hasRadio && (
+                                  <p className="flex items-center gap-1 mt-0.5">
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-600/20 text-emerald-400 text-[9px] font-bold uppercase tracking-wider" title="Railroad Radio Available">
                                       <span className="relative flex h-1.5 w-1.5">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-50"></span>
                                         <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
                                       </span>
-                                      Radio
+                                      Scanner Radio
                                     </span>
-                                  )}
-                                </p>
-                                <p className="text-xs text-white/70 truncate">{camera.location}</p>
+                                  </p>
+                                )}
                               </div>
                             </button>
                             
@@ -1870,8 +1870,15 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
 
   const handleRadioDetected = useCallback((cameraId, hasRadio) => {
     setRadioMap(prev => {
+      if (prev[cameraId] === hasRadio) return prev; // No change
       const updated = { ...prev, [cameraId]: hasRadio };
       try { localStorage.setItem('railstream_radio_map', JSON.stringify(updated)); } catch {}
+      // Save to server so ALL users see this
+      fetch('/api/cameras/radio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ camera_id: cameraId, has_radio: hasRadio }),
+      }).catch(() => {});
       return updated;
     });
   }, []);
