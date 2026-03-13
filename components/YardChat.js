@@ -223,6 +223,7 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
   }, [selectedCameras]);
 
   // ── Fetch rooms list ──
+  const fetchRoomsRef = useRef(null);
   useEffect(() => {
     const fetchRooms = () => {
       fetch('/api/chat?action=rooms')
@@ -252,8 +253,9 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
         })
         .catch(() => {});
     };
+    fetchRoomsRef.current = fetchRooms;
     fetchRooms();
-    const interval = setInterval(fetchRooms, 15000);
+    const interval = setInterval(fetchRooms, 8000); // Poll rooms every 8s for responsive online count
     return () => clearInterval(interval);
   }, [selectedCameras]);
 
@@ -282,6 +284,8 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
             const lastMsg = data.messages[data.messages.length - 1];
             if (lastMsg) lastFetchRef.current[activeRoom] = lastMsg.created_at;
             setTimeout(scrollToBottom, 100);
+            // Also refresh rooms to update online count (new messages = someone is active)
+            if (fetchRoomsRef.current) fetchRoomsRef.current();
           }
         })
         .catch(() => {});
