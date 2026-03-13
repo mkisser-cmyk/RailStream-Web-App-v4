@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { MongoClient } from 'mongodb';
+import crypto from 'crypto';
 
 const API_BASE = process.env.RAILSTREAM_API_URL || 'https://api.railstream.net';
 const ADMIN_USER = process.env.RAILSTREAM_ADMIN_USER;
@@ -12,6 +13,35 @@ const MONGO_URL = process.env.MONGO_URL || 'mongodb://localhost:27017';
 const STUDIO_API_URL = process.env.STUDIO_API_URL || 'https://studio.railstream.net';
 const STUDIO_USERNAME = process.env.STUDIO_USERNAME;
 const STUDIO_PASSWORD = process.env.STUDIO_PASSWORD;
+
+// Session encryption key (AES-256-GCM)
+const SESSION_KEY = process.env.SESSION_ENCRYPTION_KEY || '';
+
+// ── Credential encryption helpers (AES-256-GCM) ──
+function encryptCredential(plaintext) {
+  if (!SESSION_KEY) throw new Error('SESSION_ENCRYPTION_KEY not set');
+  const key = Buffer.from(SESSION_KEY, 'hex');
+  const iv = crypto.randomBytes(12); // 96-bit IV for GCM
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  let encrypted = cipher.update(plaintext, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const authTag = cipher.getAuthTag().toString('hex');
+  // Format: iv:authTag:ciphertext
+  return `${iv.toString('hex')}:${authTag}:${encrypted}`;
+}
+
+function decryptCredential(encryptedStr) {
+  if (!SESSION_KEY) throw new Error('SESSION_ENCRYPTION_KEY not set');
+  const key = Buffer.from(SESSION_KEY, 'hex');
+  const [ivHex, authTagHex, ciphertext] = encryptedStr.split(':');
+  const iv = Buffer.from(ivHex, 'hex');
+  const authTag = Buffer.from(authTagHex, 'hex');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(authTag);
+  let decrypted = decipher.update(ciphertext, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
+}
 
 // Cache for admin token (simple in-memory cache)
 let adminTokenCache = { token: null, expiresAt: 0 };
@@ -350,6 +380,41 @@ async function handleRoute(request, { params }) {
           sameSite: 'lax',
           maxAge: data.expires_in || 3600,
         });
+
+        // ── Persistent session: store encrypted credentials for auto-renewal ──
+        // This enables "Keep me logged in" — the server can re-authenticate
+        // on behalf of the user before the 30-min token expires.
+        if (body.remember_me && body.username && body.password && SESSION_KEY) {
+          try {
+            const db = await getMongoDb();
+            const sessionId = crypto.randomUUID();
+            const encPassword = encryptCredential(body.password);
+            await db.collection('user_sessions').insertOne({
+              session_id: sessionId,
+              username: body.username.toLowerCase(),
+              encrypted_password: encPassword,
+              created_at: new Date(),
+              last_renewed_at: new Date(),
+              expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+            });
+            // Ensure TTL index exists (auto-deletes expired sessions)
+            await db.collection('user_sessions').createIndex(
+              { expires_at: 1 },
+              { expireAfterSeconds: 0 }
+            ).catch(() => {}); // ignore if already exists
+            // Set long-lived session cookie (30 days)
+            response.cookies.set('railstream_session', sessionId, {
+              httpOnly: true,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+              maxAge: 30 * 24 * 60 * 60, // 30 days
+            });
+          } catch (e) {
+            console.error('[Auth] Failed to create persistent session:', e.message);
+            // Non-fatal — login still succeeds, just without persistent session
+          }
+        }
+
         return handleCORS(response);
       }
       return handleCORS(NextResponse.json(data, { status: res.status }));
@@ -359,7 +424,86 @@ async function handleRoute(request, { params }) {
     if (route === '/auth/logout' && method === 'POST') {
       const response = NextResponse.json({ ok: true });
       response.cookies.delete('railstream_token');
+      // Clean up persistent session if it exists
+      const cookieStore = cookies();
+      const sessionId = cookieStore.get('railstream_session')?.value;
+      if (sessionId) {
+        try {
+          const db = await getMongoDb();
+          await db.collection('user_sessions').deleteOne({ session_id: sessionId });
+        } catch (e) {
+          console.error('[Auth] Failed to delete persistent session:', e.message);
+        }
+        response.cookies.delete('railstream_session');
+      }
       return handleCORS(response);
+    }
+
+    // Auth: Renew — use stored credentials to get a fresh access token
+    // This powers the "Keep me logged in" / "always active" session feature.
+    // Called proactively by the client before the 30-min token expires.
+    if (route === '/auth/renew' && method === 'POST') {
+      const cookieStore = cookies();
+      const sessionId = cookieStore.get('railstream_session')?.value;
+      if (!sessionId) {
+        return handleCORS(NextResponse.json({ error: 'No persistent session', renewed: false }, { status: 401 }));
+      }
+      try {
+        const db = await getMongoDb();
+        const session = await db.collection('user_sessions').findOne({ session_id: sessionId });
+        if (!session) {
+          // Session expired or was deleted — clear the cookie
+          const response = NextResponse.json({ error: 'Session not found', renewed: false }, { status: 401 });
+          response.cookies.delete('railstream_session');
+          return handleCORS(response);
+        }
+        // Decrypt credentials and re-authenticate
+        const password = decryptCredential(session.encrypted_password);
+        const loginRes = await fetch(`${API_BASE}/api/auth/login`, {
+          method: 'POST',
+          headers: upstreamHeaders(request, { contentType: 'application/json' }),
+          body: JSON.stringify({ username: session.username, password }),
+        });
+        const loginData = await loginRes.json();
+        if (loginData.access_token) {
+          // Update session's last_renewed_at and extend expiry
+          await db.collection('user_sessions').updateOne(
+            { session_id: sessionId },
+            { $set: { last_renewed_at: new Date(), expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) } }
+          );
+          const response = NextResponse.json({
+            renewed: true,
+            access_token: loginData.access_token,
+            expires_in: loginData.expires_in || 1800,
+            user: loginData.user,
+          });
+          // Update the access token cookie
+          response.cookies.set('railstream_token', loginData.access_token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: loginData.expires_in || 3600,
+          });
+          // Extend the session cookie too
+          response.cookies.set('railstream_session', sessionId, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 30 * 24 * 60 * 60,
+          });
+          console.log(`[Auth] Session renewed for ${session.username}`);
+          return handleCORS(response);
+        }
+        // Login failed (password changed, account suspended, etc.)
+        // Delete the stale session
+        await db.collection('user_sessions').deleteOne({ session_id: sessionId });
+        const response = NextResponse.json({ error: 'Credentials no longer valid', renewed: false }, { status: 401 });
+        response.cookies.delete('railstream_session');
+        return handleCORS(response);
+      } catch (e) {
+        console.error('[Auth] Session renewal error:', e.message);
+        return handleCORS(NextResponse.json({ error: 'Renewal failed', renewed: false }, { status: 500 }));
+      }
     }
 
     // Auth: Get current user

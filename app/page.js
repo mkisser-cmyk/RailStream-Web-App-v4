@@ -3623,7 +3623,7 @@ function LoginDialog({ open, onClose, onSuccess }) {
     // Set the remember preference BEFORE storing the token
     auth.setRememberMe(rememberMe);
     try {
-      const data = await clientApi.login(username, password);
+      const data = await clientApi.login(username, password, rememberMe);
       if (data.access_token) {
         auth.setToken(data.access_token);
         // Save refresh token if the API provides one (used for silent token renewal)
