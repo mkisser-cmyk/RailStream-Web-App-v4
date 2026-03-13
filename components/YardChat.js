@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   MessageCircle, Send, Users, X, ExternalLink, Hash, ChevronDown,
   Shield, ShieldCheck, Crown, Pin, Trash2, VolumeX, Ban, MoreHorizontal,
-  Radio, ChevronRight, PanelRightOpen,
+  Radio, ChevronRight, PanelRightOpen, MapPin,
 } from 'lucide-react';
 
 // ── Tier badge component ──
@@ -187,34 +187,40 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
     }
   }, []);
 
-  // ── Auto-join camera rooms based on what's being watched ──
+  // ── Auto-join LOCATION rooms based on what's being watched ──
+  // Groups cameras by city/location instead of creating per-camera rooms
   useEffect(() => {
-    const cameraRooms = selectedCameras
-      .filter(Boolean)
-      .map(cam => ({
-        id: `cam-${cam._id}`,
-        name: cam.location || cam.name,
-        type: 'camera',
-        camera_id: cam._id,
-      }));
+    // Group selected cameras by their city/location name
+    const locationMap = {};
+    selectedCameras.filter(Boolean).forEach(cam => {
+      const cityName = cam.name || cam.location || 'Unknown';
+      const slug = cityName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const roomId = `loc-${slug}`;
+      if (!locationMap[roomId]) {
+        locationMap[roomId] = { id: roomId, name: cityName, type: 'location', cameras: [] };
+      }
+      locationMap[roomId].cameras.push(cam._id);
+    });
 
-    // Ensure camera rooms exist on the server
-    cameraRooms.forEach(room => {
+    const locationRooms = Object.values(locationMap);
+
+    // Ensure location rooms exist on the server (one per location, not per camera)
+    locationRooms.forEach(room => {
       fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'ensure_room', room_id: room.id, name: room.name, type: 'camera', camera_id: room.camera_id }),
+        body: JSON.stringify({ action: 'ensure_room', room_id: room.id, name: room.name, type: 'location' }),
       }).catch(() => {});
     });
 
     setJoinedRooms(prev => {
       const newRooms = new Set(prev);
       newRooms.add('the-yard'); // Always in The Yard
-      cameraRooms.forEach(r => newRooms.add(r.id));
-      // Remove camera rooms we're no longer watching (but keep manually joined ones)
-      const watchingIds = new Set(cameraRooms.map(r => r.id));
+      locationRooms.forEach(r => newRooms.add(r.id));
+      // Remove location rooms we're no longer watching
+      const watchingIds = new Set(locationRooms.map(r => r.id));
       prev.forEach(rid => {
-        if (rid.startsWith('cam-') && !watchingIds.has(rid)) {
+        if (rid.startsWith('loc-') && !watchingIds.has(rid)) {
           newRooms.delete(rid);
         }
       });
@@ -238,25 +244,28 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
         .then(r => r.json())
         .then(data => {
           if (data.ok && data.rooms) {
-            // Merge server rooms with auto-joined camera rooms
+            // Merge server rooms with auto-joined location rooms
             const serverRooms = data.rooms;
-            const cameraRooms = selectedCameras.filter(Boolean).map(cam => ({
-              id: `cam-${cam._id}`,
-              name: cam.location || cam.name,
-              type: 'camera',
-              camera_id: cam._id,
-              online_count: 0,
-              online_users: [],
-              pinned_message: null,
-            }));
+            const locationMap = {};
+            selectedCameras.filter(Boolean).forEach(cam => {
+              const cityName = cam.name || cam.location || 'Unknown';
+              const slug = cityName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+              const roomId = `loc-${slug}`;
+              if (!locationMap[roomId]) {
+                locationMap[roomId] = { id: roomId, name: cityName, type: 'location', online_count: 0, online_users: [], pinned_message: null };
+              }
+            });
             // Merge: server data takes priority
             const roomMap = {};
-            [...cameraRooms, ...serverRooms].forEach(r => { roomMap[r.id] = r; });
+            Object.values(locationMap).forEach(r => { roomMap[r.id] = r; });
+            serverRooms.forEach(r => { roomMap[r.id] = r; });
             // Always ensure The Yard is present
             if (!roomMap['the-yard']) {
               roomMap['the-yard'] = { id: 'the-yard', name: 'The Yard', type: 'global', online_count: 0, online_users: [], pinned_message: null };
             }
-            setRooms(Object.values(roomMap));
+            // Filter out old per-camera rooms (cam-*) from the displayed list
+            const filtered = Object.values(roomMap).filter(r => !r.id.startsWith('cam-'));
+            setRooms(filtered);
           }
         })
         .catch(() => {});
@@ -441,7 +450,6 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
 
   const activeRoomData = rooms.find(r => r.id === activeRoom) || { name: 'The Yard', online_count: 0, online_users: [], pinned_message: null };
   const activeMessages = messages[activeRoom] || [];
-  const visibleRooms = rooms.filter(r => joinedRooms.includes(r.id));
 
   // Boost online count for rooms the user has joined (always count self)
   const roomsWithSelf = useMemo(() => {
@@ -517,7 +525,7 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
                 : 'text-white/50 hover:text-white/80 hover:bg-white/5'
             }`}
           >
-            {room.type === 'global' ? <Radio className="w-3 h-3" /> : <Hash className="w-3 h-3" />}
+            {room.type === 'global' ? <Radio className="w-3 h-3" /> : <MapPin className="w-3 h-3" />}
             {room.name}
             {room.online_count > 0 && (
               <span className="text-[9px] bg-white/10 px-1 rounded">{room.online_count}</span>
@@ -545,7 +553,7 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
               }`}
             >
               <span className="flex items-center gap-2">
-                {room.type === 'global' ? <Radio className="w-3.5 h-3.5" /> : <Hash className="w-3.5 h-3.5" />}
+                {room.type === 'global' ? <Radio className="w-3.5 h-3.5" /> : <MapPin className="w-3.5 h-3.5" />}
                 {room.name}
               </span>
               <span className="text-[10px] text-white/40">{room.online_count} online</span>
