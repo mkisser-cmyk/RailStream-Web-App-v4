@@ -7,7 +7,7 @@ import {
   Train, Calendar, MapPin, Clock, Plus, Search, ChevronLeft, ChevronRight,
   Play, Edit2, Trash2, X, Filter, Camera, ArrowUpRight, Eye, Image,
   TrendingUp, Award, BarChart3, ChevronDown, Upload, Flame, Trophy,
-  Zap, Activity, Radio, Crosshair, Navigation
+  Zap, Activity, Radio, Crosshair, Navigation, MessageSquare, Send
 } from 'lucide-react';
 
 const RAILROADS = ['CSX', 'NS', 'UP', 'BNSF', 'CN', 'CP', 'KCS', 'Amtrak', 'Other'];
@@ -206,6 +206,10 @@ export default function SightingsPage() {
   // Expanded image - stores full sighting for showing notes
   const [expandedSighting, setExpandedSighting] = useState(null);
 
+  // Comments
+  const [commentText, setCommentText] = useState('');
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
+
   // Hero parallax
   const [scrollY, setScrollY] = useState(0);
   useEffect(() => {
@@ -354,6 +358,55 @@ export default function SightingsPage() {
       else alert(data.error || 'Failed to delete');
     } catch (err) {
       alert('Network error');
+    }
+  };
+
+  // ── Comment handlers ──
+  const addComment = async () => {
+    if (!expandedSighting || !commentText.trim()) return;
+    setCommentSubmitting(true);
+    const token = localStorage.getItem('railstream_token');
+    try {
+      const res = await fetch('/api/sightings/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ sighting_id: expandedSighting._id, text: commentText.trim() }),
+      });
+      const data = await res.json();
+      if (data.ok && data.comment) {
+        const updatedComments = [...(expandedSighting.comments || []), data.comment];
+        const updated = { ...expandedSighting, comments: updatedComments };
+        setExpandedSighting(updated);
+        setSightings(prev => prev.map(s => s._id === updated._id ? updated : s));
+        setLogSightings(prev => prev.map(s => s._id === updated._id ? updated : s));
+        setCommentText('');
+      } else {
+        alert(data.error || 'Failed to add comment');
+      }
+    } catch (err) {
+      alert('Network error');
+    }
+    setCommentSubmitting(false);
+  };
+
+  const deleteComment = async (commentId) => {
+    if (!expandedSighting) return;
+    const token = localStorage.getItem('railstream_token');
+    try {
+      const res = await fetch(`/api/sightings/comments/${commentId}?sighting_id=${expandedSighting._id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.ok) {
+        const updatedComments = (expandedSighting.comments || []).filter(c => c.id !== commentId);
+        const updated = { ...expandedSighting, comments: updatedComments };
+        setExpandedSighting(updated);
+        setSightings(prev => prev.map(s => s._id === updated._id ? updated : s));
+        setLogSightings(prev => prev.map(s => s._id === updated._id ? updated : s));
+      }
+    } catch (err) {
+      alert('Error deleting comment');
     }
   };
 
@@ -1103,22 +1156,33 @@ export default function SightingsPage() {
                                     <p className="text-white/35 text-xs mt-2 italic leading-relaxed line-clamp-2 max-w-lg">{s.notes}</p>
                                   )}
 
-                                  {/* Posted by */}
-                                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/[0.04]">
-                                    <div className="w-5 h-5 rounded-full bg-white/[0.06] flex items-center justify-center text-[9px] font-bold text-white/30">
-                                      {(s.user || '?')[0].toUpperCase()}
+                                  {/* Posted by + Comments count */}
+                                  <div className="flex items-center gap-4 mt-3 pt-3 border-t border-white/[0.04]">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-5 h-5 rounded-full bg-white/[0.06] flex items-center justify-center text-[9px] font-bold text-white/30">
+                                        {(s.user || '?')[0].toUpperCase()}
+                                      </div>
+                                      <p className="text-white/30 text-[11px]">
+                                        <span className="text-white/50 font-medium">{s.user}</span>
+                                        {stats?.leaderboard && (() => {
+                                          const rank = stats.leaderboard.find(l => l.username === s.user);
+                                          if (rank && rank.rank <= 3) {
+                                            const medals = ['🥇', '🥈', '🥉'];
+                                            return <span className="ml-1.5" title={`#${rank.rank} spotter • ${rank.points} pts`}>{medals[rank.rank - 1]}</span>;
+                                          }
+                                          return null;
+                                        })()}
+                                      </p>
                                     </div>
-                                    <p className="text-white/30 text-[11px]">
-                                      <span className="text-white/50 font-medium">{s.user}</span>
-                                      {stats?.leaderboard && (() => {
-                                        const rank = stats.leaderboard.find(l => l.username === s.user);
-                                        if (rank && rank.rank <= 3) {
-                                          const medals = ['🥇', '🥈', '🥉'];
-                                          return <span className="ml-1.5" title={`#${rank.rank} spotter • ${rank.points} pts`}>{medals[rank.rank - 1]}</span>;
-                                        }
-                                        return null;
-                                      })()}
-                                    </p>
+                                    {(s.comments?.length > 0) && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); setExpandedSighting(s); }}
+                                        className="flex items-center gap-1.5 text-white/30 hover:text-white/60 transition-colors text-[11px]"
+                                      >
+                                        <MessageSquare className="w-3 h-3" />
+                                        {s.comments.length} comment{s.comments.length !== 1 ? 's' : ''}
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
 
@@ -1417,10 +1481,10 @@ export default function SightingsPage() {
       {expandedSighting && (
         <div
           className="fixed inset-0 bg-black/95 backdrop-blur-xl z-50 flex items-center justify-center p-4 cursor-pointer"
-          onClick={() => setExpandedSighting(null)}
+          onClick={() => { setExpandedSighting(null); setCommentText(''); }}
           style={{ animation: 'modalIn 0.2s ease-out' }}
         >
-          <div className="relative max-w-5xl w-full" onClick={e => e.stopPropagation()}>
+          <div className="relative max-w-5xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <img
               src={expandedSighting.image_url || expandedSighting.imageUrl}
               alt={`${expandedSighting.railroad} ${expandedSighting.train_id || 'train'}`}
@@ -1474,12 +1538,90 @@ export default function SightingsPage() {
                 <p className="text-white/50 text-sm mt-3 leading-relaxed italic border-l-2 border-[#ff7a00]/30 pl-3">{expandedSighting.notes}</p>
               )}
               <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/[0.04]">
-                <div className="w-5 h-5 rounded-full bg-white/[0.06] flex items-center justify-center text-[9px] font-bold text-white/30">
+                <div className="w-5 h-5 rounded-full bg-white/[0.06] flex items-center justify-center text-[9px] font-bold text-white/50">
                   {(expandedSighting.user || '?')[0].toUpperCase()}
                 </div>
-                <p className="text-white/30 text-[11px]">
-                  Spotted by <span className="text-white/50 font-medium">{expandedSighting.user}</span>
+                <p className="text-white/50 text-[11px]">
+                  Spotted by <span className="text-white/70 font-medium">{expandedSighting.user}</span>
                 </p>
+              </div>
+
+              {/* ── Comments Section ── */}
+              <div className="mt-4 pt-4 border-t border-white/[0.08]">
+                <div className="flex items-center gap-2 mb-3">
+                  <MessageSquare className="w-4 h-4 text-white/60" />
+                  <span className="text-white/80 text-sm font-semibold">
+                    Comments {(expandedSighting.comments?.length || 0) > 0 && `(${expandedSighting.comments.length})`}
+                  </span>
+                </div>
+
+                {/* Comment list */}
+                {expandedSighting.comments?.length > 0 ? (
+                  <div className="space-y-3 mb-4 max-h-[200px] overflow-y-auto pr-1">
+                    {expandedSighting.comments.map(c => {
+                      const isCommentOwner = user && c.username === (user.username || user.name);
+                      const isSightingOwner = user && expandedSighting.user === (user.username || user.name);
+                      const isAdmin = user && (user.is_admin || user.tier === 'admin' || user.membership_tier === 'admin');
+                      const canDelete = isCommentOwner || isSightingOwner || isAdmin;
+                      const timeAgo = (() => {
+                        const diff = Date.now() - new Date(c.created_at).getTime();
+                        const mins = Math.floor(diff / 60000);
+                        if (mins < 1) return 'just now';
+                        if (mins < 60) return `${mins}m ago`;
+                        const hrs = Math.floor(mins / 60);
+                        if (hrs < 24) return `${hrs}h ago`;
+                        const days = Math.floor(hrs / 24);
+                        return `${days}d ago`;
+                      })();
+
+                      return (
+                        <div key={c.id} className="flex gap-2.5 group">
+                          <div className="w-6 h-6 rounded-full bg-white/[0.08] flex items-center justify-center text-[9px] font-bold text-white/60 flex-shrink-0 mt-0.5">
+                            {(c.username || '?')[0].toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-white/70 text-xs font-semibold">{c.username}</span>
+                              <span className="text-white/30 text-[10px]">{timeAgo}</span>
+                              {canDelete && (
+                                <button onClick={() => deleteComment(c.id)}
+                                  className="text-red-400/0 group-hover:text-red-400/60 hover:!text-red-400 text-[10px] transition-all ml-auto">
+                                  Delete
+                                </button>
+                              )}
+                            </div>
+                            <p className="text-white/60 text-xs leading-relaxed mt-0.5">{c.text}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-white/30 text-xs mb-3 italic">No comments yet. Be the first!</p>
+                )}
+
+                {/* Comment input */}
+                {user ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={commentText}
+                      onChange={e => setCommentText(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addComment(); } }}
+                      placeholder="Add a comment..."
+                      className="flex-1 bg-white/[0.04] border border-white/[0.08] text-white text-xs rounded-xl px-3 py-2.5 focus:border-[#ff7a00]/40 focus:outline-none transition-all placeholder:text-white/30"
+                    />
+                    <button
+                      onClick={addComment}
+                      disabled={commentSubmitting || !commentText.trim()}
+                      className="px-3 py-2 bg-[#ff7a00] hover:bg-[#ff8c20] text-black rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-white/30 text-xs italic">Log in to leave a comment.</p>
+                )}
               </div>
             </div>
             <button

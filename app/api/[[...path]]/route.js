@@ -63,7 +63,7 @@ async function getMongoDb() {
     mongoClient = new MongoClient(MONGO_URL);
     await mongoClient.connect();
   }
-  return mongoClient.db();
+  return mongoClient.db(process.env.DB_NAME || 'railstream');
 }
 
 // Railroad options for validation
@@ -1700,6 +1700,109 @@ async function handleRoute(request, { params }) {
       } catch (error) {
         console.error('Sightings delete error:', error);
         return handleCORS(NextResponse.json({ error: 'Failed to delete sighting' }, { status: 500 }));
+      }
+    }
+
+    // ── SIGHTING COMMENTS ──
+
+    // POST /api/sightings/comments — Add a comment to a sighting
+    if (route === '/sightings/comments' && method === 'POST') {
+      const token = getToken(request);
+      if (!token) {
+        return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }));
+      }
+
+      try {
+        const userRes = await fetch(`${API_BASE}/api/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'X-API-Key': API_KEY },
+        });
+        if (!userRes.ok) {
+          return handleCORS(NextResponse.json({ error: 'Invalid token' }, { status: 401 }));
+        }
+        const userData = await userRes.json();
+        const username = userData.username || userData.name || 'Unknown';
+
+        const body = await request.json();
+        const { sighting_id, text } = body;
+        if (!sighting_id || !text?.trim()) {
+          return handleCORS(NextResponse.json({ error: 'sighting_id and text required' }, { status: 400 }));
+        }
+
+        const db = await getMongoDb();
+        const col = db.collection('train_sightings');
+        const sighting = await col.findOne({ _id: sighting_id });
+        if (!sighting) {
+          return handleCORS(NextResponse.json({ error: 'Sighting not found' }, { status: 404 }));
+        }
+
+        const comment = {
+          id: crypto.randomUUID(),
+          username,
+          text: text.trim().substring(0, 1000),
+          created_at: new Date().toISOString(),
+        };
+
+        await col.updateOne(
+          { _id: sighting_id },
+          { $push: { comments: comment } }
+        );
+
+        return handleCORS(NextResponse.json({ ok: true, comment }));
+      } catch (error) {
+        console.error('Sighting comment add error:', error);
+        return handleCORS(NextResponse.json({ error: 'Failed to add comment' }, { status: 500 }));
+      }
+    }
+
+    // DELETE /api/sightings/comments/:commentId — Delete a comment from a sighting
+    if (route.startsWith('/sightings/comments/') && method === 'DELETE') {
+      const commentId = route.split('/sightings/comments/')[1].split('?')[0];
+      const token = getToken(request);
+      if (!token) {
+        return handleCORS(NextResponse.json({ error: 'Authentication required' }, { status: 401 }));
+      }
+
+      try {
+        const userRes = await fetch(`${API_BASE}/api/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'X-API-Key': API_KEY },
+        });
+        if (!userRes.ok) {
+          return handleCORS(NextResponse.json({ error: 'Invalid token' }, { status: 401 }));
+        }
+        const userData = await userRes.json();
+        const username = userData.username || userData.name || 'Unknown';
+        const isAdmin = userData.is_admin || userData.membership_tier === 'admin' || userData.tier === 'admin';
+
+        const url = new URL(request.url);
+        const sighting_id = url.searchParams.get('sighting_id');
+        if (!sighting_id || !commentId) {
+          return handleCORS(NextResponse.json({ error: 'sighting_id and comment ID required' }, { status: 400 }));
+        }
+
+        const db = await getMongoDb();
+        const col = db.collection('train_sightings');
+        const sighting = await col.findOne({ _id: sighting_id });
+        if (!sighting) {
+          return handleCORS(NextResponse.json({ error: 'Sighting not found' }, { status: 404 }));
+        }
+
+        const isSightingOwner = sighting.user === username;
+        const comment = (sighting.comments || []).find(c => c.id === commentId);
+        const isCommentAuthor = comment && comment.username === username;
+
+        if (!isAdmin && !isSightingOwner && !isCommentAuthor) {
+          return handleCORS(NextResponse.json({ error: 'Not authorized' }, { status: 403 }));
+        }
+
+        await col.updateOne(
+          { _id: sighting_id },
+          { $pull: { comments: { id: commentId } } }
+        );
+
+        return handleCORS(NextResponse.json({ ok: true }));
+      } catch (error) {
+        console.error('Sighting comment delete error:', error);
+        return handleCORS(NextResponse.json({ error: 'Failed to delete comment' }, { status: 500 }));
       }
     }
 
