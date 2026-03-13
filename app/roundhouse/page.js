@@ -8,7 +8,7 @@ import {
   Radio, ChevronDown, ChevronLeft, ChevronRight, Eye, Image, Star,
   TrendingUp, Award, BarChart3, Zap, ArrowUpRight, Flame, Trophy,
   Navigation, Tag, AlertTriangle, Sparkles, ExternalLink, Grid3X3,
-  LayoutGrid, Check, ChevronsUpDown, Pencil, Save,
+  LayoutGrid, Check, ChevronsUpDown, Pencil, Save, MessageSquare, Trash2, Send,
 } from 'lucide-react';
 import { RAILROADS, RAILROAD_CATEGORIES, getRailroad, getRailroadColor, getRailroadsByCategory, searchRailroads } from '@/lib/railroads';
 import { LOCO_MODELS, BUILDERS, getModelsByBuilder } from '@/lib/locomotive-models';
@@ -296,6 +296,57 @@ export default function RoundhousePage() {
   const [editMode, setEditMode] = useState(false);
   const [editData, setEditData] = useState({});
   const [saving, setSaving] = useState(false);
+
+  // Comments
+  const [commentText, setCommentText] = useState('');
+  const [postingComment, setPostingComment] = useState(false);
+
+  const addComment = async () => {
+    if (!selectedPhoto || !commentText.trim()) return;
+    setPostingComment(true);
+    try {
+      const token = localStorage.getItem('railstream_token');
+      const res = await fetch('/api/roundhouse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ action: 'add_comment', photo_id: selectedPhoto.id, text: commentText }),
+      });
+      const data = await res.json();
+      if (data.ok && data.comment) {
+        const updatedComments = [...(selectedPhoto.comments || []), data.comment];
+        const updatedPhoto = { ...selectedPhoto, comments: updatedComments };
+        setSelectedPhoto(updatedPhoto);
+        setPhotos(prev => prev.map(p => p.id === updatedPhoto.id ? updatedPhoto : p));
+        setCommentText('');
+      } else {
+        alert(data.error || 'Failed to post comment');
+      }
+    } catch (e) {
+      alert('Error posting comment');
+    }
+    setPostingComment(false);
+  };
+
+  const deleteComment = async (commentId) => {
+    if (!selectedPhoto || !confirm('Delete this comment?')) return;
+    try {
+      const token = localStorage.getItem('railstream_token');
+      const res = await fetch('/api/roundhouse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ action: 'delete_comment', photo_id: selectedPhoto.id, comment_id: commentId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        const updatedComments = (selectedPhoto.comments || []).filter(c => c.id !== commentId);
+        const updatedPhoto = { ...selectedPhoto, comments: updatedComments };
+        setSelectedPhoto(updatedPhoto);
+        setPhotos(prev => prev.map(p => p.id === updatedPhoto.id ? updatedPhoto : p));
+      }
+    } catch (e) {
+      alert('Error deleting comment');
+    }
+  };
 
   const startEdit = (photo) => {
     setEditData({
@@ -1246,7 +1297,7 @@ export default function RoundhousePage() {
       {/* ====== PHOTO LIGHTBOX ====== */}
       {selectedPhoto && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-50 flex items-center justify-center p-4"
-          onClick={() => { setSelectedPhoto(null); setEditMode(false); }} style={{ animation: 'modalIn 0.2s ease-out' }}>
+          onClick={() => { setSelectedPhoto(null); setEditMode(false); setCommentText(''); }} style={{ animation: 'modalIn 0.2s ease-out' }}>
           <div className="relative max-w-5xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             {/* Heritage banner */}
             {selectedPhoto.is_heritage && (
@@ -1489,7 +1540,7 @@ export default function RoundhousePage() {
                   </div>
                   <span className="text-white/50 text-sm font-medium">{selectedPhoto.username}</span>
                 </div>
-                {(user && (selectedPhoto.username === (user.username || user.name) || user.is_admin)) && (
+                {(user && (selectedPhoto.username === (user.username || user.name) || user.is_admin || user.tier === 'admin' || user.membership_tier === 'admin')) && (
                   <div className="flex items-center gap-3">
                     <button onClick={() => startEdit(selectedPhoto)}
                       className="flex items-center gap-1.5 text-[#ff7a00]/60 hover:text-[#ff7a00] text-xs transition-colors">
@@ -1500,6 +1551,77 @@ export default function RoundhousePage() {
                       Delete
                     </button>
                   </div>
+                )}
+              </div>
+
+              {/* ── Comments Section ── */}
+              <div className="mt-4 pt-4 border-t border-white/[0.04]">
+                <div className="flex items-center gap-2 mb-3">
+                  <MessageSquare className="w-4 h-4 text-white/30" />
+                  <span className="text-white/50 text-sm font-semibold">
+                    Comments {(selectedPhoto.comments?.length || 0) > 0 && `(${selectedPhoto.comments.length})`}
+                  </span>
+                </div>
+
+                {/* Comment list */}
+                {selectedPhoto.comments?.length > 0 ? (
+                  <div className="space-y-3 mb-4 max-h-[200px] overflow-y-auto pr-1">
+                    {selectedPhoto.comments.map(c => {
+                      const isCommentOwner = user && c.username === (user.username || user.name);
+                      const isPhotoOwner = user && selectedPhoto.username === (user.username || user.name);
+                      const isAdmin = user && (user.is_admin || user.tier === 'admin' || user.membership_tier === 'admin');
+                      const canDelete = isCommentOwner || isPhotoOwner || isAdmin;
+                      const timeAgo = (() => {
+                        const diff = Date.now() - new Date(c.created_at).getTime();
+                        const mins = Math.floor(diff / 60000);
+                        if (mins < 1) return 'just now';
+                        if (mins < 60) return `${mins}m ago`;
+                        const hrs = Math.floor(mins / 60);
+                        if (hrs < 24) return `${hrs}h ago`;
+                        const days = Math.floor(hrs / 24);
+                        return `${days}d ago`;
+                      })();
+
+                      return (
+                        <div key={c.id} className="group flex gap-2.5">
+                          <div className="w-6 h-6 rounded-full bg-white/[0.06] flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-white/30 mt-0.5">
+                            {(c.username || '?')[0].toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-white/60 text-xs font-semibold">{c.username}</span>
+                              <span className="text-white/20 text-[10px]">{timeAgo}</span>
+                              {canDelete && (
+                                <button onClick={() => deleteComment(c.id)}
+                                  className="opacity-0 group-hover:opacity-100 text-red-400/40 hover:text-red-400 transition-all ml-auto">
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                            <p className="text-white/50 text-sm leading-relaxed">{c.text}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-white/20 text-xs mb-4 italic">No comments yet. Be the first!</p>
+                )}
+
+                {/* Add comment input */}
+                {user ? (
+                  <form onSubmit={(e) => { e.preventDefault(); addComment(); }} className="flex gap-2">
+                    <input type="text" value={commentText} onChange={e => setCommentText(e.target.value)}
+                      placeholder="Write a comment..."
+                      maxLength={1000}
+                      className="flex-1 bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-2.5 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/20" />
+                    <button type="submit" disabled={!commentText.trim() || postingComment}
+                      className="px-4 py-2.5 bg-[#ff7a00] hover:bg-[#e06800] text-black rounded-xl transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                      <Send className="w-4 h-4" />
+                    </button>
+                  </form>
+                ) : (
+                  <p className="text-white/30 text-xs italic">Log in to leave a comment.</p>
                 )}
               </div>
                 </>

@@ -585,6 +585,59 @@ export async function POST(request) {
       return NextResponse.json({ ok: true, photo: updatedPhoto });
     }
 
+    // ── ADD COMMENT ──
+    if (action === 'add_comment') {
+      const user = await verifyAuth(request);
+      if (!user) return NextResponse.json({ ok: false, error: 'Login required' }, { status: 401 });
+
+      const { photo_id, text } = body;
+      if (!photo_id || !text?.trim()) return NextResponse.json({ ok: false, error: 'photo_id and text required' }, { status: 400 });
+
+      const username = user.username || user.name;
+      const comment = {
+        id: crypto.randomUUID(),
+        username,
+        text: text.trim().substring(0, 1000), // Max 1000 chars
+        created_at: new Date().toISOString(),
+      };
+
+      await db.collection('roundhouse_photos').updateOne(
+        { id: photo_id },
+        { $push: { comments: comment } }
+      );
+
+      return NextResponse.json({ ok: true, comment });
+    }
+
+    // ── DELETE COMMENT ──
+    if (action === 'delete_comment') {
+      const user = await verifyAuth(request);
+      if (!user) return NextResponse.json({ ok: false, error: 'Login required' }, { status: 401 });
+
+      const { photo_id, comment_id } = body;
+      if (!photo_id || !comment_id) return NextResponse.json({ ok: false, error: 'photo_id and comment_id required' }, { status: 400 });
+
+      const photo = await db.collection('roundhouse_photos').findOne({ id: photo_id });
+      if (!photo) return NextResponse.json({ ok: false, error: 'Not found' }, { status: 404 });
+
+      const username = user.username || user.name;
+      const isAdmin = user.is_admin || user.membership_tier === 'admin' || user.tier === 'admin';
+      const isOwner = photo.username === username; // Photo owner can delete any comment
+      const comment = (photo.comments || []).find(c => c.id === comment_id);
+      const isCommentAuthor = comment && comment.username === username;
+
+      if (!isAdmin && !isOwner && !isCommentAuthor) {
+        return NextResponse.json({ ok: false, error: 'Not authorized' }, { status: 403 });
+      }
+
+      await db.collection('roundhouse_photos').updateOne(
+        { id: photo_id },
+        { $pull: { comments: { id: comment_id } } }
+      );
+
+      return NextResponse.json({ ok: true });
+    }
+
     return NextResponse.json({ ok: false, error: 'Unknown action' }, { status: 400 });
   } catch (err) {
     console.error('Roundhouse POST error:', err);
