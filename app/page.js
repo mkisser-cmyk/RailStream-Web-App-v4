@@ -1284,7 +1284,7 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmi
 // ============================================
 
 // LAYOUTS MENU — Quick access to save/load multi-view presets
-function LayoutsMenu({ presets, onSave, onLoad, onDelete, onUpdate, viewMode, selectedCameras, slots }) {
+function LayoutsMenu({ presets, onSave, onLoad, onDelete, onUpdate, onSetDefault, viewMode, selectedCameras, slots }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
@@ -1381,14 +1381,34 @@ function LayoutsMenu({ presets, onSave, onLoad, onDelete, onUpdate, viewMode, se
               presets.map((preset, i) => (
                 <div
                   key={i}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition group cursor-pointer border-b border-white/5 last:border-0"
+                  className={`flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition group cursor-pointer border-b border-white/5 last:border-0 ${preset.isDefault ? 'bg-[#ff7a00]/5' : ''}`}
                   onClick={() => { onLoad(preset); setOpen(false); toast.success(`Loaded "${preset.name}"`); }}
                 >
+                  {/* Default star indicator */}
+                  <button
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      onSetDefault(preset.isDefault ? null : i);
+                      toast.success(preset.isDefault ? 'Default layout cleared' : `"${preset.name}" set as default`);
+                    }}
+                    className={`p-1 rounded transition flex-shrink-0 ${
+                      preset.isDefault 
+                        ? 'text-[#ff7a00]' 
+                        : 'text-white/20 hover:text-[#ff7a00]/60'
+                    }`}
+                    aria-label={preset.isDefault ? 'Remove as default layout' : `Set "${preset.name}" as default layout`}
+                    title={preset.isDefault ? 'Default layout (click to clear)' : 'Set as default startup layout'}
+                  >
+                    <Star className="w-4 h-4" fill={preset.isDefault ? 'currentColor' : 'none'} />
+                  </button>
                   <div className="w-8 h-8 rounded-lg bg-[#ff7a00]/10 border border-[#ff7a00]/20 flex items-center justify-center flex-shrink-0">
                     <span className="text-[#ff7a00] text-xs font-bold">{VIEW_LABELS[preset.viewMode] || '?'}</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-medium truncate">{preset.name}</p>
+                    <p className="text-white text-sm font-medium truncate">
+                      {preset.name}
+                      {preset.isDefault && <span className="text-[#ff7a00] text-xs ml-1.5 font-normal">(default)</span>}
+                    </p>
                     <p className="text-white/60 text-xs">
                       {preset.cameras?.filter(Boolean).length || 0} cameras &bull; {VIEW_LABELS[preset.viewMode] || '1'}-view
                     </p>
@@ -2175,6 +2195,35 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
     });
   };
 
+  // ── Auto-load default layout on mount ──
+  // When a logged-in user enters Watch with no cameras active and has a default preset,
+  // automatically load it so they get their preferred view instantly.
+  const defaultLayoutLoadedRef = useRef(false);
+  useEffect(() => {
+    if (defaultLayoutLoadedRef.current) return;
+    if (!user) return;
+    
+    // Don't auto-load if cameras are already active (from URL params or direct camera click)
+    const hasActiveCameras = selectedCameras.some(Boolean);
+    if (hasActiveCameras) return;
+    
+    // Wait for presets to load from server
+    if (presets.length === 0) return;
+    
+    // Find the default preset
+    const defaultPreset = presets.find(p => p.isDefault);
+    if (!defaultPreset) return;
+    
+    // Auto-load it
+    console.log(`[Layout] Auto-loading default layout: "${defaultPreset.name}"`);
+    defaultLayoutLoadedRef.current = true;
+    // Small delay to let the Watch page render first
+    setTimeout(() => {
+      handleLoadPreset(defaultPreset);
+      toast.success(`Loading "${defaultPreset.name}"`, { icon: '⭐' });
+    }, 200);
+  }, [user, presets, selectedCameras]);
+
   // Clear all cameras when switching layout mode
   const handleViewModeChange = (newMode) => {
     if (newMode === viewMode) return;
@@ -2281,6 +2330,14 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                     cameras: selectedCameras.slice(0, slots),
                     updatedAt: new Date().toISOString(),
                   };
+                  setPresets(newPresets);
+                }}
+                onSetDefault={(idx) => {
+                  // idx = index to set as default, or null to clear
+                  const newPresets = presets.map((p, i) => ({
+                    ...p,
+                    isDefault: idx === i,
+                  }));
                   setPresets(newPresets);
                 }}
                 viewMode={viewMode}
@@ -2632,7 +2689,7 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                         <div className="absolute inset-0 flex items-center justify-center bg-black/90">
                           <div className="text-center p-2">
                             <X className={`${isCompact ? 'w-5 h-5' : 'w-10 h-10'} text-red-400 mx-auto mb-1`} aria-hidden="true" />
-                            <p className={`text-white ${isCompact ? 'text-[10px]' : 'text-sm'}`}>{state.error}</p>
+                            <p className={`text-white ${isCompact ? 'text-[10px]' : 'text-sm'}`}>{typeof state.error === 'string' ? state.error : (state.error?.msg || state.error?.message || 'Unable to load stream')}</p>
                           </div>
                         </div>
                       ) : state.data?.hls_url ? (
@@ -4364,7 +4421,7 @@ export default function App() {
       } else {
         setPlaybackStates(prev => ({
           ...prev,
-          [slotIndex]: { loading: false, data: null, error: data.detail || data.error || data.message || 'Unable to authorize stream' },
+          [slotIndex]: { loading: false, data: null, error: (typeof data.detail === 'string' ? data.detail : data.error || data.message || 'Unable to authorize stream') },
         }));
       }
     } catch (err) {
