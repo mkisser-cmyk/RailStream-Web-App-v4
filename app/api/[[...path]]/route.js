@@ -173,15 +173,19 @@ async function getStudioToken() {
   return data.access_token;
 }
 
-// Fetch studio sites with caching (10-second TTL for fresh thumbnails)
-// Thumbnails are served raw from the Studio API — no server-side compression needed
+// Fetch studio sites with caching
+// Only WORKER_ID=0 fetches frequently (10s). Other workers use a longer TTL (120s)
+// to avoid redundant API calls across the cluster.
+const IS_THUMBNAIL_LEADER = !process.env.WORKER_ID || process.env.WORKER_ID === '0';
+const THUMBNAIL_CACHE_TTL = IS_THUMBNAIL_LEADER ? 10000 : 120000; // Leader: 10s, Others: 120s
+
 let thumbnailDataUriCache = null; // Pre-serialized response string
 let thumbnailDataUriCacheTime = 0;
 let thumbnailEtag = ''; // ETag for conditional requests
 
 async function fetchStudioSites() {
   const now = Date.now();
-  if (studioSitesCache.data && (now - studioSitesCache.fetchedAt) < 10000) {
+  if (studioSitesCache.data && (now - studioSitesCache.fetchedAt) < THUMBNAIL_CACHE_TTL) {
     return studioSitesCache;
   }
   const token = await getStudioToken();
