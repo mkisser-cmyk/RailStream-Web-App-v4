@@ -1629,8 +1629,8 @@ export default function RoundhousePage() {
             </div>
 
             {/* Close button */}
-            <button onClick={() => { setSelectedPhoto(null); setEditMode(false); }}
-              className="absolute top-4 right-4 p-2.5 rounded-xl bg-black/50 backdrop-blur-sm text-white/50 hover:text-white transition-colors border border-white/[0.1]">
+            <button onClick={(e) => { e.stopPropagation(); setSelectedPhoto(null); setEditMode(false); setCommentText(''); }}
+              className="absolute top-4 right-4 z-50 p-2.5 rounded-xl bg-black/80 backdrop-blur-sm text-white/70 hover:text-white transition-colors border border-white/[0.15] hover:bg-black/90 cursor-pointer">
               <X className="w-5 h-5" />
             </button>
           </div>
