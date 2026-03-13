@@ -2295,6 +2295,13 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
     if (defaultLayoutLoadedRef.current) return;
     if (!user) return;
     
+    // Don't auto-load if a replay/DVR seek is pending (from Train Log or Sightings)
+    // The replay handler already set single-cam view and will load the camera shortly
+    if (replaySeekOffset > 0) {
+      defaultLayoutLoadedRef.current = true;
+      return;
+    }
+    
     // Don't auto-load if cameras are already active (from URL params or direct camera click)
     const hasActiveCameras = selectedCameras.some(Boolean);
     if (hasActiveCameras) return;
