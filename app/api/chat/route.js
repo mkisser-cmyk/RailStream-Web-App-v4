@@ -16,6 +16,12 @@ async function getDb() {
   return cachedClient.db(DB_NAME);
 }
 
+// ── Server-side cache for rooms data (reduces DB load dramatically) ──
+let roomsCache = null;
+let roomsCacheTime = 0;
+const ROOMS_CACHE_TTL = 15000; // 15 seconds — rooms data is shared across all users
+let yardEnsured = false; // One-time flag for the-yard room creation
+
 // ── GET: Fetch messages, rooms, or presence ──
 export async function GET(request) {
   try {
@@ -61,60 +67,48 @@ export async function GET(request) {
     // ── GET ROOMS ──
     if (action === 'rooms') {
       // Piggyback presence update: if username is provided, update their presence
-      // This acts as a backup heartbeat — just polling rooms keeps the user "alive"
+      // Throttled: only write if we have user info (the actual write is lightweight)
       const presenceUser = searchParams.get('user');
       const presenceTier = searchParams.get('tier') || 'guest';
       const presenceAdmin = searchParams.get('is_admin') === 'true';
-      const presenceRooms = searchParams.get('rooms'); // comma-separated room IDs
+      const presenceRooms = searchParams.get('rooms');
       if (presenceUser) {
-        const roomIds = presenceRooms ? presenceRooms.split(',') : ['the-yard'];
+        const roomIds = presenceRooms ? presenceRooms.split(',').filter(Boolean) : ['the-yard'];
+        // Single bulkWrite for all rooms (efficient)
         const bulkOps = roomIds.map(roomId => ({
           updateOne: {
             filter: { username: presenceUser, room_id: roomId },
             update: {
-              $set: {
-                username: presenceUser,
-                tier: presenceTier,
-                is_admin: presenceAdmin,
-                is_mod: false,
-                room_id: roomId,
-                last_seen: new Date(),
-              },
+              $set: { username: presenceUser, tier: presenceTier, is_admin: presenceAdmin, is_mod: false, room_id: roomId, last_seen: new Date() },
             },
             upsert: true,
           },
         }));
-        try {
-          await db.collection('chat_presence').bulkWrite(bulkOps);
-        } catch (e) {
-          console.warn('[Chat] Piggyback presence update failed:', e.message);
-        }
+        // Fire-and-forget — don't await, don't block the response
+        db.collection('chat_presence').bulkWrite(bulkOps).catch(() => {});
       }
 
-      // Auto-ensure "the-yard" global room exists (critical: this room must always be present)
-      await db.collection('chat_rooms').updateOne(
-        { id: 'the-yard' },
-        {
-          $setOnInsert: {
-            id: 'the-yard',
-            name: 'The Yard',
-            type: 'global',
-            camera_id: null,
-            pinned_message: null,
-            created_at: new Date(),
-          },
-        },
-        { upsert: true }
-      );
+      // Auto-ensure "the-yard" once per server lifecycle (not every request!)
+      if (!yardEnsured) {
+        await db.collection('chat_rooms').updateOne(
+          { id: 'the-yard' },
+          { $setOnInsert: { id: 'the-yard', name: 'The Yard', type: 'global', camera_id: null, pinned_message: null, created_at: new Date() } },
+          { upsert: true }
+        );
+        yardEnsured = true;
+      }
 
-      // Get all rooms with online user counts
-      const rooms = await db.collection('chat_rooms')
-        .find({})
-        .sort({ type: 1, name: 1 })
-        .toArray();
+      // Serve from cache if fresh (shared across ALL users — huge DB savings)
+      const now = Date.now();
+      if (roomsCache && (now - roomsCacheTime) < ROOMS_CACHE_TTL) {
+        return NextResponse.json(roomsCache);
+      }
 
-      // Get online counts per room (active in last 5 minutes via presence heartbeat)
-      const presenceCutoff = new Date(Date.now() - 300000);
+      // Cache miss — rebuild rooms data from DB
+      const rooms = await db.collection('chat_rooms').find({}).sort({ type: 1, name: 1 }).toArray();
+
+      // Single aggregation for presence (last 5 min)
+      const presenceCutoff = new Date(now - 300000);
       const presenceCounts = await db.collection('chat_presence')
         .aggregate([
           { $match: { last_seen: { $gt: presenceCutoff } } },
@@ -122,49 +116,29 @@ export async function GET(request) {
         ])
         .toArray();
 
-      // Also get recent message activity (last 5 min) as a fallback for online detection
-      const messageCutoff = new Date(Date.now() - 300000);
-      const recentAuthors = await db.collection('chat_messages')
-        .aggregate([
-          { $match: { created_at: { $gt: messageCutoff }, is_system: { $ne: true } } },
-          { $group: { _id: { room_id: '$room_id', username: '$username' }, tier: { $last: '$tier' }, is_admin: { $last: '$is_admin' }, is_mod: { $last: '$is_mod' } } },
-        ])
-        .toArray();
-
       const countMap = {};
       const usersMap = {};
-      
-      // Start with presence data
       presenceCounts.forEach(p => {
         countMap[p._id] = p.count;
         usersMap[p._id] = p.users;
       });
 
-      // Merge in message-activity users that aren't already in presence
-      recentAuthors.forEach(a => {
-        const roomId = a._id.room_id;
-        const username = a._id.username;
-        if (!usersMap[roomId]) usersMap[roomId] = [];
-        const existing = usersMap[roomId].find(u => u.username === username);
-        if (!existing) {
-          usersMap[roomId].push({ username, tier: a.tier || 'guest', is_admin: a.is_admin || false, is_mod: a.is_mod || false });
-        }
-      });
-
-      // Recount
-      Object.keys(usersMap).forEach(k => { countMap[k] = usersMap[k].length; });
-
       const formatted = rooms.map(r => ({
         id: r.id,
         name: r.name,
-        type: r.type, // 'global' | 'camera'
+        type: r.type,
         camera_id: r.camera_id || null,
         online_count: countMap[r.id] || 0,
         online_users: usersMap[r.id] || [],
         pinned_message: r.pinned_message || null,
       }));
 
-      return NextResponse.json({ ok: true, rooms: formatted });
+      // Cache the response
+      const response = { ok: true, rooms: formatted };
+      roomsCache = response;
+      roomsCacheTime = now;
+
+      return NextResponse.json(response);
     }
 
     // ── GET PRESENCE (who's online in a room) ──

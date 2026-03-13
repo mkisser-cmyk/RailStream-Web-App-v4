@@ -272,8 +272,18 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
     };
     fetchRoomsRef.current = fetchRooms;
     fetchRooms();
-    const interval = setInterval(fetchRooms, 10000); // Poll rooms every 10s
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchRooms, 15000); // Poll rooms every 15s (presence piggyback included)
+
+    // Refresh immediately when tab becomes visible (handles browser throttling)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') fetchRooms();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [selectedCameras, user, joinedRooms]);
 
   // ── Poll messages for active room ──
@@ -315,42 +325,9 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
     return () => clearInterval(interval);
   }, [activeRoom, scrollToBottom]);
 
-  // ── Presence heartbeat (robust: interval + visibilitychange) ──
-  const sendPresenceRef = useRef(null);
-  useEffect(() => {
-    if (!user?.username) return;
-
-    const sendPresence = () => {
-      joinedRooms.forEach(roomId => {
-        fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'presence', user, room_id: roomId }),
-        }).then(r => {
-          if (!r.ok) console.warn('[YardChat] Presence heartbeat failed:', r.status);
-        }).catch(err => console.warn('[YardChat] Presence heartbeat error:', err.message));
-      });
-    };
-    sendPresenceRef.current = sendPresence;
-
-    // Fire immediately
-    sendPresence();
-    // Fire on regular interval
-    const interval = setInterval(sendPresence, 30000); // Every 30 seconds
-
-    // Fire immediately when tab becomes visible again (browser throttles timers in background tabs)
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        sendPresence();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, [user, joinedRooms]);
+  // ── Presence is handled via piggyback on room polling (no separate heartbeat needed) ──
+  // When rooms are fetched (every 15s), user info is sent along and presence is updated server-side.
+  // This eliminates a separate set of POST requests entirely.
 
   // ── Send message ──
   const handleSend = async () => {

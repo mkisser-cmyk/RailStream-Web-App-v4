@@ -176,7 +176,7 @@ async function getStudioToken() {
 // Fetch studio sites with caching (5-second TTL)
 async function fetchStudioSites() {
   const now = Date.now();
-  if (studioSitesCache.data && (now - studioSitesCache.fetchedAt) < 5000) {
+  if (studioSitesCache.data && (now - studioSitesCache.fetchedAt) < 30000) {
     return studioSitesCache;
   }
   const token = await getStudioToken();
@@ -1080,20 +1080,25 @@ async function handleRoute(request, { params }) {
     }
 
     // GET /api/studio/thumbnails-map — Return mapping of studioSiteId → catalogCameraId
+    // Uses cached data to minimize external API calls
     if (route === '/studio/thumbnails-map' && method === 'GET') {
       try {
         const cache = await fetchStudioSites();
-        // Also fetch catalog to build the mapping
-        const catalogRes = await fetch(`${API_BASE}/api/cameras/catalog`, {
-          headers: { 'X-API-Key': API_KEY },
-        });
-        const catalog = await catalogRes.json();
+        // Use cached catalog (refresh every 60s to reduce API load)
+        if (!global._catalogCache || (Date.now() - global._catalogCacheTime) > 60000) {
+          const catalogRes = await fetch(`${API_BASE}/api/cameras/catalog`, {
+            headers: { 'X-API-Key': API_KEY },
+          });
+          global._catalogCache = await catalogRes.json();
+          global._catalogCacheTime = Date.now();
+        }
+        const catalog = global._catalogCache;
         
         // Build a mapping from studio site to catalog camera
         const mapping = buildStudioToCatalogMapping(cache.data, catalog);
         return handleCORS(NextResponse.json({
           ok: true,
-          mapping, // { catalogCameraId: studioSiteId }
+          mapping,
           available_thumbnails: Object.keys(cache.thumbnails),
         }));
       } catch (error) {
