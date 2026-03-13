@@ -49,6 +49,25 @@ const PHOTO_TAGS = [
   { id: 'scenery', label: 'Scenery', icon: '🏔️', color: '#22c55e' },
 ];
 
+// Modern Power quick-pick models for the upload form
+const MODERN_POWER_TYPES = [
+  { model: 'ES44AC', builder: 'GE', icon: '🔵' },
+  { model: 'ES44DC', builder: 'GE', icon: '🔵' },
+  { model: 'ET44AC', builder: 'Wabtec', icon: '🟢' },
+  { model: 'ET44C4', builder: 'Wabtec', icon: '🟢' },
+  { model: 'SD70ACe', builder: 'EMD', icon: '🔴' },
+  { model: 'SD70ACe-T4', builder: 'EMD', icon: '🔴' },
+  { model: 'SD70MAC', builder: 'EMD', icon: '🔴' },
+  { model: 'SD70M-2', builder: 'EMD', icon: '🔴' },
+  { model: 'AC4400CW', builder: 'GE', icon: '🔵' },
+  { model: 'AC6000CW', builder: 'GE', icon: '🔵' },
+  { model: 'C44-9W (Dash 9)', builder: 'GE', icon: '🔵' },
+  { model: 'SD90MAC', builder: 'EMD', icon: '🔴' },
+  { model: 'SC-44 (Charger)', builder: 'Siemens', icon: '🟡' },
+  { model: 'ALC-42', builder: 'Siemens', icon: '🟡' },
+  { model: 'P42DC (Genesis)', builder: 'GE', icon: '🔵' },
+];
+
 // Quick-access railroad marks for filter chips
 const QUICK_FILTER_MARKS = ['BNSF', 'CN', 'CPKC', 'CSX', 'KCS', 'NS', 'UP', 'AMTK'];
 
@@ -239,12 +258,12 @@ function StatCard({ icon: Icon, label, value, valueColor = 'text-white', subtitl
             <div className="w-8 h-8 rounded-lg bg-white/[0.04] flex items-center justify-center group-hover:bg-[#ff7a00]/10 transition-colors duration-500">
               <Icon className="w-4 h-4 text-white/40 group-hover:text-[#ff7a00] transition-colors duration-500" />
             </div>
-            <p className="text-white/50 text-[11px] uppercase tracking-[0.15em] font-semibold">{label}</p>
+            <p className="text-white/60 text-[11px] uppercase tracking-[0.15em] font-semibold">{label}</p>
           </div>
           <p className={`text-3xl font-extrabold ${valueColor} tabular-nums tracking-tight`}>
             {typeof displayVal === 'number' ? displayVal.toLocaleString() : displayVal}
           </p>
-          {subtitle && <p className="text-white/40 text-xs mt-1">{subtitle}</p>}
+          {subtitle && <p className="text-white/50 text-xs mt-1">{subtitle}</p>}
         </div>
       </div>
     </div>
@@ -654,7 +673,7 @@ export default function RoundhousePage() {
                 <span className="text-white">The</span>{' '}
                 <span className="bg-gradient-to-r from-[#ff7a00] to-[#ff9a40] bg-clip-text text-transparent">Roundhouse</span>
               </h1>
-              <p className="text-white/50 text-lg md:text-xl leading-relaxed max-w-lg">
+              <p className="text-white/60 text-lg md:text-xl leading-relaxed max-w-lg">
                 The community's rail photo vault. Camera captures, trackside shots, and heritage unit archives — all searchable, all in one place.
               </p>
 
@@ -743,7 +762,7 @@ export default function RoundhousePage() {
                   )}
                   <div className="absolute bottom-0 left-0 right-0 p-3">
                     <p className="text-white text-xs font-bold truncate">{coll.name}</p>
-                    <p className="text-white/40 text-[10px] mt-0.5">{coll.photo_count} photo{coll.photo_count !== 1 ? 's' : ''} · by {coll.username}</p>
+                    <p className="text-white/50 text-[10px] mt-0.5">{coll.photo_count} photo{coll.photo_count !== 1 ? 's' : ''} · by {coll.username}</p>
                   </div>
                 </button>
               ))}
@@ -816,7 +835,7 @@ export default function RoundhousePage() {
               return (
                 <button key={tag.id} onClick={() => { setFilterTag(active ? '' : tag.id); setPage(1); }}
                   className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold tracking-wide transition-all duration-300 border flex items-center gap-1.5 ${
-                    active ? 'border-white/20 text-white bg-white/[0.08]' : 'border-white/[0.04] text-white/30 hover:text-white/50 hover:border-white/[0.08] bg-transparent'}`}>
+                    active ? 'border-white/20 text-white bg-white/[0.08]' : 'border-white/[0.06] text-white/50 hover:text-white/70 hover:border-white/[0.08] bg-transparent'}`}>
                   <span>{tag.icon}</span> {tag.label}
                 </button>
               );
@@ -826,7 +845,7 @@ export default function RoundhousePage() {
 
             {/* Sort */}
             <select value={sortBy} onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
-              className="bg-white/[0.04] border border-white/[0.06] text-white/50 text-[11px] font-semibold rounded-lg px-3 py-1.5 focus:outline-none">
+              className="bg-white/[0.04] border border-white/[0.06] text-white/60 text-[11px] font-semibold rounded-lg px-3 py-1.5 focus:outline-none">
               <option value="newest">Newest</option>
               <option value="oldest">Oldest</option>
               <option value="most_liked">Most Liked</option>
@@ -849,7 +868,7 @@ export default function RoundhousePage() {
               <div className="absolute inset-0 w-16 h-16 border-2 border-transparent border-t-[#ff7a00] rounded-full animate-spin" />
               <Camera className="absolute inset-0 m-auto w-6 h-6 text-[#ff7a00]/40" />
             </div>
-            <p className="text-white/30 mt-6 text-sm font-medium">Loading The Roundhouse...</p>
+            <p className="text-white/50 mt-6 text-sm font-medium">Loading The Roundhouse...</p>
           </div>
         ) : photos.length === 0 ? (
           <div className="text-center py-32 relative">
@@ -861,7 +880,7 @@ export default function RoundhousePage() {
               <p className="text-white/50 text-xl font-semibold">
                 {searchQuery ? 'No photos found' : 'The Roundhouse is empty'}
               </p>
-              <p className="text-white/30 text-sm mt-2 max-w-md mx-auto leading-relaxed">
+              <p className="text-white/50 text-sm mt-2 max-w-md mx-auto leading-relaxed">
                 {searchQuery ? `No results for "${searchQuery}". Try a different search.` : 'Be the first to archive a rail photo! Camera captures and trackside shots welcome.'}
               </p>
               {isPaidMember && !searchQuery && (
@@ -876,8 +895,8 @@ export default function RoundhousePage() {
           <>
             <div className="flex items-center gap-3 mb-5">
               <div className="w-1 h-5 rounded-full bg-[#ff7a00]" />
-              <p className="text-white/40 text-sm font-medium">
-                <span className="text-white/70 font-semibold">{total}</span> photo{total !== 1 ? 's' : ''} {searchQuery ? `matching "${searchQuery}"` : 'archived'}
+              <p className="text-white/60 text-sm font-medium">
+                <span className="text-white/80 font-semibold">{total}</span> photo{total !== 1 ? 's' : ''} {searchQuery ? `matching "${searchQuery}"` : 'archived'}
               </p>
             </div>
 
@@ -954,7 +973,7 @@ export default function RoundhousePage() {
                       {photo.title && (
                         <p className="text-white/70 text-sm font-medium truncate mb-1">{photo.title}</p>
                       )}
-                      <div className="flex items-center gap-3 text-[11px] text-white/30">
+                      <div className="flex items-center gap-3 text-[11px] text-white/50">
                         {photo.location && (
                           <span className="flex items-center gap-1 truncate">
                             <MapPin className="w-3 h-3 flex-shrink-0" /> {photo.location}
@@ -971,7 +990,7 @@ export default function RoundhousePage() {
                           {photo.tags.map(t => {
                             const tagInfo = PHOTO_TAGS.find(pt => pt.id === t);
                             return tagInfo ? (
-                              <span key={t} className="text-[10px] text-white/30 bg-white/[0.04] px-1.5 py-0.5 rounded">
+                              <span key={t} className="text-[10px] text-white/50 bg-white/[0.06] px-1.5 py-0.5 rounded">
                                 {tagInfo.icon} {tagInfo.label}
                               </span>
                             ) : null;
@@ -981,15 +1000,15 @@ export default function RoundhousePage() {
                       {/* Author + likes */}
                       <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-white/[0.04]">
                         <div className="flex items-center gap-1.5">
-                          <div className="w-4 h-4 rounded-full bg-white/[0.06] flex items-center justify-center text-[8px] font-bold text-white/30">
+                          <div className="w-4 h-4 rounded-full bg-white/[0.06] flex items-center justify-center text-[8px] font-bold text-white/50">
                             {(photo.username || '?')[0].toUpperCase()}
                           </div>
-                          <span className="text-white/40 text-[11px]">{photo.username}</span>
+                          <span className="text-white/60 text-[11px]">{photo.username}</span>
                           {photo.source === 'camera_capture' && (
                             <span className="text-[9px] text-[#ff7a00]/50 bg-[#ff7a00]/5 px-1.5 py-0.5 rounded font-semibold">CAM</span>
                           )}
                         </div>
-                        <div className="flex items-center gap-1 text-white/20 text-[11px]">
+                        <div className="flex items-center gap-1 text-white/40 text-[11px]">
                           <Heart className={`w-3 h-3 ${isLiked ? 'fill-red-400 text-red-400' : ''}`} />
                           {photo.likes || 0}
                         </div>
@@ -1037,7 +1056,7 @@ export default function RoundhousePage() {
             <div className="absolute inset-0 bg-gradient-to-r from-[#ff7a00]/[0.08] via-transparent to-[#ff5500]/[0.05]" />
             <div className="relative px-8 py-10 text-center">
               <h3 className="text-xl md:text-2xl font-bold text-white mb-3">Join The Roundhouse</h3>
-              <p className="text-white/40 text-sm max-w-md mx-auto mb-6 leading-relaxed">
+              <p className="text-white/60 text-sm max-w-md mx-auto mb-6 leading-relaxed">
                 Subscribe to archive your rail photos, save camera captures, and contribute to the community collection.
               </p>
               <Link href="/pricing" className="inline-flex items-center gap-2 bg-gradient-to-r from-[#ff7a00] to-[#ff5500] text-white px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 hover:scale-[1.02] shadow-lg shadow-[#ff7a00]/20">
@@ -1051,7 +1070,7 @@ export default function RoundhousePage() {
       {/* ====== UPLOAD MODAL ====== */}
       {showUpload && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4" onClick={() => setShowUpload(false)}>
-          <div className="bg-[#0f0f0f] border border-white/[0.08] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
+          <div className="bg-[#0f0f0f] border border-white/[0.08] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl"
             onClick={e => e.stopPropagation()} style={{ animation: 'modalIn 0.3s cubic-bezier(0.16,1,0.3,1)' }}>
             <style>{`@keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }`}</style>
 
@@ -1062,7 +1081,7 @@ export default function RoundhousePage() {
                 </div>
                 Add to The Roundhouse
               </h2>
-              <button onClick={() => setShowUpload(false)} className="text-white/30 hover:text-white transition p-2 rounded-xl hover:bg-white/[0.06]">
+              <button onClick={() => setShowUpload(false)} className="text-white/50 hover:text-white transition p-2 rounded-xl hover:bg-white/[0.06]">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1070,7 +1089,7 @@ export default function RoundhousePage() {
             <form onSubmit={handleSubmit} className="p-5 space-y-5">
               {/* Image Upload */}
               <div>
-                <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Photo *</label>
+                <label className="block text-white/60 text-[11px] uppercase tracking-wider font-semibold mb-2">Photo *</label>
                 {imagePreview ? (
                   <div className="relative rounded-xl overflow-hidden border border-white/[0.08]">
                     <img src={imagePreview} alt="Preview" className="w-full aspect-video object-cover" />
@@ -1083,7 +1102,7 @@ export default function RoundhousePage() {
                   <button type="button" onClick={() => fileInputRef.current?.click()}
                     className="w-full h-32 border-2 border-dashed border-white/[0.06] hover:border-[#ff7a00]/20 rounded-xl flex flex-col items-center justify-center gap-2 transition-all duration-300 group hover:bg-[#ff7a00]/[0.02]">
                     <Upload className="w-6 h-6 text-white/20 group-hover:text-[#ff7a00]/40 transition-colors" />
-                    <span className="text-white/30 text-xs group-hover:text-white/50">Click to upload (max 15MB)</span>
+                    <span className="text-white/50 text-xs group-hover:text-white/70">Click to upload (max 15MB)</span>
                   </button>
                 )}
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
@@ -1091,7 +1110,7 @@ export default function RoundhousePage() {
 
               {/* Source toggle */}
               <div>
-                <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Source</label>
+                <label className="block text-white/60 text-[11px] uppercase tracking-wider font-semibold mb-2">Source</label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { id: 'trackside', label: 'Trackside Photo', icon: '🚶' },
@@ -1100,7 +1119,7 @@ export default function RoundhousePage() {
                     <button key={s.id} type="button"
                       onClick={() => setFormData(f => ({ ...f, source: s.id }))}
                       className={`flex items-center gap-2 px-4 py-3 rounded-xl text-xs font-semibold transition-all border ${
-                        formData.source === s.id ? 'bg-[#ff7a00]/10 border-[#ff7a00]/30 text-[#ff7a00]' : 'bg-white/[0.03] border-white/[0.06] text-white/40 hover:text-white/60'}`}>
+                        formData.source === s.id ? 'bg-[#ff7a00]/10 border-[#ff7a00]/30 text-[#ff7a00]' : 'bg-white/[0.03] border-white/[0.06] text-white/60 hover:text-white/80'}`}>
                       <span>{s.icon}</span> {s.label}
                     </button>
                   ))}
@@ -1109,7 +1128,7 @@ export default function RoundhousePage() {
 
               {/* Railroad */}
               <div>
-                <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Railroad *</label>
+                <label className="block text-white/60 text-[11px] uppercase tracking-wider font-semibold mb-2">Railroad *</label>
                 <RailroadCombobox
                   value={formData.railroad}
                   onChange={(val) => setFormData(f => ({ ...f, railroad: val }))}
@@ -1120,11 +1139,11 @@ export default function RoundhousePage() {
 
               {/* Locomotive Numbers + Heritage detection */}
               <div>
-                <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Locomotive Number(s)</label>
+                <label className="block text-white/60 text-[11px] uppercase tracking-wider font-semibold mb-2">Locomotive Number(s)</label>
                 <input type="text" value={formData.locomotive_numbers}
                   onChange={e => handleLocoChange(e.target.value)}
                   placeholder="e.g., NS 1073, NS 9254"
-                  className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/15" />
+                  className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/30" />
                 {/* Heritage auto-detection banner */}
                 {heritageDetected && heritageDetected.length > 0 && (
                   <div className="mt-2 px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center gap-2">
@@ -1142,25 +1161,25 @@ export default function RoundhousePage() {
               {/* Title + Location */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Title</label>
+                  <label className="block text-white/60 text-[11px] uppercase tracking-wider font-semibold mb-2">Title</label>
                   <input type="text" value={formData.title}
                     onChange={e => setFormData(f => ({ ...f, title: e.target.value }))}
                     placeholder="e.g., NS Heritage on Q335"
-                    className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/15" />
+                    className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/30" />
                 </div>
                 <div>
-                  <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Location</label>
+                  <label className="block text-white/60 text-[11px] uppercase tracking-wider font-semibold mb-2">Location</label>
                   <input type="text" value={formData.location}
                     onChange={e => setFormData(f => ({ ...f, location: e.target.value }))}
                     placeholder="e.g., Fostoria, Ohio"
-                    className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/15" />
+                    className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/30" />
                 </div>
               </div>
 
               {/* Locomotive Model + Builder */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Locomotive Model</label>
+                  <label className="block text-white/60 text-[11px] uppercase tracking-wider font-semibold mb-2">Locomotive Model</label>
                   <ModelCombobox
                     value={formData.loco_model}
                     onChange={(val) => {
@@ -1175,7 +1194,7 @@ export default function RoundhousePage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Builder</label>
+                  <label className="block text-white/60 text-[11px] uppercase tracking-wider font-semibold mb-2">Builder</label>
                   <select value={formData.builder}
                     onChange={e => setFormData(f => ({ ...f, builder: e.target.value }))}
                     className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all">
@@ -1185,9 +1204,31 @@ export default function RoundhousePage() {
                 </div>
               </div>
 
+              {/* Modern Power Quick Pick */}
+              <div>
+                <label className="block text-white/60 text-[11px] uppercase tracking-wider font-semibold mb-2">Modern Power — Quick Pick</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {MODERN_POWER_TYPES.map(mp => {
+                    const isActive = formData.loco_model === mp.model;
+                    return (
+                      <button key={mp.model} type="button"
+                        onClick={() => setFormData(f => ({ ...f, loco_model: isActive ? '' : mp.model, builder: isActive ? '' : mp.builder }))}
+                        className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold tracking-wide transition-all border flex items-center gap-1 ${
+                          isActive
+                            ? 'border-[#ff7a00]/40 bg-[#ff7a00]/15 text-[#ff7a00] shadow-sm shadow-[#ff7a00]/10'
+                            : 'border-white/[0.06] text-white/50 hover:text-white/80 hover:border-white/[0.12] bg-white/[0.02]'
+                        }`}>
+                        <span className="text-[10px]">{mp.icon}</span> {mp.model}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-white/30 text-[10px] mt-1.5">Click to auto-fill model & builder, or use the search above</p>
+              </div>
+
               {/* Photo Date */}
               <div>
-                <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Photo Date</label>
+                <label className="block text-white/60 text-[11px] uppercase tracking-wider font-semibold mb-2">Photo Date</label>
                 <input type="date" value={formData.photo_date}
                   onChange={e => setFormData(f => ({ ...f, photo_date: e.target.value }))}
                   className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all [color-scheme:dark]" />
@@ -1195,7 +1236,7 @@ export default function RoundhousePage() {
 
               {/* Collection */}
               <div>
-                <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Collection</label>
+                <label className="block text-white/60 text-[11px] uppercase tracking-wider font-semibold mb-2">Collection</label>
                 {!showNewCollection ? (
                   <div className="space-y-2">
                     <select value={formData.collection_id}
@@ -1217,11 +1258,11 @@ export default function RoundhousePage() {
                     <input type="text" value={newCollectionName}
                       onChange={e => setNewCollectionName(e.target.value)}
                       placeholder="Collection name..."
-                      className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-lg px-3 py-2 focus:border-[#ff7a00]/50 focus:outline-none transition-all placeholder:text-white/15" />
+                      className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-lg px-3 py-2 focus:border-[#ff7a00]/50 focus:outline-none transition-all placeholder:text-white/30" />
                     <input type="text" value={newCollectionDesc}
                       onChange={e => setNewCollectionDesc(e.target.value)}
                       placeholder="Description (optional)..."
-                      className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-lg px-3 py-2 focus:border-[#ff7a00]/50 focus:outline-none transition-all placeholder:text-white/15" />
+                      className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-lg px-3 py-2 focus:border-[#ff7a00]/50 focus:outline-none transition-all placeholder:text-white/30" />
                     <div className="flex gap-2">
                       <button type="button" onClick={async () => {
                         if (!newCollectionName.trim()) return;
@@ -1256,14 +1297,14 @@ export default function RoundhousePage() {
 
               {/* Tags */}
               <div>
-                <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Tags</label>
+                <label className="block text-white/60 text-[11px] uppercase tracking-wider font-semibold mb-2">Tags</label>
                 <div className="flex flex-wrap gap-2">
                   {PHOTO_TAGS.map(tag => {
                     const active = formData.tags.includes(tag.id);
                     return (
                       <button key={tag.id} type="button" onClick={() => toggleTag(tag.id)}
                         className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold tracking-wide transition-all border flex items-center gap-1.5 ${
-                          active ? 'border-white/20 text-white bg-white/[0.08]' : 'border-white/[0.04] text-white/30 hover:text-white/50 bg-transparent'}`}>
+                          active ? 'border-white/20 text-white bg-white/[0.08]' : 'border-white/[0.06] text-white/50 hover:text-white/70 bg-transparent'}`}>
                         <span>{tag.icon}</span> {tag.label}
                       </button>
                     );
@@ -1273,12 +1314,12 @@ export default function RoundhousePage() {
 
               {/* Description */}
               <div>
-                <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Description</label>
+                <label className="block text-white/60 text-[11px] uppercase tracking-wider font-semibold mb-2">Description</label>
                 <textarea value={formData.description}
                   onChange={e => setFormData(f => ({ ...f, description: e.target.value }))}
                   placeholder="Tell the story behind this photo..."
                   rows={2}
-                  className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/15 resize-none" />
+                  className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/30 resize-none" />
               </div>
 
               <button type="submit" disabled={submitting}

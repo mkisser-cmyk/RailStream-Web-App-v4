@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import uuid
 
 # Test configuration
-BASE_URL = "https://dvr-seek-fix.preview.emergentagent.com/api"
+BASE_URL = "https://photo-modal-enhance.preview.emergentagent.com/api"
 USERNAME = "chicagotest"
 PASSWORD = "sZyE8cDFk"
 CAMERA_ID = "699894a055761e18195294e3"

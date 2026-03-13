@@ -3223,10 +3223,34 @@ const ROUNDHOUSE_TAGS = [
   { id: 'scenery', label: 'Scenery', icon: '🏔️' },
 ];
 
+const MODERN_POWER_TYPES = [
+  { id: 'es44ac', label: 'ES44AC' },
+  { id: 'es44dc', label: 'ES44DC' },
+  { id: 'es44c4', label: 'ES44C4' },
+  { id: 'et44ac', label: 'ET44AC' },
+  { id: 'et44c4', label: 'ET44C4' },
+  { id: 'sd70ace', label: 'SD70ACe' },
+  { id: 'sd70m', label: 'SD70M' },
+  { id: 'sd70mac', label: 'SD70MAC' },
+  { id: 'ac4400cw', label: 'AC4400CW' },
+  { id: 'ac6000cw', label: 'AC6000CW' },
+  { id: 'c40-9w', label: 'C40-9W' },
+  { id: 'sd90mac', label: 'SD90MAC' },
+  { id: 'sd80mac', label: 'SD80MAC' },
+  { id: 'gp38-2', label: 'GP38-2' },
+  { id: 'gp40-2', label: 'GP40-2' },
+  { id: 'sd40-2', label: 'SD40-2' },
+  { id: 'sd60m', label: 'SD60M' },
+  { id: 'sd60i', label: 'SD60I' },
+  { id: 'tier4', label: 'Tier 4' },
+  { id: 'slug', label: 'Slug' },
+  { id: 'rebuild', label: 'Rebuild' },
+];
+
 function RoundhouseQuickSave({ capture, cameras, user, onClose, onSaved }) {
   const [formData, setFormData] = useState({
     railroad: '', locomotive_numbers: '', location: capture?.cameraName || '',
-    title: '', description: '', tags: [], source: 'camera_capture',
+    title: '', description: '', tags: [], power_types: [], source: 'camera_capture',
   });
   const [submitting, setSubmitting] = useState(false);
   const [heritageDetected, setHeritageDetected] = useState(null);
@@ -3288,19 +3312,19 @@ function RoundhouseQuickSave({ capture, cameras, user, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-[#0f0f0f] border border-white/[0.08] rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-white/[0.06] sticky top-0 bg-[#0f0f0f] z-10 rounded-t-2xl">
+      <div className="bg-[#0f0f0f] border border-white/[0.1] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-white/[0.1] sticky top-0 bg-[#0f0f0f] z-10 rounded-t-2xl">
           <h2 className="text-lg font-bold text-white flex items-center gap-3">
             <span className="text-xl">🏛️</span> Save to Roundhouse
           </h2>
-          <button onClick={onClose} className="text-white/30 hover:text-white transition p-2 rounded-xl hover:bg-white/[0.06]">
+          <button onClick={onClose} className="text-white/60 hover:text-white transition p-2 rounded-xl hover:bg-white/[0.08]">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {capture?.imageData && (
-            <div className="relative rounded-xl overflow-hidden border border-white/[0.08]">
+            <div className="relative rounded-xl overflow-hidden border border-white/[0.1]">
               <img src={capture.imageData} alt="Camera capture" className="w-full aspect-video object-cover" />
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-3 py-2">
                 <p className="text-white text-xs font-medium">{capture.cameraName}</p>
@@ -3310,44 +3334,58 @@ function RoundhouseQuickSave({ capture, cameras, user, onClose, onSaved }) {
           )}
 
           <div>
-            <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Railroad *</label>
+            <label className="block text-white/80 text-[11px] uppercase tracking-wider font-semibold mb-2">Railroad *</label>
             <select value={formData.railroad} onChange={e => setFormData(f => ({ ...f, railroad: e.target.value }))} required
-              className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all">
-              <option value="">Select...</option>
-              {ROUNDHOUSE_RAILROADS.map(r => <option key={r} value={r}>{r}</option>)}
+              className="w-full bg-white/[0.05] border border-white/[0.12] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all">
+              <option value="" className="bg-[#111]">Select...</option>
+              {ROUNDHOUSE_RAILROADS.map(r => <option key={r} value={r} className="bg-[#111]">{r}</option>)}
             </select>
           </div>
 
           <div>
-            <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Locomotive Number(s)</label>
+            <label className="block text-white/80 text-[11px] uppercase tracking-wider font-semibold mb-2">Locomotive Number(s)</label>
             <input type="text" value={formData.locomotive_numbers} onChange={e => handleLocoChange(e.target.value)}
               placeholder="e.g., NS 1073, NS 9254"
-              className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/15" />
+              className="w-full bg-white/[0.05] border border-white/[0.12] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/40" />
             {heritageDetected && heritageDetected.length > 0 && (
               <div className="mt-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center gap-2">
                 <span className="text-lg">👑</span>
                 <div>
                   <p className="text-amber-400 text-xs font-bold">Heritage Unit Detected!</p>
-                  <p className="text-amber-400/60 text-[11px]">{heritageDetected.map(u => `${u.unit} — ${u.name}`).join(', ')}</p>
+                  <p className="text-amber-400/70 text-[11px]">{heritageDetected.map(u => `${u.unit} — ${u.name}`).join(', ')}</p>
                 </div>
               </div>
             )}
           </div>
 
           <div>
-            <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Title</label>
+            <label className="block text-white/80 text-[11px] uppercase tracking-wider font-semibold mb-2">Title</label>
             <input type="text" value={formData.title} onChange={e => setFormData(f => ({ ...f, title: e.target.value }))}
               placeholder="e.g., NS Heritage on Q335"
-              className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/15" />
+              className="w-full bg-white/[0.05] border border-white/[0.12] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/40" />
+          </div>
+
+          {/* Power Types */}
+          <div>
+            <label className="block text-white/80 text-[11px] uppercase tracking-wider font-semibold mb-2">Power Type</label>
+            <div className="flex flex-wrap gap-1.5">
+              {MODERN_POWER_TYPES.map(pt => (
+                <button key={pt.id} type="button" onClick={() => setFormData(f => ({ ...f, power_types: f.power_types.includes(pt.id) ? f.power_types.filter(t => t !== pt.id) : [...f.power_types, pt.id] }))}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all border flex items-center gap-1 ${
+                    formData.power_types.includes(pt.id) ? 'border-emerald-500/40 text-emerald-400 bg-emerald-500/15' : 'border-white/[0.1] text-white/70 bg-white/[0.04] hover:bg-white/[0.08]'}`}>
+                  🚂 {pt.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div>
-            <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Tags</label>
+            <label className="block text-white/80 text-[11px] uppercase tracking-wider font-semibold mb-2">Tags</label>
             <div className="flex flex-wrap gap-1.5">
               {ROUNDHOUSE_TAGS.map(tag => (
                 <button key={tag.id} type="button" onClick={() => toggleTag(tag.id)}
                   className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all border flex items-center gap-1 ${
-                    formData.tags.includes(tag.id) ? 'border-white/20 text-white bg-white/[0.08]' : 'border-white/[0.04] text-white/30 bg-transparent'}`}>
+                    formData.tags.includes(tag.id) ? 'border-white/25 text-white bg-white/[0.12]' : 'border-white/[0.1] text-white/70 bg-white/[0.04] hover:bg-white/[0.08]'}`}>
                   <span>{tag.icon}</span> {tag.label}
                 </button>
               ))}
@@ -3355,10 +3393,10 @@ function RoundhouseQuickSave({ capture, cameras, user, onClose, onSaved }) {
           </div>
 
           <div>
-            <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-2">Description</label>
+            <label className="block text-white/80 text-[11px] uppercase tracking-wider font-semibold mb-2">Description</label>
             <textarea value={formData.description} onChange={e => setFormData(f => ({ ...f, description: e.target.value }))}
               placeholder="Details about what you captured..." rows={2}
-              className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/15 resize-none" />
+              className="w-full bg-white/[0.05] border border-white/[0.12] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/40 resize-none" />
           </div>
 
           <button type="submit" disabled={submitting}

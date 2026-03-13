@@ -5,7 +5,7 @@ import json
 import os
 
 # Configuration
-BASE_URL = "https://dvr-seek-fix.preview.emergentagent.com/api"
+BASE_URL = "https://photo-modal-enhance.preview.emergentagent.com/api"
 TEST_USERNAME = "chicagotest"
 TEST_PASSWORD = "sZyE8cDFk"
 ATLANTA_CAMERA_ID = "699894a055761e18195294e3"

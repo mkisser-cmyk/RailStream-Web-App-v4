@@ -20,7 +20,7 @@ import time
 import uuid
 
 # Configuration from .env
-BASE_URL = "https://dvr-seek-fix.preview.emergentagent.com"
+BASE_URL = "https://photo-modal-enhance.preview.emergentagent.com"
 TEST_USERNAME = "chicagotest"
 TEST_PASSWORD = "sZyE8cDFk"
 
