@@ -2750,10 +2750,10 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
                               >
                                 <Monitor className={`${isCompact ? 'w-4 h-4' : 'w-5 h-5'}`} />
                               </button>
-                              <div className="absolute top-1/2 -translate-y-1/2 left-full ml-2 pointer-events-none opacity-0 group-hover/expand:opacity-100 transition-opacity whitespace-nowrap z-50">
+                              <div className="absolute top-1/2 -translate-y-1/2 right-full mr-2 pointer-events-none opacity-0 group-hover/expand:opacity-100 transition-opacity whitespace-nowrap z-50">
                                 <div className="bg-zinc-800 border border-white/10 text-white text-sm font-medium px-3 py-1.5 rounded-lg shadow-xl">
                                   Expand to Full View
-                                  <div className="absolute top-1/2 -translate-y-1/2 right-full w-2.5 h-2.5 bg-zinc-800 border-l border-b border-white/10 transform rotate-45 -mr-1" />
+                                  <div className="absolute top-1/2 -translate-y-1/2 left-full w-2.5 h-2.5 bg-zinc-800 border-r border-t border-white/10 transform rotate-45 -ml-1" />
                                 </div>
                               </div>
                             </div>
