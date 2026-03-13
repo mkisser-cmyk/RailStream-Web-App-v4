@@ -10,7 +10,7 @@ import sys
 from typing import Dict, Any, Optional
 
 # Base URL from environment
-BASE_URL = "https://railroad-radio.preview.emergentagent.com"
+BASE_URL = "https://roundhouse-staging.preview.emergentagent.com"
 API_URL = f"{BASE_URL}/api"
 
 # Review request specific test credentials

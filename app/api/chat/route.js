@@ -66,8 +66,8 @@ export async function GET(request) {
         .sort({ type: 1, name: 1 })
         .toArray();
 
-      // Get online counts per room (active in last 90 seconds via presence heartbeat)
-      const presenceCutoff = new Date(Date.now() - 90000);
+      // Get online counts per room (active in last 5 minutes via presence heartbeat)
+      const presenceCutoff = new Date(Date.now() - 300000);
       const presenceCounts = await db.collection('chat_presence')
         .aggregate([
           { $match: { last_seen: { $gt: presenceCutoff } } },
@@ -123,7 +123,7 @@ export async function GET(request) {
     // ── GET PRESENCE (who's online in a room) ──
     if (action === 'presence') {
       const room = searchParams.get('room') || 'the-yard';
-      const cutoff = new Date(Date.now() - 60000);
+      const cutoff = new Date(Date.now() - 300000);
 
       const users = await db.collection('chat_presence')
         .find({ room_id: room, last_seen: { $gt: cutoff } })
@@ -154,6 +154,9 @@ export async function POST(request) {
     const body = await request.json();
     const action = body.action || 'message';
     const db = await getDb();
+
+    // Debug: log incoming chat POST actions
+    console.log(`[Chat POST] action=${action}, user=${body.user?.username || 'none'}, room=${body.room_id || 'none'}`);
 
     // ── SEND MESSAGE ──
     if (action === 'message') {

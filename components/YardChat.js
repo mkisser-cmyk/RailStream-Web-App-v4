@@ -300,7 +300,8 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
     return () => clearInterval(interval);
   }, [activeRoom, scrollToBottom]);
 
-  // ── Presence heartbeat ──
+  // ── Presence heartbeat (robust: interval + visibilitychange) ──
+  const sendPresenceRef = useRef(null);
   useEffect(() => {
     if (!user?.username) return;
 
@@ -310,13 +311,30 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'presence', user, room_id: roomId }),
-        }).catch(() => {});
+        }).then(r => {
+          if (!r.ok) console.warn('[YardChat] Presence heartbeat failed:', r.status);
+        }).catch(err => console.warn('[YardChat] Presence heartbeat error:', err.message));
       });
     };
+    sendPresenceRef.current = sendPresence;
 
+    // Fire immediately
     sendPresence();
-    const interval = setInterval(sendPresence, 20000); // Every 20 seconds
-    return () => clearInterval(interval);
+    // Fire on regular interval
+    const interval = setInterval(sendPresence, 30000); // Every 30 seconds
+
+    // Fire immediately when tab becomes visible again (browser throttles timers in background tabs)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        sendPresence();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [user, joinedRooms]);
 
   // ── Send message ──
@@ -419,6 +437,22 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
   const activeMessages = messages[activeRoom] || [];
   const visibleRooms = rooms.filter(r => joinedRooms.includes(r.id));
 
+  // Boost online count for rooms the user has joined (always count self)
+  const roomsWithSelf = useMemo(() => {
+    if (!user?.username) return rooms;
+    return rooms.map(r => {
+      if (joinedRooms.includes(r.id)) {
+        const alreadyCounted = (r.online_users || []).some(u => u.username === user.username);
+        if (!alreadyCounted) {
+          return { ...r, online_count: (r.online_count || 0) + 1 };
+        }
+      }
+      return r;
+    });
+  }, [rooms, joinedRooms, user]);
+
+  const visibleRoomsWithSelf = roomsWithSelf.filter(r => joinedRooms.includes(r.id));
+
   // Merge server online users with self (always show yourself as online if logged in)
   const mergedOnlineUsers = useMemo(() => {
     const serverUsers = activeRoomData.online_users || [];
@@ -467,7 +501,7 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
 
       {/* ── Room tabs ── */}
       <div className="flex items-center gap-0.5 px-2 py-1.5 bg-zinc-800/40 border-b border-white/5 overflow-x-auto scrollbar-none">
-        {visibleRooms.map(room => (
+        {visibleRoomsWithSelf.map(room => (
           <button
             key={room.id}
             onClick={() => setActiveRoom(room.id)}
@@ -496,7 +530,7 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
       {showBrowse && (
         <div className="bg-zinc-800 border-b border-white/10 max-h-48 overflow-y-auto">
           <div className="px-3 py-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">All Active Rooms</div>
-          {rooms.map(room => (
+          {roomsWithSelf.map(room => (
             <button
               key={room.id}
               onClick={() => handleJoinRoom(room.id)}
