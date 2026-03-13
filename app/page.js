@@ -998,6 +998,22 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmi
     return 'Other';
   };
 
+  // Strip state from camera name for display (since state is shown in the group header)
+  // "Franklin Park, Illinois" → "Franklin Park"
+  // "Shen Junction, West Virginia (3)" → "Shen Junction (3)"
+  const getCityName = (camera) => {
+    const name = camera.name || '';
+    const parts = name.split(',');
+    if (parts.length >= 2) {
+      const city = parts.slice(0, -1).join(',').trim();
+      // Check if the state portion had a parenthetical like "(3)" that belongs with the city
+      const lastPart = parts[parts.length - 1].trim();
+      const parenMatch = lastPart.match(/\(.*\)$/);
+      return parenMatch ? `${city} ${parenMatch[0]}` : city;
+    }
+    return name;
+  };
+
   // Group cameras by state, sorted alphabetically
   const groupedCameras = {};
   
@@ -1228,7 +1244,7 @@ function CameraPicker({ cameras, selectedCameras, onSelect, userTier, userIsAdmi
                                 )}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm text-white truncate">{camera.name}</p>
+                                <p className="text-sm text-white truncate">{getCityName(camera)}</p>
                                 <p className="text-xs text-white/70 truncate">{camera.location}</p>
                                 {hasRadio && (
                                   <p className="flex items-center gap-1 mt-0.5">
