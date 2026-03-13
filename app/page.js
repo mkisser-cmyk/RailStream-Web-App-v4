@@ -1876,57 +1876,6 @@ function WatchPage({ cameras, user, viewMode, setViewMode, selectedCameras, setS
     });
   }, []);
 
-  // ── Background Radio Detection ──
-  // Probes each camera's HLS master playlist to detect audio tracks
-  // Runs on mount and every 20 minutes so radio badges are always up-to-date
-  useEffect(() => {
-    if (!cameras || cameras.length === 0) return;
-
-    const probeRadio = async () => {
-      const token = auth.getToken();
-      if (!token) return; // Only probe when logged in
-
-      for (const cam of cameras) {
-        try {
-          // Get the stream URL for this camera
-          const authRes = await fetch('/api/playback/authorize', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ camera_id: cam._id, device_id: 'radio-probe' }),
-          });
-          if (!authRes.ok) continue;
-          const authData = await authRes.json();
-          const streamUrl = authData.stream_url || authData.url;
-          if (!streamUrl) continue;
-
-          // Fetch the master playlist (just the text, not the video)
-          const m3u8Res = await fetch(streamUrl);
-          if (!m3u8Res.ok) continue;
-          const m3u8Text = await m3u8Res.text();
-
-          // Check if the playlist contains multiple audio tracks
-          // HLS master playlists use #EXT-X-MEDIA:TYPE=AUDIO for audio tracks
-          const audioLines = m3u8Text.split('\n').filter(l => l.includes('#EXT-X-MEDIA') && l.includes('TYPE=AUDIO'));
-          const hasRadio = audioLines.length > 1; // More than 1 audio track = has radio
-
-          handleRadioDetected(cam._id, hasRadio);
-        } catch {
-          // Silently skip cameras that can't be probed
-        }
-      }
-    };
-
-    // Initial probe after a short delay (let auth settle)
-    const initialTimeout = setTimeout(probeRadio, 10000);
-    // Re-probe every 20 minutes
-    const interval = setInterval(probeRadio, 20 * 60 * 1000);
-
-    return () => {
-      clearTimeout(initialTimeout);
-      clearInterval(interval);
-    };
-  }, [cameras, handleRadioDetected]);
-
   // Ads system
   const [ads, setAds] = useState([]);
   const [showAdManager, setShowAdManager] = useState(false);
@@ -3771,6 +3720,7 @@ export default function App() {
   const playerStatsRef = useRef({}); // { slotIndex: { state, position, bufferCount, ... } }
 
   // Heartbeat — keep active sessions alive every 30 seconds
+  // Also cleans up stale sessions for slots that no longer have cameras
   useEffect(() => {
     const interval = setInterval(() => {
       const sessions = activeSessionsRef.current;
@@ -3785,6 +3735,21 @@ export default function App() {
       entries.forEach(([slotIdx, sessionData]) => {
         const sessionId = typeof sessionData === 'string' ? sessionData : sessionData?.session_id;
         if (!sessionId) return;
+
+        // ── Stale session cleanup: if slot has no camera, stop the session ──
+        const slotCamera = selectedCameras[parseInt(slotIdx)];
+        if (!slotCamera) {
+          fetch(`/api/playback/stop?session_id=${encodeURIComponent(sessionId)}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ session_id: sessionId }),
+          }).catch(() => {});
+          delete activeSessionsRef.current[slotIdx];
+          return;
+        }
 
         // Get player stats for this slot if available
         const stats = playerStatsRef.current[slotIdx] || {};
@@ -3813,8 +3778,6 @@ export default function App() {
         })
         .then(r => r.ok ? r.json() : null)
         .then(data => {
-          // Only log device-removal events — NEVER force-logout from a background heartbeat.
-          // The user should only be logged out by explicit action.
           if (data && (data.code === 'device_removed' || data.code === 'device_not_registered')) {
             console.warn('[Heartbeat] Server returned:', data.code, '— ignoring (user stays logged in)');
           }
@@ -3823,7 +3786,7 @@ export default function App() {
       });
     }, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedCameras]);
 
   // Cleanup sessions on tab close / navigate away
   useEffect(() => {
@@ -3834,20 +3797,33 @@ export default function App() {
         const sessionId = typeof sessionData === 'string' ? sessionData : sessionData?.session_id;
         if (!sessionId) return;
         // Use sendBeacon for reliable delivery on tab close
-        const url = `/api/playback/stop?session_id=${sessionId}`;
+        const url = `/api/playback/stop?session_id=${encodeURIComponent(sessionId)}`;
         if (navigator.sendBeacon) {
-          navigator.sendBeacon(url);
+          // sendBeacon with a Blob body for content-type
+          const blob = new Blob([JSON.stringify({ session_id: sessionId })], { type: 'application/json' });
+          navigator.sendBeacon(url, blob);
         } else {
           fetch(url, {
             method: 'POST',
             keepalive: true,
-            headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ session_id: sessionId }),
           }).catch(() => {});
         }
       });
+      activeSessionsRef.current = {};
     };
+
+    // Both events for maximum compatibility (pagehide is more reliable on mobile)
     window.addEventListener('beforeunload', cleanup);
-    return () => window.removeEventListener('beforeunload', cleanup);
+    window.addEventListener('pagehide', cleanup);
+    return () => {
+      window.removeEventListener('beforeunload', cleanup);
+      window.removeEventListener('pagehide', cleanup);
+    };
   }, []);
 
   // ── Auth session heartbeat / keep-alive ──

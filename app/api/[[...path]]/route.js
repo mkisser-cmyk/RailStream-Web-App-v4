@@ -477,6 +477,36 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json(data));
     }
 
+    // Playback: Stop ALL sessions — clears all active streams for the user
+    if (route === '/playback/stop-all' && method === 'POST') {
+      const token = getToken(request);
+      if (!token) return handleCORS(NextResponse.json({ error: 'Auth required' }, { status: 401 }));
+      
+      // Get user's active sessions from the upstream API
+      try {
+        const sessRes = await fetch(`${API_BASE}/api/playback/sessions`, {
+          headers: { 'X-API-Key': API_KEY, 'Authorization': `Bearer ${token}` },
+        });
+        const sessData = await sessRes.json().catch(() => ({}));
+        const sessions = sessData.sessions || sessData.data || [];
+        
+        let stopped = 0;
+        for (const sess of sessions) {
+          const sid = sess.session_id || sess.id;
+          if (sid) {
+            await fetch(`${API_BASE}/api/playback/stop?session_id=${sid}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY, 'Authorization': `Bearer ${token}` },
+            }).catch(() => {});
+            stopped++;
+          }
+        }
+        return handleCORS(NextResponse.json({ ok: true, stopped, message: `Stopped ${stopped} sessions` }));
+      } catch (err) {
+        return handleCORS(NextResponse.json({ ok: false, error: 'Failed to stop sessions' }, { status: 500 }));
+      }
+    }
+
     // Playback: Heartbeat — keep session alive
     if (route === '/playback/heartbeat' && method === 'POST') {
       const body = await request.json();
