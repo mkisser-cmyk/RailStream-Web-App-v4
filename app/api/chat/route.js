@@ -91,6 +91,22 @@ export async function GET(request) {
         }
       }
 
+      // Auto-ensure "the-yard" global room exists (critical: this room must always be present)
+      await db.collection('chat_rooms').updateOne(
+        { id: 'the-yard' },
+        {
+          $setOnInsert: {
+            id: 'the-yard',
+            name: 'The Yard',
+            type: 'global',
+            camera_id: null,
+            pinned_message: null,
+            created_at: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+
       // Get all rooms with online user counts
       const rooms = await db.collection('chat_rooms')
         .find({})
