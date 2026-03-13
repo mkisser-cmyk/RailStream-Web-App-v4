@@ -3827,17 +3827,95 @@ export default function App() {
     };
   }, []);
 
-  // ── Auth session heartbeat / keep-alive ──
-  // Smart validation: checks token when tab becomes visible.
-  // If expired, silently refreshes using the refresh token (just like mobile apps).
+  // ── Robust Auth Session Keep-Alive ──
+  // Three-layer approach:
+  //   1) Proactive refresh — refresh the token BEFORE it expires (at ~75% of lifetime)
+  //   2) Visibility check — when user returns to tab, validate immediately
+  //   3) Hard recovery — if both tokens are dead, force login modal instantly
+  //      (user should NEVER see "you need to login" unexpectedly)
   useEffect(() => {
     let refreshing = false;
+    let proactiveTimer = null; // timer to refresh before expiry
 
-    const validateSession = async () => {
+    // Force user to re-login when session is truly dead
+    const forceReLogin = (reason) => {
+      console.warn('[Auth] Session dead —', reason);
+      auth.clear();
+      setUser(null);
+      setLoginOpen(true);
+      toast.error('Your session expired — please sign in again');
+    };
+
+    // Attempt silent refresh, returns true on success
+    const tryRefresh = async () => {
+      if (refreshing) return false;
+      refreshing = true;
+      try {
+        const ok = await auth.refresh();
+        refreshing = false;
+        if (ok) {
+          console.log('[Auth] Token refreshed silently');
+          // Fetch fresh user data with new token
+          try {
+            const meRes = await fetch('/api/auth/me', {
+              headers: { 'Authorization': `Bearer ${auth.getToken()}` },
+            });
+            if (meRes.ok) {
+              const data = await meRes.json();
+              if (data && data.username) {
+                auth.setUser(data);
+                setUser({ ...data, is_admin: data.is_admin || false });
+              }
+            }
+          } catch {}
+          // Schedule next proactive refresh based on new token
+          scheduleProactiveRefresh();
+          return true;
+        }
+        return false;
+      } catch {
+        refreshing = false;
+        return false;
+      }
+    };
+
+    // Schedule a refresh at ~75% of the token's remaining lifetime
+    const scheduleProactiveRefresh = () => {
+      if (proactiveTimer) clearTimeout(proactiveTimer);
+      const remaining = auth.tokenSecondsRemaining();
+      if (remaining <= 0) return; // already expired, don't schedule
+      // Refresh at 75% of lifetime, minimum 30 seconds from now
+      const refreshIn = Math.max(30, Math.floor(remaining * 0.75));
+      console.log(`[Auth] Scheduling proactive refresh in ${refreshIn}s (token expires in ${remaining}s)`);
+      proactiveTimer = setTimeout(async () => {
+        const token = auth.getToken();
+        if (!token) return;
+        console.log('[Auth] Proactive refresh triggered');
+        const ok = await tryRefresh();
+        if (!ok && auth.getToken()) {
+          // Refresh failed but user still has a token — they may still be fine for a bit.
+          // We'll catch it on the next visibility check or interval.
+          console.log('[Auth] Proactive refresh failed — will retry on next check');
+        }
+      }, refreshIn * 1000);
+    };
+
+    // Full session validation (called on mount, tab return, and periodic interval)
+    const validateSession = async (isTabReturn = false) => {
       const token = auth.getToken();
-      if (!token) return;
-      if (refreshing) return;
+      if (!token) return; // not logged in, nothing to validate
 
+      // Quick check: is the token already expired locally?
+      if (auth.isTokenExpired(10)) {
+        console.log('[Auth] Token expired locally — attempting refresh...');
+        const ok = await tryRefresh();
+        if (!ok) {
+          forceReLogin('access + refresh tokens both expired');
+        }
+        return;
+      }
+
+      // Token looks valid locally — verify with server
       try {
         const res = await fetch('/api/auth/me', {
           headers: { 'Authorization': `Bearer ${token}` },
@@ -3854,55 +3932,42 @@ export default function App() {
             auth.setUser(updatedUser);
             setUser(updatedUser);
           }
+          // Ensure proactive refresh is scheduled
+          scheduleProactiveRefresh();
         } else if (res.status === 401) {
-          // Token expired — try to silently refresh (just like mobile apps do)
-          console.log('[Auth] Access token expired — attempting silent refresh...');
-          refreshing = true;
-          const refreshed = await auth.refresh();
-          refreshing = false;
-          if (refreshed) {
-            // Success! User stays logged in seamlessly
-            console.log('[Auth] Token refreshed — user stays logged in');
-            // Re-validate with the new token to get fresh user data
-            const newToken = auth.getToken();
-            const meRes = await fetch('/api/auth/me', {
-              headers: { 'Authorization': `Bearer ${newToken}` },
-            });
-            if (meRes.ok) {
-              const data = await meRes.json();
-              if (data && data.username) {
-                auth.setUser(data);
-                setUser({ ...data, is_admin: data.is_admin || false });
-              }
-            }
-          } else {
-            // Refresh token also expired or not available
-            // Just log it — don't interrupt the user
-            console.log('[Auth] Refresh failed — user may need to sign in on next camera load');
+          // Server says expired — try refresh
+          console.log('[Auth] Server returned 401 — attempting refresh...');
+          const ok = await tryRefresh();
+          if (!ok) {
+            forceReLogin('server rejected token and refresh failed');
           }
         }
       } catch (e) {
-        console.log('[Auth] Network error, skipping validation');
+        // Network error — don't force logout, user might just be offline briefly
+        console.log('[Auth] Network error during validation, will retry later');
       }
     };
 
-    // Validate on mount
+    // Validate on mount + schedule proactive refresh
     validateSession();
+    if (auth.getToken()) scheduleProactiveRefresh();
 
-    // Validate when tab becomes visible
+    // Validate when tab becomes visible (user returns from being away)
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        validateSession();
+        validateSession(true);
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
-    // Also refresh proactively every 3 minutes to keep user active in upstream API
-    const interval = setInterval(validateSession, 3 * 60 * 1000);
+    // Periodic keepalive — every 2 minutes verify we're still good
+    // (catches edge cases where proactive refresh timer was lost)
+    const interval = setInterval(() => validateSession(), 2 * 60 * 1000);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       clearInterval(interval);
+      if (proactiveTimer) clearTimeout(proactiveTimer);
     };
   }, []);
 
@@ -4182,20 +4247,16 @@ export default function App() {
             return;
           }
         }
-        // Refresh failed or retry failed — show inline sign-in prompt
+        // Refresh failed or retry failed — session is dead
+        // Force the login modal so user can re-authenticate immediately
+        console.warn('[loadCamera] Token refresh failed — forcing re-login');
+        auth.clear();
+        setUser(null);
+        setLoginOpen(true);
+        toast.error('Your session expired — please sign in again');
         setPlaybackStates(prev => ({
           ...prev,
-          [slotIndex]: {
-            loading: false,
-            data: null,
-            error: null,
-            upgrade: {
-              required_tier: camera.min_tier || 'conductor',
-              user_tier: 'none',
-              upgrade_url: '/join',
-              needsSignIn: true,
-            },
-          },
+          [slotIndex]: { loading: false, data: null, error: null },
         }));
         return;
       }
@@ -4214,27 +4275,53 @@ export default function App() {
           },
         }));
       } else if (data.reason === 'upgrade_required') {
-        // If user is locally known as admin or has sufficient tier, the token might be expired
-        // Re-validate auth before showing upgrade prompt
+        // If user is locally known as admin or has sufficient tier, the token is likely expired
+        // Try to refresh and retry automatically
         const localUser = auth.getUser();
         const locallyHasAccess = localUser && (localUser.is_admin || canAccess(localUser.membership_tier, camera.min_tier, localUser.is_admin));
         
         if (locallyHasAccess) {
-          // Token might be expired — show inline sign-in prompt, do NOT pop up dialog
-          console.log('[loadCamera] Locally authorized user got upgrade_required — token may be expired');
+          console.log('[loadCamera] Locally authorized user got upgrade_required — token likely expired, attempting refresh...');
+          const refreshed = await auth.refresh();
+          if (refreshed) {
+            // Retry the camera load with the new token
+            console.log('[loadCamera] Token refreshed — retrying camera load');
+            const newToken = auth.getToken();
+            const retryRes = await fetch('/api/playback/authorize', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${newToken}`,
+              },
+              body: JSON.stringify({
+                camera_id: camera._id,
+                device_id: getDeviceId(),
+                ...getDeviceInfo(),
+              }),
+            });
+            const retryData = await retryRes.json();
+            if (retryData.ok && retryData.hls_url) {
+              activeSessionsRef.current[slotIndex] = retryData.session_id || retryData.hls_url;
+              setPlaybackStates(prev => ({
+                ...prev,
+                [slotIndex]: {
+                  loading: false,
+                  data: { ...retryData, dvr_days: retryData.dvr_days || camera.dvr_days || 7 },
+                  error: null,
+                },
+              }));
+              return;
+            }
+          }
+          // Refresh failed or retry failed — force re-login
+          console.warn('[loadCamera] Refresh failed for locally-authorized user — forcing re-login');
+          auth.clear();
+          setUser(null);
+          setLoginOpen(true);
+          toast.error('Your session expired — please sign in again');
           setPlaybackStates(prev => ({
             ...prev,
-            [slotIndex]: {
-              loading: false,
-              data: null,
-              error: null,
-              upgrade: {
-                required_tier: camera.min_tier || data.required_tier || 'conductor',
-                user_tier: 'none',
-                upgrade_url: data.upgrade_url || '/join',
-                needsSignIn: true,
-              },
-            },
+            [slotIndex]: { loading: false, data: null, error: null },
           }));
         } else {
           setPlaybackStates(prev => ({
