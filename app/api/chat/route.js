@@ -60,6 +60,37 @@ export async function GET(request) {
 
     // ── GET ROOMS ──
     if (action === 'rooms') {
+      // Piggyback presence update: if username is provided, update their presence
+      // This acts as a backup heartbeat — just polling rooms keeps the user "alive"
+      const presenceUser = searchParams.get('user');
+      const presenceTier = searchParams.get('tier') || 'guest';
+      const presenceAdmin = searchParams.get('is_admin') === 'true';
+      const presenceRooms = searchParams.get('rooms'); // comma-separated room IDs
+      if (presenceUser) {
+        const roomIds = presenceRooms ? presenceRooms.split(',') : ['the-yard'];
+        const bulkOps = roomIds.map(roomId => ({
+          updateOne: {
+            filter: { username: presenceUser, room_id: roomId },
+            update: {
+              $set: {
+                username: presenceUser,
+                tier: presenceTier,
+                is_admin: presenceAdmin,
+                is_mod: false,
+                room_id: roomId,
+                last_seen: new Date(),
+              },
+            },
+            upsert: true,
+          },
+        }));
+        try {
+          await db.collection('chat_presence').bulkWrite(bulkOps);
+        } catch (e) {
+          console.warn('[Chat] Piggyback presence update failed:', e.message);
+        }
+      }
+
       // Get all rooms with online user counts
       const rooms = await db.collection('chat_rooms')
         .find({})

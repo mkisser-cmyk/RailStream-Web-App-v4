@@ -226,7 +226,15 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
   const fetchRoomsRef = useRef(null);
   useEffect(() => {
     const fetchRooms = () => {
-      fetch('/api/chat?action=rooms')
+      // Build URL with piggyback presence info (acts as backup heartbeat)
+      let url = '/api/chat?action=rooms';
+      if (user?.username) {
+        url += `&user=${encodeURIComponent(user.username)}`;
+        url += `&tier=${encodeURIComponent(user.membership_tier || 'guest')}`;
+        url += `&is_admin=${user.is_admin || false}`;
+        url += `&rooms=${encodeURIComponent(joinedRooms.join(','))}`;
+      }
+      fetch(url)
         .then(r => r.json())
         .then(data => {
           if (data.ok && data.rooms) {
@@ -255,9 +263,9 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
     };
     fetchRoomsRef.current = fetchRooms;
     fetchRooms();
-    const interval = setInterval(fetchRooms, 8000); // Poll rooms every 8s for responsive online count
+    const interval = setInterval(fetchRooms, 10000); // Poll rooms every 10s
     return () => clearInterval(interval);
-  }, [selectedCameras]);
+  }, [selectedCameras, user, joinedRooms]);
 
   // ── Poll messages for active room ──
   useEffect(() => {
@@ -284,8 +292,6 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
             const lastMsg = data.messages[data.messages.length - 1];
             if (lastMsg) lastFetchRef.current[activeRoom] = lastMsg.created_at;
             setTimeout(scrollToBottom, 100);
-            // Also refresh rooms to update online count (new messages = someone is active)
-            if (fetchRoomsRef.current) fetchRoomsRef.current();
           }
         })
         .catch(() => {});
@@ -296,7 +302,7 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
       fetchMessages();
     }
 
-    const interval = setInterval(fetchMessages, 3000);
+    const interval = setInterval(fetchMessages, 5000); // Poll messages every 5s (reduced from 3s for performance)
     return () => clearInterval(interval);
   }, [activeRoom, scrollToBottom]);
 
