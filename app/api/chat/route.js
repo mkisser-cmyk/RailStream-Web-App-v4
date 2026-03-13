@@ -313,7 +313,31 @@ export async function POST(request) {
     const db = await getDb();
 
     // Debug: log incoming chat POST actions
-    console.log(`[Chat POST] action=${action}, user=${body.user?.username || 'none'}, room=${body.room_id || 'none'}`);
+    console.log(`[Chat POST] action=${action}, user=${body.user?.username || body.username || 'none'}, room=${body.room_id || 'none'}`);
+
+    // ── ROOM UPDATE (join/leave without SSE reconnection) ──
+    if (action === 'room_update') {
+      const { username, room_id, update } = body;
+      if (!username || !room_id) return NextResponse.json({ ok: false, error: 'username and room_id required' }, { status: 400 });
+
+      // Update in-memory connected clients
+      const clientInfo = connectedClients.get(username);
+      if (clientInfo) {
+        if (update === 'join') {
+          clientInfo.rooms.add(room_id);
+        } else if (update === 'leave') {
+          clientInfo.rooms.delete(room_id);
+        }
+      }
+
+      // Emit room:update event so SSE handler adjusts its subscription
+      chatBus.emit('room:update', { username, room_id, action: update });
+
+      // Broadcast presence update for the affected room
+      broadcastPresenceUpdate(room_id);
+
+      return NextResponse.json({ ok: true });
+    }
 
     // ── SEND MESSAGE ──
     if (action === 'message') {

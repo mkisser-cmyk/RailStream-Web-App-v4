@@ -186,6 +186,8 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, []);
+  const scrollToBottomRef = useRef(scrollToBottom);
+  scrollToBottomRef.current = scrollToBottom;
 
   // ── Auto-join LOCATION rooms based on what's being watched ──
   // Groups cameras by city/location instead of creating per-camera rooms
@@ -270,12 +272,17 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
   }, [selectedCameras, user, joinedRooms]);
   fetchRoomsRef.current = fetchRoomsOnce;
 
-  // Connect SSE stream
+  // ── SSE connection — connects ONCE, stays open, rooms updated via POST ──
+  const joinedRoomsRef = useRef(joinedRooms);
+  joinedRoomsRef.current = joinedRooms;
+
+  // Connect SSE stream (only reconnects if user identity changes, NOT room changes)
   useEffect(() => {
     if (!user?.username) return;
 
-    // Build SSE URL
-    const sseUrl = `/api/chat?action=stream&user=${encodeURIComponent(user.username)}&tier=${encodeURIComponent(user.membership_tier || 'guest')}&is_admin=${user.is_admin || false}&rooms=${encodeURIComponent(joinedRooms.join(','))}`;
+    // Connect with initial rooms
+    const initialRooms = joinedRoomsRef.current.join(',');
+    const sseUrl = `/api/chat?action=stream&user=${encodeURIComponent(user.username)}&tier=${encodeURIComponent(user.membership_tier || 'guest')}&is_admin=${user.is_admin || false}&rooms=${encodeURIComponent(initialRooms)}`;
 
     // Close previous connection
     if (eventSourceRef.current) {
@@ -290,14 +297,13 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
         const msg = JSON.parse(e.data);
         setMessages(prev => {
           const existing = prev[msg.room_id] || [];
-          if (existing.some(m => m.id === msg.id)) return prev; // Dedupe
+          if (existing.some(m => m.id === msg.id)) return prev;
           const merged = [...existing, msg].slice(-200);
           return { ...prev, [msg.room_id]: merged };
         });
-        // Update last fetch timestamp
         lastFetchRef.current[msg.room_id] = msg.created_at;
-        setTimeout(scrollToBottom, 100);
-      } catch (err) { /* ignore parse errors */ }
+        scrollToBottomRef.current?.();
+      } catch (err) { /* ignore */ }
     });
 
     es.addEventListener('presence', (e) => {
@@ -337,19 +343,48 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
 
     es.onopen = () => {
       sseConnectedRef.current = true;
-      console.log('[YardChat] SSE connected');
     };
 
     es.onerror = () => {
       sseConnectedRef.current = false;
-      // EventSource auto-reconnects, but we should refresh rooms on reconnect
     };
 
     return () => {
       es.close();
       sseConnectedRef.current = false;
     };
-  }, [user, joinedRooms, scrollToBottom]);
+  }, [user?.username, user?.membership_tier, user?.is_admin]); // Only reconnect on user identity change!
+
+  // ── Update SSE room subscriptions without reconnecting ──
+  const prevRoomsRef = useRef(new Set(joinedRooms));
+  useEffect(() => {
+    if (!user?.username) return;
+    const prevSet = prevRoomsRef.current;
+    const currSet = new Set(joinedRooms);
+
+    // Find newly joined and left rooms
+    joinedRooms.forEach(roomId => {
+      if (!prevSet.has(roomId)) {
+        // Joined a new room — notify server via lightweight POST
+        fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'room_update', username: user.username, room_id: roomId, update: 'join' }),
+        }).catch(() => {});
+      }
+    });
+    prevSet.forEach(roomId => {
+      if (!currSet.has(roomId)) {
+        // Left a room — notify server
+        fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'room_update', username: user.username, room_id: roomId, update: 'leave' }),
+        }).catch(() => {});
+      }
+    });
+    prevRoomsRef.current = currSet;
+  }, [joinedRooms, user?.username]);
 
   // Fetch initial rooms + messages (one-time on mount + when rooms change)
   useEffect(() => {
