@@ -36,8 +36,9 @@ module.exports = {
       NODE_ENV: 'production',
       PORT: 3000,
       HOST: '0.0.0.0',
-      // WORKERS: 'auto' means use all CPU cores (default)
-      // Set to a specific number to limit: WORKERS=2
+      // Default to 4 workers — sweet spot for 8-core servers
+      // Leaves cores for MongoDB, OS, and burst headroom
+      WORKERS: 4,
     },
     
     // Logging

@@ -34,37 +34,50 @@ if (cluster.isPrimary) {
 
   // Fork workers
   for (let i = 0; i < NUM_WORKERS; i++) {
-    spawnWorker();
+    spawnWorker(i);
   }
 
   // Auto-restart crashed workers
   cluster.on('exit', (worker, code, signal) => {
-    console.warn(`[Master] Worker ${worker.process.pid} died (code=${code}, signal=${signal}). Restarting...`);
-    setTimeout(spawnWorker, 1000); // 1s delay to avoid crash loops
+    const workerId = worker.process.env?.WORKER_ID || '?';
+    console.warn(`[Master] Worker ${worker.process.pid} (id=${workerId}) died (code=${code}, signal=${signal}). Restarting...`);
+    setTimeout(() => spawnWorker(parseInt(workerId) || 0), 1000);
   });
 
-  function spawnWorker() {
-    const worker = cluster.fork();
+  function spawnWorker(id) {
+    const worker = cluster.fork({
+      WORKER_ID: String(id),
+      // Only worker 0 fetches and compresses thumbnails
+      // Other workers receive compressed data via IPC from the leader
+      THUMBNAIL_LEADER: id === 0 ? 'true' : 'false',
+    });
 
-    // ── Chat Message Relay ──
-    // When any worker broadcasts a chat event, relay it to ALL other workers.
-    // This ensures SSE clients on different workers all receive every message.
     worker.on('message', (msg) => {
-      if (!msg || !msg._relay) return; // Only relay messages marked for it
-
-      for (const id in cluster.workers) {
-        const target = cluster.workers[id];
-        if (target && target !== worker && !target.isDead()) {
-          try {
-            target.send(msg);
-          } catch (e) {
-            // Worker might have died between the check and send
+      if (!msg) return;
+      
+      // ── Chat Message Relay ──
+      if (msg._relay) {
+        for (const wid in cluster.workers) {
+          const target = cluster.workers[wid];
+          if (target && target !== worker && !target.isDead()) {
+            try { target.send(msg); } catch (e) { /* Worker may be shutting down */ }
+          }
+        }
+      }
+      
+      // ── Thumbnail Data Relay ──
+      // Leader worker sends compressed thumbnails → master relays to all other workers
+      if (msg._thumbnailBroadcast) {
+        for (const wid in cluster.workers) {
+          const target = cluster.workers[wid];
+          if (target && target !== worker && !target.isDead()) {
+            try { target.send(msg); } catch (e) { /* Worker may be shutting down */ }
           }
         }
       }
     });
 
-    console.log(`[Master] Worker ${worker.process.pid} started`);
+    console.log(`[Master] Worker ${worker.process.pid} started (id=${id}${id === 0 ? ', thumbnail leader' : ''})`);
     return worker;
   }
 

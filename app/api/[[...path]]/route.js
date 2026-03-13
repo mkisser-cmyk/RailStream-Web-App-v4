@@ -182,6 +182,50 @@ let thumbnailDataUriCache = null; // Pre-serialized response string
 let thumbnailDataUriCacheTime = 0;
 let thumbnailEtag = ''; // ETag for conditional requests
 
+// ── Leader-Worker Thumbnail Architecture ──
+// Only WORKER_ID=0 (the "leader") fetches from the studio API and runs sharp compression.
+// The leader then broadcasts compressed data to other workers via IPC.
+// This reduces thumbnail CPU by Nx (where N = number of workers).
+const IS_THUMBNAIL_LEADER = process.env.THUMBNAIL_LEADER === 'true' || !process.env.WORKER_ID;
+
+// Listen for thumbnail broadcasts from the leader (via master relay)
+if (typeof process.on === 'function' && process.env.WORKER_ID) {
+  process.on('message', (msg) => {
+    if (msg && msg._thumbnailBroadcast) {
+      // Reconstruct Buffer objects from base64-encoded data
+      const buffers = {};
+      for (const [siteId, b64] of Object.entries(msg.bufferData || {})) {
+        buffers[siteId] = Buffer.from(b64, 'base64');
+      }
+      thumbnailBufferCache = buffers;
+      thumbnailEtag = msg.etag || '';
+      // Invalidate the data URI cache so it rebuilds from new buffers
+      thumbnailDataUriCache = null;
+      thumbnailDataUriCacheTime = 0;
+    }
+  });
+}
+
+function broadcastThumbnailsToWorkers() {
+  if (typeof process.send !== 'function') return;
+  try {
+    // Convert Buffers to base64 for IPC serialization
+    const bufferData = {};
+    for (const [siteId, buf] of Object.entries(thumbnailBufferCache)) {
+      if (Buffer.isBuffer(buf)) {
+        bufferData[siteId] = buf.toString('base64');
+      }
+    }
+    process.send({
+      _thumbnailBroadcast: true,
+      bufferData,
+      etag: thumbnailEtag,
+    });
+  } catch (e) {
+    // Worker may be shutting down
+  }
+}
+
 // Thumbnail compression settings (balance quality vs size)
 const THUMB_WIDTH = 320;
 const THUMB_HEIGHT = 180;
@@ -228,28 +272,26 @@ async function fetchStudioSites() {
   // Separate thumbnails from site data and sanitize
   const thumbnails = {};
   const compressionPromises = [];
-  let anyChanged = false; // Track if ANY thumbnail changed (for ETag invalidation)
+  let anyChanged = false;
   const sanitizedSites = sites.map(site => {
-    // Store thumbnail separately
     if (site.health?.preview_image) {
       thumbnails[site.id] = site.health.preview_image;
       
-      // ── Change detection: only re-compress if the source image actually changed ──
-      // This saves ~150ms of sharp CPU work per cycle when cameras are static (no trains)
-      const hash = quickHash(site.health.preview_image);
-      if (thumbnailSourceHash[site.id] !== hash || !thumbnailBufferCache[site.id]) {
-        thumbnailSourceHash[site.id] = hash;
-        anyChanged = true;
-        // Queue compression only for changed thumbnails
-        compressionPromises.push(
-          compressThumbnail(site.health.preview_image).then(buf => {
-            thumbnailBufferCache[site.id] = buf;
-          })
-        );
+      // ── Only the LEADER worker does sharp compression ──
+      // Other workers receive pre-compressed data via IPC
+      if (IS_THUMBNAIL_LEADER) {
+        const hash = quickHash(site.health.preview_image);
+        if (thumbnailSourceHash[site.id] !== hash || !thumbnailBufferCache[site.id]) {
+          thumbnailSourceHash[site.id] = hash;
+          anyChanged = true;
+          compressionPromises.push(
+            compressThumbnail(site.health.preview_image).then(buf => {
+              thumbnailBufferCache[site.id] = buf;
+            })
+          );
+        }
       }
-      // else: thumbnail unchanged, keep existing compressed buffer
     }
-    // Return sanitized site data (no passwords, IPs, API keys)
     return {
       id: site.id,
       name: site.name,
@@ -282,12 +324,13 @@ async function fetchStudioSites() {
     };
   });
 
-  // Compress only CHANGED thumbnails in parallel
-  if (compressionPromises.length > 0) {
+  // Only leader compresses; others skip this entirely
+  if (IS_THUMBNAIL_LEADER && compressionPromises.length > 0) {
     await Promise.all(compressionPromises);
+    // Broadcast compressed thumbnails to other workers via IPC
+    broadcastThumbnailsToWorkers();
   }
   
-  // Only invalidate data URI cache if thumbnails actually changed
   if (anyChanged || !thumbnailDataUriCache) {
     thumbnailDataUriCache = null;
     thumbnailDataUriCacheTime = 0;
@@ -1160,9 +1203,19 @@ async function handleRoute(request, { params }) {
         const cache = await fetchStudioSites();
         // Build data URI map from COMPRESSED Buffers (much smaller than original)
         const dataUris = {};
-        Object.entries(thumbnailBufferCache).forEach(([siteId, buffer]) => {
-          dataUris[siteId] = `data:image/jpeg;base64,${buffer.toString('base64')}`;
-        });
+        const hasCompressedData = Object.keys(thumbnailBufferCache).length > 0;
+        
+        if (hasCompressedData) {
+          // Use compressed buffers (from leader's sharp processing or IPC broadcast)
+          Object.entries(thumbnailBufferCache).forEach(([siteId, buffer]) => {
+            dataUris[siteId] = `data:image/jpeg;base64,${buffer.toString('base64')}`;
+          });
+        } else if (cache.thumbnails) {
+          // Fallback: use raw thumbnails from API (before leader's first broadcast arrives)
+          Object.entries(cache.thumbnails).forEach(([siteId, base64]) => {
+            dataUris[siteId] = `data:image/jpeg;base64,${base64}`;
+          });
+        }
 
         const response = { ok: true, thumbnails: dataUris, timestamp: now };
         // Pre-stringify once — subsequent requests serve this string directly (zero JSON.stringify cost)
