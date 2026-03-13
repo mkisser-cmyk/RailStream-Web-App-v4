@@ -468,6 +468,45 @@ export default function HlsPlayer({
         if (autoPlay && !adPlayingRef.current) {
           video.play().catch(() => setIsPlaying(false));
         }
+
+        // ── Apply pending DVR seek as soon as seekable range is ready ──
+        // This is more reliable than waiting for the React state update cycle
+        // (the time update interval is 2s, which can cause a visible delay/flash)
+        if (pendingSeekFromEndRef.current > 0) {
+          const seekTarget = pendingSeekFromEndRef.current;
+          let seekAttempts = 0;
+          const maxSeekAttempts = 30; // 30 × 200ms = 6 seconds max wait
+
+          const tryApplySeek = () => {
+            seekAttempts++;
+            if (pendingSeekFromEndRef.current <= 0) return; // Already applied by another path
+            if (seekAttempts > maxSeekAttempts) {
+              console.warn(`[HlsPlayer] Pending seek gave up after ${maxSeekAttempts} attempts`);
+              return;
+            }
+
+            if (video.seekable && video.seekable.length > 0) {
+              const start = video.seekable.start(0);
+              const end = video.seekable.end(video.seekable.length - 1);
+              const range = end - start;
+              const targetTime = end - seekTarget;
+
+              // Only apply if the seekable range is large enough to contain our target
+              if (range > 60 && targetTime >= start && targetTime <= end) {
+                video.currentTime = targetTime;
+                setIsLive(false);
+                pendingSeekFromEndRef.current = 0;
+                console.log(`[HlsPlayer] DVR seek applied (manifest): seekable=[${start.toFixed(0)},${end.toFixed(0)}], target=${targetTime.toFixed(0)}s (${seekTarget}s from end), attempt=${seekAttempts}`);
+                return;
+              }
+            }
+            // Retry quickly until the seekable range is established
+            setTimeout(tryApplySeek, 200);
+          };
+
+          // Start checking after a short delay to let HLS.js settle
+          setTimeout(tryApplySeek, 300);
+        }
       });
 
       hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (_, data) => {

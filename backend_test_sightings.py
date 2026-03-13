@@ -11,7 +11,7 @@ import base64
 from typing import Dict, Any, Optional
 
 # Base URL from environment  
-BASE_URL = "https://roundhouse-staging.preview.emergentagent.com"
+BASE_URL = "https://dvr-seek-fix.preview.emergentagent.com"
 API_URL = f"{BASE_URL}/api"
 
 # Test credentials from review request

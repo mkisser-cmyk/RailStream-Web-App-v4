@@ -460,6 +460,8 @@ export default function YardChat({ user, selectedCameras = [], isPopout = false,
       if (data.ok && data.message) {
         setMessages(prev => {
           const existing = prev[activeRoom] || [];
+          // Dedup: SSE may have already delivered this message before the POST response
+          if (existing.some(m => m.id === data.message.id)) return prev;
           return { ...prev, [activeRoom]: [...existing, data.message].slice(-200) };
         });
         lastFetchRef.current[activeRoom] = data.message.created_at;
