@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import SiteHeader from '@/components/SiteHeader';
 import {
@@ -134,6 +134,71 @@ export default function SightingsPage() {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
+
+  // ── Daily Train Log state ──
+  const [logLocation, setLogLocation] = useState('');
+  const [logDate, setLogDate] = useState('');
+  const [logSightings, setLogSightings] = useState([]);
+  const [logLoading, setLogLoading] = useState(false);
+  const [logActive, setLogActive] = useState(false);
+
+  // Fetch daily log when location + date are set
+  const fetchDailyLog = useCallback(async () => {
+    if (!logLocation || !logDate) return;
+    setLogLoading(true);
+    setLogActive(true);
+    try {
+      const params = new URLSearchParams({
+        camera_name: logLocation,
+        date: logDate,
+        limit: '200',
+        page: '1',
+      });
+      const res = await fetch(`/api/sightings?${params}`);
+      const data = await res.json();
+      if (data.ok) {
+        // Sort by sighting_time ascending
+        const sorted = (data.sightings || []).sort((a, b) =>
+          new Date(a.sighting_time) - new Date(b.sighting_time)
+        );
+        setLogSightings(sorted);
+      }
+    } catch (e) {
+      console.error('Failed to fetch daily log:', e);
+    }
+    setLogLoading(false);
+  }, [logLocation, logDate]);
+
+  useEffect(() => {
+    if (logLocation && logDate) fetchDailyLog();
+  }, [fetchDailyLog]);
+
+  // Helper: check if a sighting's DVR replay is still available (within 7 days)
+  const isDvrAvailable = (sightingTime) => {
+    const sightTs = new Date(sightingTime).getTime();
+    const now = Date.now();
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    return (now - sightTs) < sevenDays;
+  };
+
+  // Compute daily log stats
+  const logStats = useMemo(() => {
+    if (!logSightings.length) return null;
+    const byRailroad = {};
+    const byHour = {};
+    logSightings.forEach(s => {
+      const rr = s.railroad || 'Unknown';
+      byRailroad[rr] = (byRailroad[rr] || 0) + 1;
+      const hour = new Date(s.sighting_time).getHours();
+      byHour[hour] = (byHour[hour] || 0) + 1;
+    });
+    const peakHour = Object.entries(byHour).sort((a, b) => b[1] - a[1])[0];
+    return {
+      total: logSightings.length,
+      byRailroad: Object.entries(byRailroad).sort((a, b) => b[1] - a[1]),
+      peakHour: peakHour ? { hour: parseInt(peakHour[0]), count: peakHour[1] } : null,
+    };
+  }, [logSightings]);
 
   // Editing
   const [editingId, setEditingId] = useState(null);
@@ -546,6 +611,210 @@ export default function SightingsPage() {
             </div>
           </div>
         )}
+
+        {/* ====== DAILY TRAIN LOG ====== */}
+        <div className="mb-10 animate-in fade-in slide-in-from-bottom-3 duration-700">
+          <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a0a]">
+            {/* Ambient glow */}
+            <div className="absolute -top-20 left-1/4 w-96 h-40 bg-[#ff7a00]/[0.04] rounded-full blur-3xl" />
+
+            {/* Header */}
+            <div className="relative px-6 py-4 border-b border-white/[0.06] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#ff7a00]/20 to-[#ff5500]/10 flex items-center justify-center border border-[#ff7a00]/20">
+                  <BarChart3 className="w-4.5 h-4.5 text-[#ff7a00]" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-white tracking-wide">Daily Train Log</h2>
+                  <p className="text-white/25 text-[11px]">Select a site and date to view the day's activity</p>
+                </div>
+              </div>
+              {logActive && (
+                <button
+                  onClick={() => { setLogActive(false); setLogSightings([]); setLogLocation(''); setLogDate(''); }}
+                  className="text-white/30 hover:text-white/60 text-xs font-medium transition flex items-center gap-1"
+                >
+                  <X className="w-3 h-3" /> Clear
+                </button>
+              )}
+            </div>
+
+            {/* Site + Date selectors */}
+            <div className="relative px-6 py-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-white/30 text-[11px] uppercase tracking-wider font-semibold mb-2">Camera / Site</label>
+                  <select
+                    value={logLocation}
+                    onChange={(e) => setLogLocation(e.target.value)}
+                    className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all"
+                  >
+                    <option value="">Select a site...</option>
+                    {uniqueLocations.map(loc => (
+                      <option key={loc} value={loc}>{loc}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-white/30 text-[11px] uppercase tracking-wider font-semibold mb-2">Date</label>
+                  <input
+                    type="date"
+                    value={logDate}
+                    onChange={(e) => setLogDate(e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
+                    className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={fetchDailyLog}
+                    disabled={!logLocation || !logDate || logLoading}
+                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#ff7a00] to-[#ff5500] hover:from-[#ff8c20] hover:to-[#ff6620] disabled:from-gray-700 disabled:to-gray-600 text-white py-3 rounded-xl font-bold text-sm transition-all"
+                  >
+                    {logLoading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-4 h-4" />
+                        View Log
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Daily Log Results */}
+            {logActive && (
+              <div className="border-t border-white/[0.06]">
+                {logSightings.length === 0 && !logLoading ? (
+                  <div className="px-6 py-12 text-center">
+                    <Train className="w-10 h-10 text-white/10 mx-auto mb-3" />
+                    <p className="text-white/40 text-sm font-medium">No trains logged at this site on this date</p>
+                    <p className="text-white/20 text-xs mt-1">Try a different date or location</p>
+                  </div>
+                ) : logSightings.length > 0 && (
+                  <>
+                    {/* Daily summary bar */}
+                    <div className="px-6 py-4 bg-white/[0.02] flex flex-wrap items-center gap-6">
+                      <div className="flex items-center gap-2">
+                        <Train className="w-4 h-4 text-[#ff7a00]" />
+                        <span className="text-white font-bold text-lg">{logStats?.total || 0}</span>
+                        <span className="text-white/40 text-sm">trains logged</span>
+                      </div>
+                      {logStats?.byRailroad?.map(([rr, count]) => {
+                        const rrStyle = RR_COLORS[rr] || RR_COLORS.Other;
+                        return (
+                          <span key={rr} className="flex items-center gap-1.5">
+                            <span
+                              className="inline-block w-2.5 h-2.5 rounded-sm"
+                              style={{ background: rrStyle.bg }}
+                            />
+                            <span className="text-white/50 text-xs font-medium">{rr}</span>
+                            <span className="text-white/30 text-xs">({count})</span>
+                          </span>
+                        );
+                      })}
+                      {logStats?.peakHour && (
+                        <span className="text-white/30 text-xs ml-auto">
+                          Peak: {logStats.peakHour.hour > 12 ? `${logStats.peakHour.hour - 12} PM` : logStats.peakHour.hour === 0 ? '12 AM' : `${logStats.peakHour.hour} AM`} ({logStats.peakHour.count} trains)
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Train log table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-white/[0.06]">
+                            <th className="text-left px-6 py-3 text-white/30 text-[11px] uppercase tracking-wider font-semibold">Time</th>
+                            <th className="text-left px-4 py-3 text-white/30 text-[11px] uppercase tracking-wider font-semibold">Railroad</th>
+                            <th className="text-left px-4 py-3 text-white/30 text-[11px] uppercase tracking-wider font-semibold">Train</th>
+                            <th className="text-left px-4 py-3 text-white/30 text-[11px] uppercase tracking-wider font-semibold">Type</th>
+                            <th className="text-left px-4 py-3 text-white/30 text-[11px] uppercase tracking-wider font-semibold">Direction</th>
+                            <th className="text-left px-4 py-3 text-white/30 text-[11px] uppercase tracking-wider font-semibold">Power</th>
+                            <th className="text-left px-4 py-3 text-white/30 text-[11px] uppercase tracking-wider font-semibold">Spotter</th>
+                            <th className="text-right px-6 py-3 text-white/30 text-[11px] uppercase tracking-wider font-semibold">DVR</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {logSightings.map((s, idx) => {
+                            const sightDate = new Date(s.sighting_time);
+                            const rrStyle = RR_COLORS[s.railroad] || RR_COLORS.Other;
+                            const dvrOk = isDvrAvailable(s.sighting_time);
+                            const replayUrl = getReplayUrl(s);
+
+                            return (
+                              <tr
+                                key={s._id || idx}
+                                className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
+                                style={{ animation: `fadeInUp 0.3s ease ${Math.min(idx * 30, 300)}ms both` }}
+                              >
+                                <td className="px-6 py-3.5">
+                                  <span className="text-white/70 font-mono text-xs">
+                                    {sightDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3.5">
+                                  <span
+                                    className="inline-flex px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider"
+                                    style={{
+                                      background: rrStyle.bg,
+                                      color: rrStyle.text,
+                                      border: rrStyle.border ? `1px solid ${rrStyle.border}` : 'none',
+                                    }}
+                                  >
+                                    {s.railroad}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3.5">
+                                  <span className="text-white/80 font-semibold text-xs">{s.train_id || '—'}</span>
+                                </td>
+                                <td className="px-4 py-3.5">
+                                  <span className="text-white/40 text-xs">{s.train_type || '—'}</span>
+                                </td>
+                                <td className="px-4 py-3.5">
+                                  {s.direction ? (
+                                    <span className="flex items-center gap-1 text-white/40 text-xs">
+                                      <Navigation className="w-3 h-3" />
+                                      {s.direction}
+                                    </span>
+                                  ) : <span className="text-white/20 text-xs">—</span>}
+                                </td>
+                                <td className="px-4 py-3.5">
+                                  <span className="text-white/40 font-mono text-[11px]">{s.locomotives || '—'}</span>
+                                </td>
+                                <td className="px-4 py-3.5">
+                                  <span className="text-white/30 text-xs">{s.user || '—'}</span>
+                                </td>
+                                <td className="px-6 py-3.5 text-right">
+                                  {dvrOk && replayUrl ? (
+                                    <Link
+                                      href={replayUrl}
+                                      className="inline-flex items-center gap-1.5 bg-[#ff7a00]/10 hover:bg-[#ff7a00]/20 text-[#ff7a00] text-[11px] font-bold px-3 py-1.5 rounded-lg transition-all"
+                                    >
+                                      <Play className="w-3 h-3" fill="currentColor" />
+                                      Review
+                                    </Link>
+                                  ) : (
+                                    <span className="text-white/15 text-[11px] italic">Expired</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* ====== RAILROAD QUICK-FILTER CHIPS ====== */}
         <div className="mb-8">

@@ -2,6 +2,22 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import Hls from 'hls.js';
+import { Clock } from 'lucide-react';
+
+// Auto-return countdown for DVR errors
+function DvrAutoReturn({ onReturn, seconds = 8 }) {
+  const [remaining, setRemaining] = useState(seconds);
+  useEffect(() => {
+    if (remaining <= 0) { onReturn(); return; }
+    const timer = setTimeout(() => setRemaining(r => r - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [remaining, onReturn]);
+  return (
+    <p className="text-white/50 text-xs mt-1">
+      Returning to live in {remaining}s...
+    </p>
+  );
+}
 
 /**
  * RailStream HLS Player — Full-featured live streaming player
@@ -1086,16 +1102,42 @@ export default function HlsPlayer({
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/90 z-20">
           <div className="text-center p-6 max-w-sm">
-            <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-              </svg>
-            </div>
-            <p className="text-white font-semibold text-lg mb-1">Stream Unavailable</p>
-            <p className="text-white/70 text-sm mb-4">{error}</p>
-            <button onClick={handleRetry} aria-label="Retry loading stream" className="px-6 py-2.5 bg-[#ff7a00] hover:bg-[#ff8c20] text-white font-semibold rounded-lg transition-colors">
-              Try Again
-            </button>
+            {isReviewMode ? (
+              <>
+                {/* DVR/Review Mode Error — friendly message + auto-return to live */}
+                <div className="w-16 h-16 rounded-full bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center mx-auto mb-4">
+                  <Clock className="w-8 h-8 text-yellow-400" />
+                </div>
+                <p className="text-white font-semibold text-lg mb-1">Recording Not Available</p>
+                <p className="text-white/70 text-sm mb-4">
+                  This DVR recording may no longer be available. Recordings are kept for up to 7 days.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button 
+                    onClick={backToLiveOps} 
+                    aria-label="Return to live stream"
+                    className="px-6 py-2.5 bg-[#ff7a00] hover:bg-[#ff8c20] text-white font-semibold rounded-lg transition-colors"
+                  >
+                    Back to Live
+                  </button>
+                  <DvrAutoReturn onReturn={backToLiveOps} seconds={8} />
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Normal stream error */}
+                <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                  </svg>
+                </div>
+                <p className="text-white font-semibold text-lg mb-1">Stream Unavailable</p>
+                <p className="text-white/70 text-sm mb-4">{error}</p>
+                <button onClick={handleRetry} aria-label="Retry loading stream" className="px-6 py-2.5 bg-[#ff7a00] hover:bg-[#ff8c20] text-white font-semibold rounded-lg transition-colors">
+                  Try Again
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

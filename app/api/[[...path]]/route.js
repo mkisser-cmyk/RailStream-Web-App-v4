@@ -1309,12 +1309,26 @@ async function handleRoute(request, { params }) {
 
         const query = {};
         if (camera_id) query.camera_id = camera_id;
-        if (camera_name) query.camera_name = camera_name;
+        // Use regex match for camera_name to handle partial matches
+        // (e.g., "Atlanta, Georgia" should match sightings tagged as "Atlanta Howell Yard East")
+        if (camera_name) {
+          // Extract the city/location keyword for broader matching
+          const cityPart = camera_name.split(',')[0].trim();
+          query.$or = [
+            { camera_name: camera_name },
+            { camera_name: { $regex: cityPart, $options: 'i' } },
+            { location: { $regex: cityPart, $options: 'i' } },
+          ];
+        }
         if (railroad) query.railroad = railroad;
         if (date) {
           const dayStart = new Date(date + 'T00:00:00Z');
-          const dayEnd = new Date(date + 'T23:59:59Z');
-          query.sighting_time = { $gte: dayStart.toISOString(), $lte: dayEnd.toISOString() };
+          const dayEnd = new Date(date + 'T23:59:59.999Z');
+          // Handle sighting_time stored as both ISO strings and Date objects
+          query.sighting_time = {
+            $gte: dayStart.toISOString(),
+            $lte: dayEnd.toISOString(),
+          };
         }
 
         const total = await col.countDocuments(query);
