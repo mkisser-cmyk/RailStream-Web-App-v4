@@ -30,6 +30,35 @@ let yardEnsured = false;
 const chatBus = new EventEmitter();
 chatBus.setMaxListeners(2000);
 
+// ── Cross-Worker Message Relay (for clustered production server) ──
+// When running with server.js (multi-core clustering), each worker has its own
+// chatBus and connectedClients. Messages need to be relayed between workers so
+// SSE clients on any worker see every chat message.
+//
+// Flow: Worker A receives POST → emits locally → sends to master → master relays
+//       to Workers B, C, D → they emit locally → their SSE clients receive it.
+const isClusterWorker = typeof process.send === 'function';
+
+function relayToOtherWorkers(event, data) {
+  if (isClusterWorker) {
+    try {
+      process.send({ _relay: true, event, data });
+    } catch (e) {
+      // Worker might be shutting down
+    }
+  }
+}
+
+// Listen for relayed messages from master (originated by other workers)
+if (isClusterWorker) {
+  process.on('message', (packet) => {
+    if (packet && packet._relay && packet.event && packet.data) {
+      // Emit on local chatBus so SSE clients connected to THIS worker see it
+      chatBus.emit(packet.event, packet.data);
+    }
+  });
+}
+
 // ── Connected clients tracking (replaces chat_presence DB for online status) ──
 // Map: username -> { rooms: Set, connectedAt, tier, is_admin, is_mod }
 const connectedClients = new Map();
@@ -387,7 +416,9 @@ export async function POST(request) {
       await db.collection('chat_messages').insertOne(newMsg);
 
       // ── Broadcast message via SSE to all connected clients ──
-      chatBus.emit('chat:message', { ...newMsg, created_at: newMsg.created_at.toISOString() });
+      const msgPayload = { ...newMsg, created_at: newMsg.created_at.toISOString() };
+      chatBus.emit('chat:message', msgPayload);
+      relayToOtherWorkers('chat:message', msgPayload); // Cross-worker relay
 
       return NextResponse.json({
         ok: true,
@@ -613,6 +644,11 @@ export async function DELETE(request) {
 
     const db = await getDb();
     await db.collection('chat_messages').deleteOne({ id: messageId });
+
+    // Broadcast deletion to all SSE clients so the message disappears in real-time
+    const deletePayload = { type: 'delete', message_id: messageId };
+    chatBus.emit('moderation', deletePayload);
+    relayToOtherWorkers('moderation', deletePayload); // Cross-worker relay
 
     return NextResponse.json({ ok: true, deleted: messageId });
   } catch (error) {

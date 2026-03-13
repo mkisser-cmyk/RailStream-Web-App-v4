@@ -177,6 +177,7 @@ async function getStudioToken() {
 // Fetch studio sites with caching (10-second TTL for fresh thumbnails)
 // Pre-decodes AND compresses thumbnails using sharp for minimal payload
 let thumbnailBufferCache = {}; // siteId -> Buffer (compressed)
+let thumbnailSourceHash = {}; // siteId -> hash of source base64 (to detect changes)
 let thumbnailDataUriCache = null; // Pre-serialized response string
 let thumbnailDataUriCacheTime = 0;
 let thumbnailEtag = ''; // ETag for conditional requests
@@ -185,6 +186,16 @@ let thumbnailEtag = ''; // ETag for conditional requests
 const THUMB_WIDTH = 320;
 const THUMB_HEIGHT = 180;
 const THUMB_QUALITY = 55; // JPEG quality — 55 is good for small previews
+
+// Fast hash for change detection (djb2) — avoids re-compressing identical images
+function quickHash(str) {
+  let hash = 5381;
+  const len = Math.min(str.length, 200); // Sample first 200 chars for speed
+  for (let i = 0; i < len; i++) {
+    hash = ((hash << 5) + hash) + str.charCodeAt(i);
+  }
+  return hash >>> 0; // Unsigned 32-bit
+}
 
 async function compressThumbnail(base64Data) {
   try {
@@ -217,16 +228,26 @@ async function fetchStudioSites() {
   // Separate thumbnails from site data and sanitize
   const thumbnails = {};
   const compressionPromises = [];
+  let anyChanged = false; // Track if ANY thumbnail changed (for ETag invalidation)
   const sanitizedSites = sites.map(site => {
     // Store thumbnail separately
     if (site.health?.preview_image) {
       thumbnails[site.id] = site.health.preview_image;
-      // Queue compression
-      compressionPromises.push(
-        compressThumbnail(site.health.preview_image).then(buf => {
-          thumbnailBufferCache[site.id] = buf;
-        })
-      );
+      
+      // ── Change detection: only re-compress if the source image actually changed ──
+      // This saves ~150ms of sharp CPU work per cycle when cameras are static (no trains)
+      const hash = quickHash(site.health.preview_image);
+      if (thumbnailSourceHash[site.id] !== hash || !thumbnailBufferCache[site.id]) {
+        thumbnailSourceHash[site.id] = hash;
+        anyChanged = true;
+        // Queue compression only for changed thumbnails
+        compressionPromises.push(
+          compressThumbnail(site.health.preview_image).then(buf => {
+            thumbnailBufferCache[site.id] = buf;
+          })
+        );
+      }
+      // else: thumbnail unchanged, keep existing compressed buffer
     }
     // Return sanitized site data (no passwords, IPs, API keys)
     return {
@@ -261,13 +282,17 @@ async function fetchStudioSites() {
     };
   });
 
-  // Compress all thumbnails in parallel (non-blocking, ~150ms for 27 images)
-  await Promise.all(compressionPromises);
+  // Compress only CHANGED thumbnails in parallel
+  if (compressionPromises.length > 0) {
+    await Promise.all(compressionPromises);
+  }
   
-  // Invalidate data URI cache so it rebuilds with fresh compressed data
-  thumbnailDataUriCache = null;
-  thumbnailDataUriCacheTime = 0;
-  thumbnailEtag = `"thumb-${now}"`;
+  // Only invalidate data URI cache if thumbnails actually changed
+  if (anyChanged || !thumbnailDataUriCache) {
+    thumbnailDataUriCache = null;
+    thumbnailDataUriCacheTime = 0;
+    thumbnailEtag = `"thumb-${now}"`;
+  }
   
   studioSitesCache = { data: sanitizedSites, thumbnails, fetchedAt: now };
   return studioSitesCache;

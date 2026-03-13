@@ -7,7 +7,13 @@
         "dev:no-reload": "next dev --hostname 0.0.0.0 --port 3000",
         "dev:webpack": "next dev --hostname 0.0.0.0 --port 3000",
         "build": "next build",
-        "start": "next start"
+        "start": "next start",
+        "start:prod": "NODE_ENV=production node server.js",
+        "start:pm2": "pm2 start ecosystem.config.js",
+        "stop:pm2": "pm2 stop railstream",
+        "restart:pm2": "pm2 restart railstream",
+        "logs:pm2": "pm2 logs railstream",
+        "monit": "pm2 monit"
     },
     "dependencies": {
         "@hookform/resolvers": "^5.1.1",
