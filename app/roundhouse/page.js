@@ -1377,13 +1377,13 @@ export default function RoundhousePage() {
 
                   {/* Railroad */}
                   <div>
-                    <label className="text-white/70 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Railroad *</label>
+                    <label className="text-white/90 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Railroad *</label>
                     <RailroadCombobox value={editData.railroad} onChange={(v) => setEditData(d => ({ ...d, railroad: v }))} placeholder="Search or browse railroads..." />
                   </div>
 
                   {/* Locomotive Numbers */}
                   <div>
-                    <label className="text-white/70 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Locomotive Number(s)</label>
+                    <label className="text-white/90 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Locomotive Number(s)</label>
                     <input type="text" value={editData.locomotive_numbers} onChange={e => setEditData(d => ({ ...d, locomotive_numbers: e.target.value }))}
                       className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/40"
                       placeholder="e.g., NS 1073, NS 9254" />
@@ -1392,13 +1392,13 @@ export default function RoundhousePage() {
                   {/* Title + Location */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-white/70 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Title</label>
+                      <label className="text-white/90 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Title</label>
                       <input type="text" value={editData.title} onChange={e => setEditData(d => ({ ...d, title: e.target.value }))}
                         className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/40"
                         placeholder="e.g., NS Heritage on Q335" />
                     </div>
                     <div>
-                      <label className="text-white/70 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Location</label>
+                      <label className="text-white/90 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Location</label>
                       <input type="text" value={editData.location} onChange={e => setEditData(d => ({ ...d, location: e.target.value }))}
                         className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/40"
                         placeholder="e.g., Fostoria, Ohio" />
@@ -1407,7 +1407,7 @@ export default function RoundhousePage() {
 
                   {/* Description */}
                   <div>
-                    <label className="text-white/70 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Description</label>
+                    <label className="text-white/90 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Description</label>
                     <textarea value={editData.description} onChange={e => setEditData(d => ({ ...d, description: e.target.value }))}
                       className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none focus:ring-2 focus:ring-[#ff7a00]/20 transition-all placeholder:text-white/40 resize-none"
                       rows={3} placeholder="Add details, context, or notes about this sighting..." />
@@ -1416,7 +1416,7 @@ export default function RoundhousePage() {
                   {/* Model + Builder */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-white/70 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Locomotive Model</label>
+                      <label className="text-white/90 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Locomotive Model</label>
                       <ModelCombobox value={editData.loco_model} onChange={(val) => {
                         setEditData(d => ({ ...d, loco_model: val }));
                         const matchedModel = LOCO_MODELS.find(m => m.model === val);
@@ -1426,7 +1426,7 @@ export default function RoundhousePage() {
                       }} placeholder="Search models..." />
                     </div>
                     <div>
-                      <label className="text-white/70 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Builder</label>
+                      <label className="text-white/90 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Builder</label>
                       <select value={editData.builder} onChange={e => setEditData(d => ({ ...d, builder: e.target.value }))}
                         className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none">
                         <option value="" className="bg-[#111] text-white/40">Select builder...</option>
@@ -1437,19 +1437,33 @@ export default function RoundhousePage() {
 
                   {/* Photo Date */}
                   <div>
-                    <label className="text-white/70 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Photo Date</label>
+                    <label className="text-white/90 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Photo Date</label>
                     <input type="date" value={editData.photo_date} onChange={e => setEditData(d => ({ ...d, photo_date: e.target.value }))}
                       className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none" />
                   </div>
 
+                  {/* Collection */}
+                  <div>
+                    <label className="text-white/90 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Collection</label>
+                    <select value={editData.collection_id || ''}
+                      onChange={e => {
+                        const coll = collections.find(c => c.id === e.target.value);
+                        setEditData(d => ({ ...d, collection_id: e.target.value, collection_name: coll?.name || '' }));
+                      }}
+                      className="w-full bg-white/[0.03] border border-white/[0.08] text-white text-sm rounded-xl px-4 py-3 focus:border-[#ff7a00]/50 focus:outline-none">
+                      <option value="" className="bg-[#111] text-white/50">No collection</option>
+                      {collections.map(c => <option key={c.id} value={c.id} className="bg-[#111] text-white">{c.name} ({c.photo_count} photos)</option>)}
+                    </select>
+                  </div>
+
                   {/* Tags */}
                   <div>
-                    <label className="text-white/70 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Tags</label>
+                    <label className="text-white/90 text-[11px] font-bold uppercase tracking-wider mb-1.5 block">Tags</label>
                     <div className="flex flex-wrap gap-2">
                       {PHOTO_TAGS.map(tag => (
                         <button key={tag.id} type="button"
                           onClick={() => setEditData(d => ({ ...d, tags: d.tags.includes(tag.id) ? d.tags.filter(t => t !== tag.id) : [...d.tags, tag.id] }))}
-                          className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${editData.tags.includes(tag.id) ? 'border-[#ff7a00]/40 bg-[#ff7a00]/10 text-white' : 'border-white/[0.1] bg-white/[0.04] text-white/70 hover:bg-white/[0.08]'}`}>
+                          className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${editData.tags.includes(tag.id) ? 'border-[#ff7a00]/40 bg-[#ff7a00]/10 text-white' : 'border-white/[0.1] bg-white/[0.04] text-white/80 hover:bg-white/[0.08]'}`}>
                           {tag.icon} {tag.label}
                         </button>
                       ))}
@@ -1464,7 +1478,7 @@ export default function RoundhousePage() {
                       {saving ? 'Saving...' : 'Save Changes'}
                     </button>
                     <button onClick={cancelEdit}
-                      className="px-6 py-3 rounded-xl border border-white/[0.08] text-white/50 hover:text-white hover:bg-white/[0.05] transition-all font-medium">
+                      className="px-6 py-3 rounded-xl border border-white/[0.08] text-white/70 hover:text-white hover:bg-white/[0.05] transition-all font-medium">
                       Cancel
                     </button>
                   </div>
@@ -1507,18 +1521,18 @@ export default function RoundhousePage() {
               </div>
 
               {/* Metadata */}
-              <div className="flex items-center gap-4 flex-wrap text-xs text-white/70 mb-3">
+              <div className="flex items-center gap-4 flex-wrap text-xs text-white/80 mb-3">
                 {selectedPhoto.location && (
-                  <span className="flex items-center gap-1.5"><MapPin className="w-3 h-3 text-white/50" />{selectedPhoto.location}</span>
+                  <span className="flex items-center gap-1.5"><MapPin className="w-3 h-3 text-white/60" />{selectedPhoto.location}</span>
                 )}
                 {selectedPhoto.photo_date && (
                   <span className="flex items-center gap-1.5">
-                    <Camera className="w-3 h-3 text-white/50" />
+                    <Camera className="w-3 h-3 text-white/60" />
                     Photo: {new Date(selectedPhoto.photo_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </span>
                 )}
                 <span className="flex items-center gap-1.5">
-                  <Clock className="w-3 h-3 text-white/50" />
+                  <Clock className="w-3 h-3 text-white/60" />
                   Uploaded {new Date(selectedPhoto.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                 </span>
               </div>
@@ -1550,7 +1564,7 @@ export default function RoundhousePage() {
                   {selectedPhoto.tags.map(t => {
                     const tagInfo = PHOTO_TAGS.find(pt => pt.id === t);
                     return tagInfo ? (
-                      <span key={t} className="text-[11px] text-white/70 bg-white/[0.08] px-2.5 py-1 rounded-lg">
+                      <span key={t} className="text-[11px] text-white/80 bg-white/[0.08] px-2.5 py-1 rounded-lg">
                         {tagInfo.icon} {tagInfo.label}
                       </span>
                     ) : null;
